@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { executeUpload, type UploadOptions } from "../commands/upload.js";
 import { LocalQueue } from "../storage/local-queue.js";
 import { ConfigManager } from "../config/manager.js";
+import { DEFAULT_HOST } from "../commands/login.js";
 import type { QueueRecord } from "@zebra/core";
 
 // ---------------------------------------------------------------------------
@@ -68,7 +69,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -87,7 +88,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -116,7 +117,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -126,7 +127,7 @@ describe("executeUpload", () => {
 
     // Verify fetch was called correctly
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("https://zebra.nocoo.dev/api/ingest");
+    expect(calls[0].url).toBe(`${DEFAULT_HOST}/api/ingest`);
     expect(calls[0].init.method).toBe("POST");
     expect(calls[0].init.headers).toMatchObject({
       "Content-Type": "application/json",
@@ -166,7 +167,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -194,7 +195,7 @@ describe("executeUpload", () => {
 
     await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -202,7 +203,7 @@ describe("executeUpload", () => {
     const { fetchFn: fetchFn2, calls: calls2 } = createMockFetch([]);
     const result2 = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn2,
     });
 
@@ -235,7 +236,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -265,7 +266,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
     });
 
@@ -294,7 +295,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
       retryDelayMs: 0, // no delay for tests
     });
@@ -321,7 +322,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
       maxRetries: 2,
       retryDelayMs: 0,
@@ -352,7 +353,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
       maxRetries: 0,
       retryDelayMs: 0,
@@ -379,7 +380,7 @@ describe("executeUpload", () => {
 
     await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
       onProgress: (e) => events.push(e),
     });
@@ -418,7 +419,7 @@ describe("executeUpload", () => {
 
     const result = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn,
       maxRetries: 2,
       retryDelayMs: 0,
@@ -435,7 +436,7 @@ describe("executeUpload", () => {
 
     const result2 = await executeUpload({
       stateDir: dir,
-      apiUrl: "https://zebra.nocoo.dev",
+      apiUrl: DEFAULT_HOST,
       fetch: fetchFn2,
     });
 
