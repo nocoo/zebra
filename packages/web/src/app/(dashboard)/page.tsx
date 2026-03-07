@@ -11,12 +11,13 @@ import { formatTokens } from "@/lib/utils";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
+import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
 import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
-  const { data, daily, sources, loading, error } = useUsageData({ days: 30 });
+  const { data, daily, sources, models, loading, error } = useUsageData({ days: 30 });
   const yearData = useUsageData({ days: 365 });
 
   const currentYear = new Date().getFullYear();
@@ -79,6 +80,9 @@ export default function DashboardPage() {
             <UsageTrendChart data={daily} />
             <SourceDonutChart data={sources} />
           </div>
+
+          {/* Model breakdown */}
+          <ModelBreakdownChart data={models} />
 
           {/* Activity heatmap */}
           <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">

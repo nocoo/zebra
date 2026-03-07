@@ -52,6 +52,16 @@ export interface HeatmapPoint {
   value: number;
 }
 
+/** Model aggregate for bar chart */
+export interface ModelAggregate {
+  model: string;
+  source: string;
+  input: number;
+  output: number;
+  cached: number;
+  total: number;
+}
+
 // ---------------------------------------------------------------------------
 // Aggregation helpers
 // ---------------------------------------------------------------------------
@@ -104,6 +114,33 @@ export function toHeatmapData(daily: DailyPoint[]): HeatmapPoint[] {
   return daily.map((d) => ({ date: d.date, value: d.total }));
 }
 
+/** Aggregate records by model */
+export function toModelAggregates(records: UsageRow[]): ModelAggregate[] {
+  const byModel = new Map<string, ModelAggregate>();
+
+  for (const r of records) {
+    const key = `${r.source}:${r.model}`;
+    const existing = byModel.get(key);
+    if (existing) {
+      existing.input += r.input_tokens;
+      existing.output += r.output_tokens;
+      existing.cached += r.cached_input_tokens;
+      existing.total += r.total_tokens;
+    } else {
+      byModel.set(key, {
+        model: r.model,
+        source: r.source,
+        input: r.input_tokens,
+        output: r.output_tokens,
+        cached: r.cached_input_tokens,
+        total: r.total_tokens,
+      });
+    }
+  }
+
+  return Array.from(byModel.values()).sort((a, b) => b.total - a.total);
+}
+
 // ---------------------------------------------------------------------------
 // Pretty source names
 // ---------------------------------------------------------------------------
@@ -134,6 +171,7 @@ interface UseUsageDataResult {
   data: UsageData | null;
   daily: DailyPoint[];
   sources: SourceAggregate[];
+  models: ModelAggregate[];
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -188,6 +226,7 @@ export function useUsageData(
         label: sourceLabel(s.label),
       }))
     : [];
+  const models = data ? toModelAggregates(data.records) : [];
 
-  return { data, daily, sources, loading, error, refetch: fetchData };
+  return { data, daily, sources, models, loading, error, refetch: fetchData };
 }
