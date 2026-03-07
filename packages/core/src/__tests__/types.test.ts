@@ -19,15 +19,14 @@ import type {
 } from "../types.js";
 
 describe("Source type", () => {
-  it("should accept all 5 supported AI tools", () => {
+  it("should accept all 4 supported AI tools", () => {
     const sources: Source[] = [
       "claude-code",
-      "codex-cli",
       "gemini-cli",
       "opencode",
       "openclaw",
     ];
-    expect(sources).toHaveLength(5);
+    expect(sources).toHaveLength(4);
   });
 
   it("should reject unsupported tools at type level", () => {
@@ -101,7 +100,7 @@ describe("HourBucket type", () => {
           },
         },
         {
-          source: "codex-cli",
+          source: "opencode",
           model: "o3",
           hourStart: "2026-03-07T10:00:00Z",
           tokens: {
