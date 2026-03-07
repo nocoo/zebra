@@ -15,6 +15,11 @@ function isDevMode(): boolean {
   return process.argv.includes("--dev");
 }
 
+// Allow self-signed certs (mkcert) in dev mode
+if (isDevMode()) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 const syncCommand = defineCommand({
   meta: {
     name: "sync",
