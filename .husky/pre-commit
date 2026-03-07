@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+
+# L1: Unit Tests
+bun run test 2>&1
+TEST_EXIT=$?
+
+if [ $TEST_EXIT -ne 0 ]; then
+  echo "❌ L1 FAILED: Unit tests did not pass."
+  exit 1
+fi
+
+# L2: TypeScript strict type checking (zero errors, zero warnings)
+bun run lint 2>&1
+LINT_EXIT=$?
+
+if [ $LINT_EXIT -ne 0 ]; then
+  echo "❌ L2 FAILED: TypeScript type check failed."
+  exit 1
+fi
+
+echo "✅ L1 (UT) + L2 (Lint) passed."

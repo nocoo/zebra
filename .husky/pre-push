@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+# L3: API E2E Tests (port 17029)
+bun run test:e2e 2>&1
+E2E_EXIT=$?
+
+if [ $E2E_EXIT -ne 0 ]; then
+  echo "❌ L3 FAILED: API E2E tests did not pass."
+  exit 1
+fi
+
+echo "✅ L3 (API E2E) passed."
