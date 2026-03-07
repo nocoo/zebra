@@ -125,7 +125,7 @@ All development follows **TDD** — write tests first, then implement.
 
 ---
 
-## Phase 3: SaaS Backend (IN PROGRESS)
+## Phase 3: SaaS Backend ✅
 
 ### Architecture
 
@@ -151,7 +151,7 @@ CREATE TABLE users (
   name TEXT,
   image TEXT,                    -- avatar URL
   slug TEXT UNIQUE,              -- public profile slug (e.g. "nocoo")
-  api_key TEXT UNIQUE,           -- for CLI auth (future)
+  api_key TEXT UNIQUE,           -- for CLI auth (zk_* prefix)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -207,48 +207,94 @@ CREATE TABLE verification_tokens (
 ```
 
 ### 3.1 D1 Client
-- [ ] `packages/web/src/lib/d1.ts` — Cloudflare D1 HTTP API client
-- [ ] Environment variables: `CF_ACCOUNT_ID`, `CF_D1_DATABASE_ID`, `CF_D1_API_TOKEN`
-- [ ] Typed query helpers: `d1Query()`, `d1Execute()`, `d1Batch()`
+- [x] `packages/web/src/lib/d1.ts` — Cloudflare D1 HTTP API client
+- [x] Environment variables: `CF_ACCOUNT_ID`, `CF_D1_DATABASE_ID`, `CF_D1_API_TOKEN`
+- [x] Typed query helpers: `d1Query()`, `d1Execute()` (note: no batch — D1 REST API limitation)
 
 ### 3.2 Auth (Auth.js v5 + Google OAuth)
-- [ ] `packages/web/src/auth.ts` — NextAuth config with Google provider
-- [ ] `packages/web/src/app/api/auth/[...nextauth]/route.ts` — route handler
-- [ ] Custom D1 adapter for Auth.js (maps to D1 HTTP API)
-- [ ] Environment variables: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+- [x] `packages/web/src/auth.ts` — NextAuth config with Google provider, JWT strategy
+- [x] `packages/web/src/app/api/auth/[...nextauth]/route.ts` — route handler
+- [x] Custom D1 adapter for Auth.js (`D1AuthAdapter`, maps to D1 HTTP API)
+- [x] Environment variables: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+- [x] Reverse proxy support: `trustHost: true`, secure cookie config
 
 ### 3.3 API Routes
-- [ ] `POST /api/ingest` — receive queue records from CLI
-  - Auth: Bearer token (from CLI login)
-  - Body: `QueueRecord[]` array
-  - Upsert into `usage_records` (ON CONFLICT UPDATE, add tokens)
+- [x] `POST /api/ingest` — receive queue records from CLI
+  - Auth: Bearer token / session cookie / E2E bypass
+  - Body: `QueueRecord[]` array (max 1000)
+  - Upsert into `usage_records` (ON CONFLICT UPDATE, additive merge)
   - Validate source, model, hour_start format
-  - Rate limit: 100 requests/minute per user
-- [ ] `GET /api/usage` — query usage data for dashboard
-  - Auth: Session cookie (Auth.js)
-  - Query params: `from`, `to`, `source`, `model`, `granularity`
-  - Returns aggregated usage data
+- [x] `GET /api/usage` — query usage data for dashboard
+  - Auth: Bearer token / session cookie / E2E bypass
+  - Query params: `from`, `to`, `source`, `granularity` (half-hour/day)
+  - Returns `{ records, summary }`
+- [x] `GET /api/auth/cli` — CLI login callback endpoint
+- [x] `GET /api/leaderboard` — public leaderboard with period filtering
+- [x] `GET /api/users/[slug]` — public profile data with daily aggregation
 
 ### 3.4 CLI Login (Browser OAuth Flow)
-- [ ] `zebra login` starts local HTTP server on random port
-- [ ] Opens browser to `{ZEBRA_API_URL}/auth/cli?callback=http://localhost:{port}`
-- [ ] User authenticates via Google OAuth on SaaS
-- [ ] SaaS redirects back to local server with token
-- [ ] CLI saves token to `~/.config/zebra/config.json`
+- [x] `zebra login` starts local HTTP server on random port
+- [x] Opens browser to `{ZEBRA_API_URL}/api/auth/cli?callback=http://localhost:{port}`
+- [x] User authenticates via Google OAuth on SaaS
+- [x] SaaS generates `zk_*` API key, redirects back to local server
+- [x] CLI saves API key to `~/.config/zebra/config.json`
 
 ### 3.5 CLI Upload (zebra sync → POST /api/ingest)
-- [ ] After local sync, read queue records from JSONL
-- [ ] Batch upload to POST /api/ingest with Bearer token
-- [ ] Track upload cursor (last uploaded offset)
-- [ ] Retry on failure with exponential backoff
+- [x] After local sync, read queue records from JSONL
+- [x] Batch upload to POST /api/ingest with Bearer token (max 1000 per batch)
+- [x] Track upload cursor (last uploaded byte offset)
+- [x] Retry on failure with exponential backoff
+- [x] `zebra upload` standalone command + auto-upload via `zebra sync --upload`
+
+### 3.6 Tests
+- [x] D1 client unit tests
+- [x] Auth adapter unit tests
+- [x] Ingest API unit tests
+- [x] Usage API unit tests
+- [x] CLI auth endpoint unit tests
+- [x] L3 API E2E tests against real D1 (ingest, usage, cli-auth)
 
 ---
 
-## Phase 4: Dashboard & Public Profiles (future)
+## Phase 4: Dashboard & Public Profiles ✅
 
-- [ ] Usage trend display (day/week/month/total)
-- [ ] Activity heatmap
-- [ ] Model breakdown charts
-- [ ] Cost estimates (OpenRouter pricing)
-- [ ] Public profile pages
-- [ ] Leaderboard (week/month/total)
+### 4.1 Basalt Design System
+- [x] 3-tier luminance theme (dark/light) with chart color palette
+- [x] App shell layout — sidebar, breadcrumbs, theme toggle
+- [x] Login page with Google OAuth sign-in
+- [x] `proxy.ts` — Next.js 16 proxy convention for auth redirects
+
+### 4.2 Dashboard (`/`)
+- [x] Stat cards — total tokens, estimated cost, cache savings, input/output/cached breakdown
+- [x] Usage trend chart — Recharts area chart (daily)
+- [x] Source donut chart — by AI tool
+- [x] Model breakdown chart — horizontal bar chart
+- [x] Activity heatmap — GitHub-style 365-day calendar
+- [x] Dashboard skeleton loading state
+- [x] Cost estimation — static pricing table (Anthropic, Google, OpenAI) with cache savings
+
+### 4.3 Public Profiles (`/u/:slug`)
+- [x] Public profile pages with full usage widgets
+- [x] Dynamic SEO metadata (generateMetadata)
+- [x] `ProfileView` client component
+
+### 4.4 Leaderboard (`/leaderboard`)
+- [x] Public ranking by total tokens
+- [x] Period tabs: week / month / all
+- [x] Trophy/medal/award icons for top 3
+
+### 4.5 Tests
+- [x] Pricing + cost estimation unit tests
+- [x] Usage helpers unit tests
+- [x] Public profile API unit tests
+- [x] Leaderboard API unit tests
+
+---
+
+## Phase 5: Remaining Work (TODO)
+
+- [ ] `zebra init` command — install hooks for AI tools
+- [ ] `/settings` page — user profile, API key management, preferences
+- [ ] Database migration files — version-controlled schema management
+- [ ] L4 BDD E2E tests — Playwright core user flows (port 27030)
+- [ ] Rate limiting on `/api/ingest`
