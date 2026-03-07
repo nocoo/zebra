@@ -12,6 +12,17 @@ import { createServer, type Server } from "node:http";
 import { ConfigManager } from "../config/manager.js";
 
 // ---------------------------------------------------------------------------
+// Host constants
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_HOST = "https://zebra.hexly.ai";
+export const DEV_HOST = "https://zebra.dev.hexly.ai";
+
+export function resolveHost(dev: boolean): string {
+  return dev ? DEV_HOST : DEFAULT_HOST;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
