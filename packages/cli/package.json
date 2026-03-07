@@ -1,0 +1,44 @@
+{
+  "name": "@nocoo/zebra",
+  "version": "0.1.0",
+  "description": "Track token usage from your local AI coding tools",
+  "type": "module",
+  "bin": {
+    "zebra": "dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nocoo/zebra.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "ai",
+    "token-usage",
+    "claude",
+    "codex",
+    "gemini",
+    "opencode",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "citty": "^0.1.0",
+    "consola": "^3.4.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@zebra/core": "workspace:*",
+    "@types/node": "^22.0.0"
+  }
+}
