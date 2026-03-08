@@ -270,4 +270,123 @@ describe("parseGeminiFile", () => {
     expect(result.deltas).toHaveLength(1);
     expect(result.lastIndex).toBe(0);
   });
+
+  it("should handle non-array messages field", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, JSON.stringify({
+      sessionId: "ses-001",
+      messages: "not an array",
+    }));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    expect(result.deltas).toHaveLength(0);
+  });
+
+  it("should handle missing messages field", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, JSON.stringify({
+      sessionId: "ses-001",
+    }));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    expect(result.deltas).toHaveLength(0);
+  });
+
+  it("should skip consecutive messages with identical cumulative tokens (zero delta)", async () => {
+    const filePath = join(tempDir, "session.json");
+    const sameTokens = { input: 100, output: 50, cached: 0, thoughts: 0, tool: 0, total: 150 };
+    await writeFile(filePath, geminiSession([
+      geminiMsg({
+        id: "msg-1",
+        timestamp: "2026-03-07T10:00:00.000Z",
+        tokens: sameTokens,
+      }),
+      geminiMsg({
+        id: "msg-2",
+        timestamp: "2026-03-07T10:05:00.000Z",
+        tokens: sameTokens, // same cumulative → zero delta
+      }),
+    ]));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    // Only the first message produces a delta; the second is identical → skipped
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(100);
+  });
+
+  it("should skip null or non-object entries in messages array", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, geminiSession([
+      null,
+      "not an object",
+      geminiMsg(),
+    ]));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    expect(result.deltas).toHaveLength(1);
+  });
+
+  it("should skip messages without timestamp even if they have tokens", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, geminiSession([
+      {
+        type: "gemini",
+        model: "gemini-3-flash-preview",
+        // no timestamp
+        tokens: { input: 100, output: 50, cached: 0, thoughts: 0, tool: 0, total: 150 },
+      },
+      geminiMsg({
+        id: "msg-2",
+        timestamp: "2026-03-07T10:10:00.000Z",
+        tokens: { input: 300, output: 150, cached: 0, thoughts: 0, tool: 0, total: 450 },
+      }),
+    ]));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    // First message skipped (no timestamp) but totals still tracked
+    // Second message diffs against first's totals
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(200); // 300 - 100
+  });
+
+  it("should use 'unknown' model when no model field is present", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, geminiSession([
+      {
+        id: "msg-1",
+        timestamp: "2026-03-07T10:00:00.000Z",
+        type: "gemini",
+        // no model field
+        tokens: { input: 100, output: 50, cached: 0, thoughts: 0, tool: 0, total: 150 },
+      },
+    ]));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].model).toBe("unknown");
+  });
+
+  it("should track model across messages", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, geminiSession([
+      geminiMsg({
+        id: "msg-1",
+        timestamp: "2026-03-07T10:00:00.000Z",
+        model: "gemini-3-flash-preview",
+        tokens: { input: 100, output: 50, cached: 0, thoughts: 0, tool: 0, total: 150 },
+      }),
+      {
+        id: "msg-2",
+        timestamp: "2026-03-07T10:10:00.000Z",
+        type: "gemini",
+        // no model — should inherit from previous
+        tokens: { input: 300, output: 150, cached: 0, thoughts: 0, tool: 0, total: 450 },
+      },
+    ]));
+
+    const result = await parseGeminiFile({ filePath, startIndex: -1, lastTotals: null });
+    expect(result.deltas).toHaveLength(2);
+    expect(result.deltas[1].model).toBe("gemini-3-flash-preview");
+    expect(result.lastModel).toBe("gemini-3-flash-preview");
+  });
 });
