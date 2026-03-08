@@ -1,8 +1,12 @@
 /**
  * Pew Ingest Worker — Cloudflare Worker with native D1 bindings.
  *
- * Receives pre-validated usage records from Next.js and performs
+ * Receives pre-validated records from Next.js and performs
  * atomic batch upserts via env.DB.batch().
+ *
+ * Routes:
+ * - POST /ingest/tokens  — token usage records (also legacy /ingest)
+ * - POST /ingest/sessions — session snapshot records
  *
  * Auth: shared secret (WORKER_SECRET) between Next.js and this Worker.
  * Limit: max 50 records per request (D1 Free plan: 50 queries/invocation).
@@ -33,6 +37,26 @@ export interface IngestRequest {
   records: IngestRecord[];
 }
 
+export interface SessionIngestRecord {
+  session_key: string;
+  source: string;
+  kind: string;
+  started_at: string;
+  last_message_at: string;
+  duration_seconds: number;
+  user_messages: number;
+  assistant_messages: number;
+  total_messages: number;
+  project_ref: string | null;
+  model: string | null;
+  snapshot_at: string;
+}
+
+export interface SessionIngestRequest {
+  userId: string;
+  records: SessionIngestRecord[];
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -40,7 +64,7 @@ export interface IngestRequest {
 /** Max records per Worker invocation (D1 Free: 50 queries/invocation). */
 export const MAX_RECORDS = 50;
 
-const UPSERT_SQL = `INSERT INTO usage_records
+const TOKEN_UPSERT_SQL = `INSERT INTO usage_records
   (user_id, source, model, hour_start,
    input_tokens, cached_input_tokens, output_tokens,
    reasoning_output_tokens, total_tokens)
@@ -52,11 +76,31 @@ ON CONFLICT (user_id, source, model, hour_start) DO UPDATE SET
    reasoning_output_tokens = excluded.reasoning_output_tokens,
    total_tokens = excluded.total_tokens`;
 
+const SESSION_UPSERT_SQL = `INSERT INTO session_records
+  (user_id, session_key, source, kind, started_at, last_message_at,
+   duration_seconds, user_messages, assistant_messages, total_messages,
+   project_ref, model, snapshot_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+ON CONFLICT (user_id, session_key) DO UPDATE SET
+  source = excluded.source,
+  kind = excluded.kind,
+  started_at = excluded.started_at,
+  last_message_at = excluded.last_message_at,
+  duration_seconds = excluded.duration_seconds,
+  user_messages = excluded.user_messages,
+  assistant_messages = excluded.assistant_messages,
+  total_messages = excluded.total_messages,
+  project_ref = excluded.project_ref,
+  model = excluded.model,
+  snapshot_at = excluded.snapshot_at,
+  updated_at = datetime('now')
+WHERE excluded.snapshot_at >= session_records.snapshot_at`;
+
 // ---------------------------------------------------------------------------
-// Validation
+// Validation — Token records
 // ---------------------------------------------------------------------------
 
-function validateRequest(body: unknown): { ok: true; data: IngestRequest } | { ok: false; error: string } {
+function validateTokenRequest(body: unknown): { ok: true; data: IngestRequest } | { ok: false; error: string } {
   if (typeof body !== "object" || body === null) {
     return { ok: false, error: "Invalid request body" };
   }
@@ -75,7 +119,6 @@ function validateRequest(body: unknown): { ok: true; data: IngestRequest } | { o
     return { ok: false, error: `Batch too large: max ${MAX_RECORDS} records` };
   }
 
-  // Lightweight field presence check (full validation done by Next.js)
   for (let i = 0; i < obj.records.length; i++) {
     const r = obj.records[i] as Record<string, unknown>;
     if (typeof r.source !== "string" || typeof r.model !== "string" || typeof r.hour_start !== "string") {
@@ -93,7 +136,132 @@ function validateRequest(body: unknown): { ok: true; data: IngestRequest } | { o
 }
 
 // ---------------------------------------------------------------------------
-// Handler
+// Validation — Session records
+// ---------------------------------------------------------------------------
+
+function validateSessionRequest(body: unknown): { ok: true; data: SessionIngestRequest } | { ok: false; error: string } {
+  if (typeof body !== "object" || body === null) {
+    return { ok: false, error: "Invalid request body" };
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj.userId !== "string" || obj.userId.length === 0) {
+    return { ok: false, error: "Missing or empty userId" };
+  }
+
+  if (!Array.isArray(obj.records) || obj.records.length === 0) {
+    return { ok: false, error: "Missing or empty records array" };
+  }
+
+  if (obj.records.length > MAX_RECORDS) {
+    return { ok: false, error: `Batch too large: max ${MAX_RECORDS} records` };
+  }
+
+  for (let i = 0; i < obj.records.length; i++) {
+    const r = obj.records[i] as Record<string, unknown>;
+
+    // Required string fields
+    const requiredStrings = ["session_key", "source", "kind", "started_at", "last_message_at", "snapshot_at"];
+    for (const f of requiredStrings) {
+      if (typeof r[f] !== "string") {
+        return { ok: false, error: `record[${i}]: ${f} must be a string` };
+      }
+    }
+
+    // Required number fields
+    const requiredNumbers = ["duration_seconds", "user_messages", "assistant_messages", "total_messages"];
+    for (const f of requiredNumbers) {
+      if (typeof r[f] !== "number") {
+        return { ok: false, error: `record[${i}]: ${f} must be a number` };
+      }
+    }
+
+    // Nullable string fields (string or null)
+    for (const f of ["project_ref", "model"]) {
+      if (r[f] !== null && typeof r[f] !== "string") {
+        return { ok: false, error: `record[${i}]: ${f} must be a string or null` };
+      }
+    }
+  }
+
+  return { ok: true, data: obj as unknown as SessionIngestRequest };
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+async function handleTokenIngest(body: unknown, env: Env): Promise<Response> {
+  const validation = validateTokenRequest(body);
+  if (!validation.ok) {
+    return Response.json({ error: validation.error }, { status: 400 });
+  }
+
+  const { userId, records } = validation.data;
+
+  try {
+    const stmts = records.map((r) =>
+      env.DB.prepare(TOKEN_UPSERT_SQL).bind(
+        userId,
+        r.source,
+        r.model,
+        r.hour_start,
+        r.input_tokens,
+        r.cached_input_tokens,
+        r.output_tokens,
+        r.reasoning_output_tokens,
+        r.total_tokens,
+      ),
+    );
+
+    await env.DB.batch(stmts);
+
+    return Response.json({ ingested: records.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: `D1 batch failed: ${message}` }, { status: 500 });
+  }
+}
+
+async function handleSessionIngest(body: unknown, env: Env): Promise<Response> {
+  const validation = validateSessionRequest(body);
+  if (!validation.ok) {
+    return Response.json({ error: validation.error }, { status: 400 });
+  }
+
+  const { userId, records } = validation.data;
+
+  try {
+    const stmts = records.map((r) =>
+      env.DB.prepare(SESSION_UPSERT_SQL).bind(
+        userId,
+        r.session_key,
+        r.source,
+        r.kind,
+        r.started_at,
+        r.last_message_at,
+        r.duration_seconds,
+        r.user_messages,
+        r.assistant_messages,
+        r.total_messages,
+        r.project_ref,
+        r.model,
+        r.snapshot_at,
+      ),
+    );
+
+    await env.DB.batch(stmts);
+
+    return Response.json({ ingested: records.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: `D1 batch failed: ${message}` }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Router
 // ---------------------------------------------------------------------------
 
 export default {
@@ -109,7 +277,7 @@ export default {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 3. Parse and validate body
+    // 3. Parse JSON body
     let body: unknown;
     try {
       body = await request.json();
@@ -117,35 +285,18 @@ export default {
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const validation = validateRequest(body);
-    if (!validation.ok) {
-      return Response.json({ error: validation.error }, { status: 400 });
+    // 4. Route by URL path
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (path === "/ingest/sessions") {
+      return handleSessionIngest(body, env);
     }
 
-    const { userId, records } = validation.data;
-
-    // 4. Build prepared statements and execute batch
-    try {
-      const stmts = records.map((r) =>
-        env.DB.prepare(UPSERT_SQL).bind(
-          userId,
-          r.source,
-          r.model,
-          r.hour_start,
-          r.input_tokens,
-          r.cached_input_tokens,
-          r.output_tokens,
-          r.reasoning_output_tokens,
-          r.total_tokens,
-        ),
-      );
-
-      await env.DB.batch(stmts);
-
-      return Response.json({ ingested: records.length });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return Response.json({ error: `D1 batch failed: ${message}` }, { status: 500 });
+    if (path === "/ingest/tokens" || path === "/ingest") {
+      return handleTokenIngest(body, env);
     }
+
+    return Response.json({ error: "Not found" }, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
