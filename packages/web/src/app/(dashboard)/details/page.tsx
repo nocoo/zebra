@@ -370,7 +370,28 @@ export default function DetailsPage() {
     return data.records.filter((r) => r.model === modelFilter);
   }, [data, modelFilter]);
 
-  const daily = useMemo(() => toDailyPoints(filteredRecords), [filteredRecords]);
+  const daily = useMemo(() => {
+    const raw = toDailyPoints(filteredRecords);
+    // Build a map for quick lookup
+    const byDate = new Map(raw.map((d) => [d.date, d]));
+    // Pad to full month: 1st to last day
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const padded: typeof raw = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      padded.push(
+        byDate.get(date) ?? {
+          date,
+          input: 0,
+          output: 0,
+          cached: 0,
+          reasoning: 0,
+          total: 0,
+        }
+      );
+    }
+    return padded;
+  }, [filteredRecords, year, month]);
 
   const dailyGroups = useMemo(
     () => groupByDate(filteredRecords),

@@ -7,6 +7,8 @@ import { formatTokens } from "@/lib/utils";
 import { getModelPricing, estimateCost, formatCost } from "@/lib/pricing";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CHART_COLORS } from "@/lib/palette";
+import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
+import type { Period } from "@/components/dashboard/period-selector";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -235,21 +237,32 @@ function AppsSkeleton() {
 // ---------------------------------------------------------------------------
 
 export default function AppsPage() {
-  const { data, loading, error } = useUsageData({ days: 30 });
+  const [period, setPeriod] = useState<Period>("all");
+  const { from, to } = periodToDateRange(period);
+
+  const { data, loading, error } = useUsageData({
+    from,
+    ...(to ? { to } : {}),
+  });
 
   const appGroups = useMemo(
     () => (data ? groupByApp(data.records) : []),
     [data],
   );
 
+  const subtitle = periodLabel(period);
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold font-display">By App</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Token usage grouped by AI coding tool (last 30 days).
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold font-display">By App</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Token usage grouped by AI coding tool ({subtitle}).
+          </p>
+        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
       {/* Error */}

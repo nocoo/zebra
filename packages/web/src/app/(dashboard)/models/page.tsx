@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useUsageData, sourceLabel, type UsageRow } from "@/hooks/use-usage-data";
 import { formatTokens } from "@/lib/utils";
 import { getModelPricing, estimateCost, formatCost } from "@/lib/pricing";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CHART_COLORS } from "@/lib/palette";
 import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
+import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
+import type { Period } from "@/components/dashboard/period-selector";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,7 +109,13 @@ function ModelsSkeleton() {
 // ---------------------------------------------------------------------------
 
 export default function ModelsPage() {
-  const { data, models, loading, error } = useUsageData({ days: 30 });
+  const [period, setPeriod] = useState<Period>("all");
+  const { from, to } = periodToDateRange(period);
+
+  const { data, models, loading, error } = useUsageData({
+    from,
+    ...(to ? { to } : {}),
+  });
 
   const modelGroups = useMemo(
     () => (data ? groupByModel(data.records) : []),
@@ -119,14 +127,19 @@ export default function ModelsPage() {
     [modelGroups],
   );
 
+  const subtitle = periodLabel(period);
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold font-display">By Model</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Token usage grouped by AI model (last 30 days).
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold font-display">By Model</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Token usage grouped by AI model ({subtitle}).
+          </p>
+        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
       {/* Error */}

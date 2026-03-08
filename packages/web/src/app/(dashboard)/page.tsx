@@ -16,54 +16,10 @@ import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
 import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
+import type { Period } from "@/components/dashboard/period-selector";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import type { ModelAggregate } from "@/hooks/use-usage-data";
-
-// ---------------------------------------------------------------------------
-// Period selector
-// ---------------------------------------------------------------------------
-
-type Period = "all" | "month" | "week";
-
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: "all", label: "All Time" },
-  { value: "month", label: "This Month" },
-  { value: "week", label: "This Week" },
-];
-
-/** Compute from/to date strings for a given period */
-function periodToDateRange(period: Period): { from: string; to?: string } {
-  const now = new Date();
-
-  switch (period) {
-    case "all":
-      // Far past to capture everything
-      return { from: "2020-01-01" };
-    case "month": {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: firstOfMonth.toISOString().slice(0, 10) };
-    }
-    case "week": {
-      // Most recent Sunday
-      const day = now.getDay(); // 0=Sun, 1=Mon, ...
-      const sunday = new Date(now);
-      sunday.setDate(now.getDate() - day);
-      return { from: sunday.toISOString().slice(0, 10) };
-    }
-  }
-}
-
-function periodLabel(period: Period): string {
-  switch (period) {
-    case "all":
-      return "All time";
-    case "month":
-      return new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    case "week":
-      return "This week";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,22 +67,7 @@ export default function DashboardPage() {
             Token usage overview for your AI coding tools.
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                period === opt.value
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
       {/* Error state */}
