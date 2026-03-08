@@ -161,8 +161,12 @@ export function sourceLabel(source: string): string {
 // ---------------------------------------------------------------------------
 
 interface UseUsageDataOptions {
-  /** Number of days to look back (default 30) */
+  /** Number of days to look back (default 30). Ignored when `from` is set. */
   days?: number;
+  /** Explicit start date (ISO date string, e.g. "2026-01-01") */
+  from?: string;
+  /** Explicit end date (ISO date string). Defaults to today. */
+  to?: string;
   /** Source filter (optional) */
   source?: string;
 }
@@ -180,7 +184,7 @@ interface UseUsageDataResult {
 export function useUsageData(
   options: UseUsageDataOptions = {}
 ): UseUsageDataResult {
-  const { days = 30, source } = options;
+  const { days = 30, from: fromDate, to: toDate, source } = options;
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -190,12 +194,21 @@ export function useUsageData(
     setError(null);
 
     try {
-      const from = new Date();
-      from.setDate(from.getDate() - days);
+      // When explicit `from` is provided, use it directly; otherwise compute from `days`
+      let fromStr: string;
+      if (fromDate) {
+        fromStr = fromDate;
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() - days);
+        fromStr = d.toISOString().slice(0, 10);
+      }
+
       const params = new URLSearchParams({
-        from: from.toISOString().slice(0, 10),
+        from: fromStr,
         granularity: "day",
       });
+      if (toDate) params.set("to", toDate);
       if (source) params.set("source", source);
 
       const res = await fetch(`/api/usage?${params.toString()}`);
@@ -213,7 +226,7 @@ export function useUsageData(
     } finally {
       setLoading(false);
     }
-  }, [days, source]);
+  }, [days, fromDate, toDate, source]);
 
   useEffect(() => {
     fetchData();
