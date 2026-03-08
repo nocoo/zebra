@@ -43,7 +43,7 @@ export interface SyncOptions {
 /** Progress event for UI display */
 export interface ProgressEvent {
   source: string;
-  phase: "discover" | "parse" | "aggregate" | "done";
+  phase: "discover" | "parse" | "aggregate" | "done" | "warn";
   current?: number;
   total?: number;
   message?: string;
@@ -118,7 +118,17 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       const startOffset =
         prev && prev.inode === inode ? (prev.offset ?? 0) : 0;
 
-      const result = await parseClaudeFile({ filePath, startOffset });
+      const result = await parseClaudeFile({ filePath, startOffset }).catch(
+        (err: unknown) => {
+          onProgress?.({
+            source: "claude-code",
+            phase: "warn",
+            message: `Skipping ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+          });
+          return null;
+        },
+      );
+      if (!result) continue;
 
       cursors.files[filePath] = {
         inode,
@@ -170,7 +180,15 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
         filePath,
         startIndex,
         lastTotals,
+      }).catch((err: unknown) => {
+        onProgress?.({
+          source: "gemini-cli",
+          phase: "warn",
+          message: `Skipping ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        return null;
       });
+      if (!result) continue;
 
       cursors.files[filePath] = {
         inode,
@@ -240,7 +258,17 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       const lastTotals =
         prev && prev.inode === inode ? (prev.lastTotals ?? null) : null;
 
-      const result = await parseOpenCodeFile({ filePath, lastTotals });
+      const result = await parseOpenCodeFile({ filePath, lastTotals }).catch(
+        (err: unknown) => {
+          onProgress?.({
+            source: "opencode",
+            phase: "warn",
+            message: `Skipping ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+          });
+          return null;
+        },
+      );
+      if (!result) continue;
 
       cursors.files[filePath] = {
         inode,
@@ -294,7 +322,17 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       const startOffset =
         prev && prev.inode === inode ? (prev.offset ?? 0) : 0;
 
-      const result = await parseOpenClawFile({ filePath, startOffset });
+      const result = await parseOpenClawFile({ filePath, startOffset }).catch(
+        (err: unknown) => {
+          onProgress?.({
+            source: "openclaw",
+            phase: "warn",
+            message: `Skipping ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+          });
+          return null;
+        },
+      );
+      if (!result) continue;
 
       cursors.files[filePath] = {
         inode,
