@@ -138,6 +138,79 @@ export interface QueueRecord {
 }
 
 // ---------------------------------------------------------------------------
+// Session statistics
+// ---------------------------------------------------------------------------
+
+/** Session kind: human-driven vs automated agent */
+export type SessionKind = "human" | "automated";
+
+/**
+ * A snapshot of a single session's metadata.
+ *
+ * Sessions are snapshots (overwritten), not additive events (summed).
+ * Each sync produces the full current state of every session.
+ */
+export interface SessionSnapshot {
+  /** Stable key: source-specific, survives re-scan */
+  sessionKey: string;
+  /** Which AI tool */
+  source: Source;
+  /** "human" for Claude/Gemini/OpenCode, "automated" for OpenClaw */
+  kind: SessionKind;
+  /** ISO 8601 timestamp of first message */
+  startedAt: string;
+  /** ISO 8601 timestamp of last message */
+  lastMessageAt: string;
+  /** Wall-clock seconds: lastMessageAt - startedAt */
+  durationSeconds: number;
+  /** Number of user messages */
+  userMessages: number;
+  /** Number of assistant messages */
+  assistantMessages: number;
+  /** Total messages (user + assistant + system + tool + other) */
+  totalMessages: number;
+  /** Raw project reference (hash or path-derived) */
+  projectRef: string | null;
+  /** Primary model used (most frequent or last seen) */
+  model: string | null;
+  /** ISO 8601 — when this snapshot was generated */
+  snapshotAt: string;
+}
+
+/** A session record ready for the upload queue (snake_case for DB compat) */
+export interface SessionQueueRecord {
+  session_key: string;
+  source: Source;
+  kind: SessionKind;
+  started_at: string;
+  last_message_at: string;
+  duration_seconds: number;
+  user_messages: number;
+  assistant_messages: number;
+  total_messages: number;
+  project_ref: string | null;
+  model: string | null;
+  snapshot_at: string;
+}
+
+/** Session-specific file cursor (mtime + size dual-check) */
+export interface SessionFileCursor {
+  /** File mtime in ms */
+  mtimeMs: number;
+  /** File size in bytes */
+  size: number;
+}
+
+/** Top-level session cursor state */
+export interface SessionCursorState {
+  version: 1;
+  /** Per-file cursors, keyed by absolute file path */
+  files: Record<string, SessionFileCursor>;
+  /** ISO 8601 timestamp of last update */
+  updatedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // CLI Config
 // ---------------------------------------------------------------------------
 

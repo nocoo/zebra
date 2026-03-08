@@ -16,6 +16,11 @@ import type {
   TokenDelta,
   UsageRecord,
   PewConfig,
+  SessionKind,
+  SessionSnapshot,
+  SessionQueueRecord,
+  SessionFileCursor,
+  SessionCursorState,
 } from "../types.js";
 
 describe("Source type", () => {
@@ -189,6 +194,114 @@ describe("QueueRecord type", () => {
     };
     expect(record.source).toBe("claude-code");
     expect(record.total_tokens).toBe(8000);
+  });
+});
+
+describe("SessionKind type", () => {
+  it("should accept human and automated", () => {
+    const kinds: SessionKind[] = ["human", "automated"];
+    expect(kinds).toHaveLength(2);
+  });
+});
+
+describe("SessionSnapshot type", () => {
+  it("should hold a complete session snapshot", () => {
+    const snapshot: SessionSnapshot = {
+      sessionKey: "claude:ses-001",
+      source: "claude-code",
+      kind: "human",
+      startedAt: "2026-03-07T10:00:00Z",
+      lastMessageAt: "2026-03-07T11:30:00Z",
+      durationSeconds: 5400,
+      userMessages: 10,
+      assistantMessages: 10,
+      totalMessages: 20,
+      projectRef: "abc123",
+      model: "claude-sonnet-4-20250514",
+      snapshotAt: "2026-03-09T06:00:00Z",
+    };
+    expect(snapshot.sessionKey).toBe("claude:ses-001");
+    expect(snapshot.kind).toBe("human");
+    expect(snapshot.durationSeconds).toBe(5400);
+    expect(snapshot.totalMessages).toBe(20);
+  });
+
+  it("should allow null projectRef and model", () => {
+    const snapshot: SessionSnapshot = {
+      sessionKey: "opencode:ses_001",
+      source: "opencode",
+      kind: "human",
+      startedAt: "2026-03-07T10:00:00Z",
+      lastMessageAt: "2026-03-07T10:30:00Z",
+      durationSeconds: 1800,
+      userMessages: 5,
+      assistantMessages: 5,
+      totalMessages: 10,
+      projectRef: null,
+      model: null,
+      snapshotAt: "2026-03-09T06:00:00Z",
+    };
+    expect(snapshot.projectRef).toBeNull();
+    expect(snapshot.model).toBeNull();
+  });
+});
+
+describe("SessionQueueRecord type", () => {
+  it("should hold a session queue record with snake_case fields", () => {
+    const record: SessionQueueRecord = {
+      session_key: "gemini:ses-002",
+      source: "gemini-cli",
+      kind: "human",
+      started_at: "2026-03-07T10:00:00Z",
+      last_message_at: "2026-03-07T11:00:00Z",
+      duration_seconds: 3600,
+      user_messages: 8,
+      assistant_messages: 8,
+      total_messages: 16,
+      project_ref: "proj-hash",
+      model: "gemini-2.5-pro",
+      snapshot_at: "2026-03-09T06:00:00Z",
+    };
+    expect(record.session_key).toBe("gemini:ses-002");
+    expect(record.duration_seconds).toBe(3600);
+  });
+});
+
+describe("SessionFileCursor type", () => {
+  it("should hold mtime and size for dual-check", () => {
+    const cursor: SessionFileCursor = {
+      mtimeMs: 1709827200000,
+      size: 4096,
+    };
+    expect(cursor.mtimeMs).toBe(1709827200000);
+    expect(cursor.size).toBe(4096);
+  });
+});
+
+describe("SessionCursorState type", () => {
+  it("should compose into a cursor state", () => {
+    const state: SessionCursorState = {
+      version: 1,
+      files: {
+        "/path/to/session.jsonl": {
+          mtimeMs: 1709827200000,
+          size: 4096,
+        },
+      },
+      updatedAt: "2026-03-09T06:00:00Z",
+    };
+    expect(state.version).toBe(1);
+    expect(Object.keys(state.files)).toHaveLength(1);
+  });
+
+  it("should allow empty state", () => {
+    const state: SessionCursorState = {
+      version: 1,
+      files: {},
+      updatedAt: null,
+    };
+    expect(state.updatedAt).toBeNull();
+    expect(Object.keys(state.files)).toHaveLength(0);
   });
 });
 
