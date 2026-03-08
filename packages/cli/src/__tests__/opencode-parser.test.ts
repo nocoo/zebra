@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   parseOpenCodeFile,
   normalizeOpenCodeTokens,
+  coerceEpochMs,
 } from "../parsers/opencode.js";
 
 /** Helper: create an OpenCode message JSON */
@@ -189,5 +190,158 @@ describe("parseOpenCodeFile", () => {
 
     const result = await parseOpenCodeFile({ filePath, lastTotals: null });
     expect(result.delta).toBeNull(); // all zero → skip
+  });
+
+  it("should return null delta when time fields are missing", async () => {
+    const filePath = join(tempDir, "msg_no_time.json");
+    await writeFile(
+      filePath,
+      opencodeMsg({
+        time: {}, // no completed or created
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).toBeNull();
+    expect(result.messageKey).toBe("ses_001|msg_001");
+  });
+
+  it("should return null delta when time object is missing entirely", async () => {
+    const filePath = join(tempDir, "msg_no_time2.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        id: "msg_001",
+        sessionID: "ses_001",
+        role: "assistant",
+        modelID: "claude-opus-4.6",
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        // no time field at all
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).toBeNull();
+  });
+
+  it("should fallback to model when modelID is missing", async () => {
+    const filePath = join(tempDir, "msg_model_fallback.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        id: "msg_001",
+        sessionID: "ses_001",
+        role: "assistant",
+        // no modelID
+        model: "gpt-4o",
+        time: { completed: 1771120822000 },
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).not.toBeNull();
+    expect(result.delta!.model).toBe("gpt-4o");
+  });
+
+  it("should use 'unknown' when both modelID and model are missing", async () => {
+    const filePath = join(tempDir, "msg_no_model.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        id: "msg_001",
+        sessionID: "ses_001",
+        role: "assistant",
+        // no modelID, no model
+        time: { completed: 1771120822000 },
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).not.toBeNull();
+    expect(result.delta!.model).toBe("unknown");
+  });
+
+  it("should handle empty file content", async () => {
+    const filePath = join(tempDir, "empty.json");
+    await writeFile(filePath, "   ");
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).toBeNull();
+  });
+
+  it("should return null messageKey when sessionID or id is missing", async () => {
+    const filePath = join(tempDir, "msg_no_session.json");
+    await writeFile(
+      filePath,
+      opencodeMsg({
+        id: undefined,
+        sessionID: undefined,
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.messageKey).toBeNull();
+  });
+
+  it("should return null delta when tokens field is missing", async () => {
+    const filePath = join(tempDir, "msg_no_tokens.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        id: "msg_001",
+        sessionID: "ses_001",
+        role: "assistant",
+        modelID: "claude-opus-4.6",
+        time: { completed: 1771120822000 },
+        // no tokens field
+      }),
+    );
+
+    const result = await parseOpenCodeFile({ filePath, lastTotals: null });
+    expect(result.delta).toBeNull();
+  });
+});
+
+describe("coerceEpochMs", () => {
+  it("should return ms for epoch in milliseconds", () => {
+    expect(coerceEpochMs(1771120822000)).toBe(1771120822000);
+  });
+
+  it("should convert epoch seconds to ms", () => {
+    expect(coerceEpochMs(1771120822)).toBe(1771120822000);
+  });
+
+  it("should return 0 for non-finite values", () => {
+    expect(coerceEpochMs(NaN)).toBe(0);
+    expect(coerceEpochMs(Infinity)).toBe(0);
+    expect(coerceEpochMs(-Infinity)).toBe(0);
+  });
+
+  it("should return 0 for negative or zero values", () => {
+    expect(coerceEpochMs(0)).toBe(0);
+    expect(coerceEpochMs(-100)).toBe(0);
+  });
+
+  it("should return 0 for non-numeric values", () => {
+    expect(coerceEpochMs("not a number")).toBe(0);
+    expect(coerceEpochMs(null)).toBe(0);
+    expect(coerceEpochMs(undefined)).toBe(0);
   });
 });
