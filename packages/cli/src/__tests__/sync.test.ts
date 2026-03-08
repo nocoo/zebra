@@ -282,11 +282,12 @@ describe("executeSync", () => {
     expect(r2.sources.opencode).toBe(0);
   });
 
-  it("should re-parse OpenCode file when content changes (mtime/size differ)", async () => {
+  it("should detect new OpenCode file added to existing session directory", async () => {
+    // OpenCode message files are immutable — new messages create new files.
+    // Directory mtime changes when a new file is created, triggering re-scan.
     const ocDir = join(dataDir, "opencode", "message", "ses_001");
     await mkdir(ocDir, { recursive: true });
-    const filePath = join(ocDir, "msg_001.json");
-    await writeFile(filePath, opencodeMsg(1771120749059, 100, 50));
+    await writeFile(join(ocDir, "msg_001.json"), opencodeMsg(1771120749059, 100, 50));
 
     const r1 = await executeSync({
       stateDir,
@@ -294,15 +295,15 @@ describe("executeSync", () => {
     });
     expect(r1.totalDeltas).toBe(1);
 
-    // Wait a small amount to ensure mtime differs, then overwrite with new data
+    // Wait to ensure mtime differs, then add a NEW file (simulating a new message)
     await new Promise((r) => setTimeout(r, 50));
-    await writeFile(filePath, opencodeMsg(1771120749059, 200, 100));
+    await writeFile(join(ocDir, "msg_002.json"), opencodeMsg(1771120799059, 200, 100));
 
     const r2 = await executeSync({
       stateDir,
       openCodeMessageDir: join(dataDir, "opencode", "message"),
     });
-    // File changed → should re-parse and produce a delta (diff from previous totals)
+    // New file in directory → directory mtime changed → re-scan → find new file
     expect(r2.totalDeltas).toBe(1);
     expect(r2.sources.opencode).toBe(1);
   });
@@ -388,7 +389,7 @@ describe("executeSync", () => {
     expect(events.some((e) => e.source === "all" && e.phase === "done")).toBe(true);
   });
 
-  it("should fire progress events for OpenCode sync including skip optimization", async () => {
+  it("should fire progress events for OpenCode sync including dir-level skip", async () => {
     const ocDir = join(dataDir, "opencode", "message", "ses_001");
     await mkdir(ocDir, { recursive: true });
     await writeFile(
@@ -396,24 +397,26 @@ describe("executeSync", () => {
       opencodeMsg(1771120749059, 14967, 437),
     );
 
-    // First sync to populate cursors
+    // First sync to populate cursors and dirMtimes
     await executeSync({
       stateDir,
       openCodeMessageDir: join(dataDir, "opencode", "message"),
     });
 
-    // Second sync: triple-check skip should still fire parse progress
-    const events: Array<{ source: string; phase: string; current?: number }> = [];
+    // Second sync: dir-level mtime skip means 0 files discovered in changed dirs
+    const events: Array<{ source: string; phase: string; current?: number; total?: number; message?: string }> = [];
     await executeSync({
       stateDir,
       openCodeMessageDir: join(dataDir, "opencode", "message"),
-      onProgress: (e) => events.push({ source: e.source, phase: e.phase, current: e.current }),
+      onProgress: (e) => events.push({ source: e.source, phase: e.phase, current: e.current, total: e.total, message: e.message }),
     });
 
     expect(events.some((e) => e.source === "opencode" && e.phase === "discover")).toBe(true);
     expect(events.some((e) => e.source === "opencode" && e.phase === "parse")).toBe(true);
-    // The skip path still emits progress with current counter
-    expect(events.some((e) => e.source === "opencode" && e.phase === "parse" && e.current === 1)).toBe(true);
+    // With dir-level mtime optimization, total files should be 0 (entire dir skipped)
+    const parseEvent = events.find((e) => e.source === "opencode" && e.phase === "parse" && e.total !== undefined);
+    expect(parseEvent?.total).toBe(0);
+    expect(parseEvent?.message).toContain("1 dirs skipped");
   });
 
   // ===== All four sources in one run =====

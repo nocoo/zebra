@@ -16,6 +16,7 @@ import {
   discoverOpenCodeFiles,
   discoverOpenClawFiles,
 } from "../discovery/sources.js";
+import type { OpenCodeDiscoveryResult } from "../discovery/sources.js";
 import { parseClaudeFile } from "../parsers/claude.js";
 import { parseGeminiFile } from "../parsers/gemini.js";
 import { parseOpenCodeFile } from "../parsers/opencode.js";
@@ -198,13 +199,18 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       phase: "discover",
       message: "Discovering OpenCode files...",
     });
-    const files = await discoverOpenCodeFiles(opts.openCodeMessageDir);
+    const discovery = await discoverOpenCodeFiles(
+      opts.openCodeMessageDir,
+      cursors.dirMtimes,
+    );
+    const files = discovery.files;
+    // Count includes files in skipped dirs (already tracked in cursors)
     filesScanned.opencode = files.length;
     onProgress?.({
       source: "opencode",
       phase: "parse",
       total: files.length,
-      message: `Parsing ${files.length} OpenCode files...`,
+      message: `Parsing ${files.length} OpenCode files (${discovery.skippedDirs} dirs skipped)...`,
     });
 
     for (let i = 0; i < files.length; i++) {
@@ -257,6 +263,9 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
         total: files.length,
       });
     }
+
+    // Persist directory mtimes for next run
+    cursors.dirMtimes = discovery.dirMtimes;
   }
 
   // ---------- OpenClaw ----------

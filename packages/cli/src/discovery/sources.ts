@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
@@ -59,13 +59,78 @@ export async function discoverGeminiFiles(
 }
 
 /**
- * Discover OpenCode message files.
+ * Result of OpenCode discovery with directory-level mtime tracking.
+ */
+export interface OpenCodeDiscoveryResult {
+  /** Files in changed directories (only these need parsing) */
+  files: string[];
+  /** Updated directory mtimes (all directories, for persisting) */
+  dirMtimes: Record<string, number>;
+  /** Number of directories skipped due to unchanged mtime */
+  skippedDirs: number;
+}
+
+/**
+ * Discover OpenCode message files with directory-level mtime optimization.
+ *
+ * Instead of stat()-ing all 66K+ message files, we stat() only the ~3K
+ * session directories. If a directory's mtime hasn't changed since last
+ * sync, we skip the entire directory (no readdir, no file stat).
+ *
  * Path pattern: ~/.local/share/opencode/storage/message/ses_*\/msg_*.json
  */
 export async function discoverOpenCodeFiles(
   messageDir: string,
-): Promise<string[]> {
-  return collectFiles(messageDir, (name) => name.endsWith(".json"));
+  knownDirMtimes?: Record<string, number>,
+): Promise<OpenCodeDiscoveryResult> {
+  const known = knownDirMtimes ?? {};
+  const newDirMtimes: Record<string, number> = {};
+  const files: string[] = [];
+  let skippedDirs = 0;
+
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await readdir(messageDir, { withFileTypes: true });
+  } catch {
+    return { files: [], dirMtimes: {}, skippedDirs: 0 };
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const dirPath = join(messageDir, entry.name);
+    let dirStat: import("node:fs").Stats;
+    try {
+      dirStat = await stat(dirPath);
+    } catch {
+      continue;
+    }
+
+    const currentMtime = dirStat.mtimeMs;
+    newDirMtimes[dirPath] = currentMtime;
+
+    // Skip directory if mtime unchanged
+    if (known[dirPath] === currentMtime) {
+      skippedDirs++;
+      continue;
+    }
+
+    // Directory changed — read its files
+    let dirEntries: import("node:fs").Dirent[];
+    try {
+      dirEntries = await readdir(dirPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const fileEntry of dirEntries) {
+      if (fileEntry.isFile() && fileEntry.name.endsWith(".json")) {
+        files.push(join(dirPath, fileEntry.name));
+      }
+    }
+  }
+
+  return { files: files.sort(), dirMtimes: newDirMtimes, skippedDirs };
 }
 
 /**

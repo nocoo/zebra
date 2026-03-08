@@ -114,6 +114,8 @@ export interface CursorState {
   version: 1;
   /** Per-file cursors, keyed by absolute file path */
   files: Record<string, FileCursor>;
+  /** Directory-level mtimeMs cache for fast skip (OpenCode optimization) */
+  dirMtimes?: Record<string, number>;
   /** ISO 8601 timestamp of last cursor update */
   updatedAt: string | null;
 }
