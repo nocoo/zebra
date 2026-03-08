@@ -160,8 +160,8 @@ describe("POST /api/ingest", () => {
     expect(row!.total_tokens).toBe(1700);
   });
 
-  it("should upsert (add tokens) on conflict", async () => {
-    // Ingest the same record again — tokens should be added
+  it("should upsert (overwrite tokens) on conflict", async () => {
+    // Ingest the same record again — tokens should be overwritten, not added
     const record = makeRecord();
     const res = await fetch(`${BASE_URL}/api/ingest`, {
       method: "POST",
@@ -170,13 +170,13 @@ describe("POST /api/ingest", () => {
     });
     expect(res.status).toBe(200);
 
-    // Total should now be 1700 + 1700 = 3400
+    // Total should still be 1700 (overwrite, not 1700 + 1700)
     const row = await d1.firstOrNull<{ total_tokens: number }>(
       `SELECT total_tokens FROM usage_records
        WHERE user_id = ? AND source = ? AND model = ? AND hour_start = ?`,
       [TEST_USER_ID, record.source, record.model, record.hour_start],
     );
-    expect(row!.total_tokens).toBe(3400);
+    expect(row!.total_tokens).toBe(1700);
   });
 
   it("should ingest multiple records in a batch", async () => {
@@ -229,8 +229,8 @@ describe("GET /api/usage", () => {
     // We have 3 distinct records: claude-code, gemini-cli, opencode
     expect(body.records.length).toBe(3);
     expect(body.summary).toBeDefined();
-    // Total = 3400 (claude upserted) + 850 (gemini) + 1300 (opencode) = 5550
-    expect(body.summary.total_tokens).toBe(5550);
+    // Total = 1700 (claude overwritten) + 850 (gemini) + 1300 (opencode) = 3850
+    expect(body.summary.total_tokens).toBe(3850);
   });
 
   it("should filter by source", async () => {

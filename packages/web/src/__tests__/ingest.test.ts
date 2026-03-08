@@ -207,15 +207,15 @@ describe("POST /api/ingest", () => {
       const [sql, params] = mockClient.execute.mock.calls[0]!;
       expect(sql).toContain("INSERT INTO usage_records");
       expect(sql).toContain("ON CONFLICT");
-      // Additive semantics — tokens accumulate on conflict
-      expect(sql).toContain("usage_records.input_tokens + excluded.input_tokens");
-      expect(sql).toContain("usage_records.total_tokens + excluded.total_tokens");
+      // Overwrite semantics — tokens replaced on conflict
+      expect(sql).toContain("input_tokens = excluded.input_tokens");
+      expect(sql).toContain("total_tokens = excluded.total_tokens");
       expect(params).toContain("u1"); // user_id
       expect(params).toContain("claude-code"); // source
     });
 
     it("should build multi-row VALUES for multiple records", async () => {
-      mockClient.execute.mockResolvedValueOnce({ changes: 3, duration: 10 });
+      mockClient.execute.mockResolvedValue({ changes: 1, duration: 5 });
 
       const records = [
         VALID_RECORD,
@@ -226,12 +226,13 @@ describe("POST /api/ingest", () => {
 
       expect(res.status).toBe(200);
 
-      const [sql, params] = mockClient.execute.mock.calls[0]!;
-      // 3 records × 9 columns = 27 params
-      expect(params).toHaveLength(27);
-      // SQL should have 3 value tuples
-      const valueMatches = sql.match(/\([\s,?]+\)/g);
-      expect(valueMatches).toHaveLength(3);
+      // With CHUNK_SIZE=1, each record is its own INSERT → 3 execute calls
+      expect(mockClient.execute).toHaveBeenCalledTimes(3);
+      // Each call has 1 record × 9 columns = 9 params
+      for (const call of mockClient.execute.mock.calls) {
+        const [, params] = call;
+        expect(params).toHaveLength(9);
+      }
     });
 
     it("should return ingested count in response", async () => {
@@ -256,7 +257,7 @@ describe("POST /api/ingest", () => {
 
     it("should chunk large batches into CHUNK_SIZE groups", async () => {
       // Create more records than CHUNK_SIZE to trigger multiple execute calls
-      const count = CHUNK_SIZE + 5; // e.g. 25 records → 2 chunks (20 + 5)
+      const count = CHUNK_SIZE + 5; // 6 records → 6 chunks with CHUNK_SIZE=1
       const records = Array.from({ length: count }, (_, i) => ({
         ...VALID_RECORD,
         model: `model-${i}`,
@@ -271,16 +272,14 @@ describe("POST /api/ingest", () => {
       const body = await res.json();
       expect(body.ingested).toBe(count);
 
-      // Should have been called twice: one chunk of CHUNK_SIZE, one of 5
-      expect(mockClient.execute).toHaveBeenCalledTimes(2);
+      // Each record is its own chunk with CHUNK_SIZE=1
+      expect(mockClient.execute).toHaveBeenCalledTimes(count);
 
-      // First chunk: CHUNK_SIZE rows × 9 cols
-      const [, params1] = mockClient.execute.mock.calls[0]!;
-      expect(params1).toHaveLength(CHUNK_SIZE * 9);
-
-      // Second chunk: 5 rows × 9 cols
-      const [, params2] = mockClient.execute.mock.calls[1]!;
-      expect(params2).toHaveLength(5 * 9);
+      // Every call should have exactly 9 params (1 row × 9 cols)
+      for (const call of mockClient.execute.mock.calls) {
+        const [, params] = call;
+        expect(params).toHaveLength(CHUNK_SIZE * 9);
+      }
     });
   });
 });
@@ -307,9 +306,9 @@ describe("buildMultiRowUpsert", () => {
     expect(sql).toContain("INSERT INTO usage_records");
     expect(sql).toContain("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     expect(sql).toContain("ON CONFLICT");
-    // Additive accumulation semantics
-    expect(sql).toContain("usage_records.input_tokens + excluded.input_tokens");
-    expect(sql).toContain("usage_records.total_tokens + excluded.total_tokens");
+    // Overwrite semantics on conflict
+    expect(sql).toContain("input_tokens = excluded.input_tokens");
+    expect(sql).toContain("total_tokens = excluded.total_tokens");
     expect(params).toEqual([
       "u1", "claude-code", "sonnet", "2026-03-07T10:00:00.000Z",
       100, 20, 50, 0, 150,
@@ -353,7 +352,7 @@ describe("buildMultiRowUpsert", () => {
     expect(params[10]).toBe("gemini-cli");
   });
 
-  it("should use additive accumulation on conflict", () => {
+  it("should use overwrite semantics on conflict", () => {
     const { sql } = buildMultiRowUpsert("u1", [
       {
         source: "claude-code",
@@ -367,11 +366,11 @@ describe("buildMultiRowUpsert", () => {
       },
     ]);
 
-    // Each token field should accumulate on conflict
-    expect(sql).toContain("usage_records.input_tokens + excluded.input_tokens");
-    expect(sql).toContain("usage_records.cached_input_tokens + excluded.cached_input_tokens");
-    expect(sql).toContain("usage_records.output_tokens + excluded.output_tokens");
-    expect(sql).toContain("usage_records.reasoning_output_tokens + excluded.reasoning_output_tokens");
-    expect(sql).toContain("usage_records.total_tokens + excluded.total_tokens");
+    // Each token field should overwrite on conflict
+    expect(sql).toContain("input_tokens = excluded.input_tokens");
+    expect(sql).toContain("cached_input_tokens = excluded.cached_input_tokens");
+    expect(sql).toContain("output_tokens = excluded.output_tokens");
+    expect(sql).toContain("reasoning_output_tokens = excluded.reasoning_output_tokens");
+    expect(sql).toContain("total_tokens = excluded.total_tokens");
   });
 });

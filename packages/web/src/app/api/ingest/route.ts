@@ -80,14 +80,16 @@ function validateRecord(r: unknown, index: number): string | null {
 // SQL builder — multi-row INSERT with overwrite upsert
 // ---------------------------------------------------------------------------
 
-/** Max rows per INSERT statement to stay within D1's 999-param limit. */
-export const CHUNK_SIZE = 20; // 20 × 9 cols = 180 params
+/** Max rows per INSERT statement. D1 REST API rejects multi-row INSERTs
+ *  beyond a low threshold (empirically ~5-7 rows). Use small chunks. */
+export const CHUNK_SIZE = 1; // one row at a time until we find the real limit
 
 /**
  * Build a single multi-row INSERT ... ON CONFLICT DO UPDATE SET statement.
  *
  * Each row has 9 columns; placeholders are (?, ?, ..., ?).
- * On conflict, token counts are **accumulated** (added to existing values).
+ * On conflict, token counts are **overwritten** (idempotent: re-sending
+ * the same batch produces the same result).
  */
 export function buildMultiRowUpsert(
   userId: string,
@@ -103,11 +105,11 @@ export function buildMultiRowUpsert(
              reasoning_output_tokens, total_tokens)
             VALUES ${allPlaceholders}
             ON CONFLICT (user_id, source, model, hour_start) DO UPDATE SET
-               input_tokens = usage_records.input_tokens + excluded.input_tokens,
-               cached_input_tokens = usage_records.cached_input_tokens + excluded.cached_input_tokens,
-               output_tokens = usage_records.output_tokens + excluded.output_tokens,
-               reasoning_output_tokens = usage_records.reasoning_output_tokens + excluded.reasoning_output_tokens,
-               total_tokens = usage_records.total_tokens + excluded.total_tokens`;
+               input_tokens = excluded.input_tokens,
+               cached_input_tokens = excluded.cached_input_tokens,
+               output_tokens = excluded.output_tokens,
+               reasoning_output_tokens = excluded.reasoning_output_tokens,
+               total_tokens = excluded.total_tokens`;
 
   const params: unknown[] = [];
   for (const r of records) {
