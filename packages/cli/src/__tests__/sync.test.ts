@@ -418,6 +418,60 @@ describe("executeSync", () => {
 
   // ===== All four sources in one run =====
 
+  it("should fire progress events for all four sources", async () => {
+    // Claude
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+    // Gemini
+    const geminiDir = join(dataDir, ".gemini", "tmp", "proj-b", "chats");
+    await mkdir(geminiDir, { recursive: true });
+    await writeFile(
+      join(geminiDir, "session-2026-03-07.json"),
+      geminiSession("2026-03-07T10:15:00.000Z", 2000, 200),
+    );
+    // OpenCode
+    const ocDir = join(dataDir, "opencode", "message", "ses_001");
+    await mkdir(ocDir, { recursive: true });
+    await writeFile(
+      join(ocDir, "msg_001.json"),
+      opencodeMsg(1771120749059, 14967, 437),
+    );
+    // OpenClaw
+    const agentDir = join(dataDir, ".openclaw", "agents", "a1", "sessions");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      join(agentDir, "session.jsonl"),
+      openclawLine("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    const events: Array<{ source: string; phase: string }> = [];
+
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+      openCodeMessageDir: join(dataDir, "opencode", "message"),
+      openclawDir: join(dataDir, ".openclaw"),
+      onProgress: (e) => events.push({ source: e.source, phase: e.phase }),
+    });
+
+    // Verify all four sources emit discover + parse events
+    expect(events.some((e) => e.source === "claude-code" && e.phase === "discover")).toBe(true);
+    expect(events.some((e) => e.source === "claude-code" && e.phase === "parse")).toBe(true);
+    expect(events.some((e) => e.source === "gemini-cli" && e.phase === "discover")).toBe(true);
+    expect(events.some((e) => e.source === "gemini-cli" && e.phase === "parse")).toBe(true);
+    expect(events.some((e) => e.source === "opencode" && e.phase === "discover")).toBe(true);
+    expect(events.some((e) => e.source === "opencode" && e.phase === "parse")).toBe(true);
+    expect(events.some((e) => e.source === "openclaw" && e.phase === "discover")).toBe(true);
+    expect(events.some((e) => e.source === "openclaw" && e.phase === "parse")).toBe(true);
+    expect(events.some((e) => e.source === "all" && e.phase === "aggregate")).toBe(true);
+    expect(events.some((e) => e.source === "all" && e.phase === "done")).toBe(true);
+  });
+
   it("should sync all four sources simultaneously", async () => {
     // Claude
     const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
