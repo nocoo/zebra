@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST, buildMultiRowUpsert } from "@/app/api/ingest/route";
+import { POST, buildMultiRowUpsert, CHUNK_SIZE } from "@/app/api/ingest/route";
 import * as d1Module from "@/lib/d1";
 
 // Mock getD1Client
@@ -252,6 +252,35 @@ describe("POST /api/ingest", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toContain("ingest");
+    });
+
+    it("should chunk large batches into CHUNK_SIZE groups", async () => {
+      // Create more records than CHUNK_SIZE to trigger multiple execute calls
+      const count = CHUNK_SIZE + 5; // e.g. 25 records → 2 chunks (20 + 5)
+      const records = Array.from({ length: count }, (_, i) => ({
+        ...VALID_RECORD,
+        model: `model-${i}`,
+      }));
+
+      // Mock execute for each chunk
+      mockClient.execute.mockResolvedValue({ changes: CHUNK_SIZE, duration: 5 });
+
+      const res = await POST(makeRequest(records));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ingested).toBe(count);
+
+      // Should have been called twice: one chunk of CHUNK_SIZE, one of 5
+      expect(mockClient.execute).toHaveBeenCalledTimes(2);
+
+      // First chunk: CHUNK_SIZE rows × 9 cols
+      const [, params1] = mockClient.execute.mock.calls[0]!;
+      expect(params1).toHaveLength(CHUNK_SIZE * 9);
+
+      // Second chunk: 5 rows × 9 cols
+      const [, params2] = mockClient.execute.mock.calls[1]!;
+      expect(params2).toHaveLength(5 * 9);
     });
   });
 });

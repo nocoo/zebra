@@ -6,8 +6,8 @@
  * Upserts by (user_id, source, model, hour_start) — on conflict, overwrites
  * token counts (idempotent: re-sending the same batch produces same result).
  *
- * Performance: builds a single multi-row INSERT ... VALUES (...), (...)
- * so one API batch = one HTTP call to D1 (not N calls).
+ * Performance: builds multi-row INSERT ... VALUES (...), (...) statements,
+ * chunked into groups of 20 rows to stay within D1's 999-param limit.
  */
 
 import { NextResponse } from "next/server";
@@ -80,12 +80,14 @@ function validateRecord(r: unknown, index: number): string | null {
 // SQL builder — multi-row INSERT with overwrite upsert
 // ---------------------------------------------------------------------------
 
+/** Max rows per INSERT statement to stay within D1's 999-param limit. */
+export const CHUNK_SIZE = 20; // 20 × 9 cols = 180 params
+
 /**
  * Build a single multi-row INSERT ... ON CONFLICT DO UPDATE SET statement.
  *
  * Each row has 9 columns; placeholders are (?, ?, ..., ?).
- * On conflict, token counts are **overwritten** (not accumulated) so that
- * re-sending the same batch is idempotent.
+ * On conflict, token counts are **accumulated** (added to existing values).
  */
 export function buildMultiRowUpsert(
   userId: string,
@@ -180,14 +182,15 @@ export async function POST(request: Request) {
     }
   }
 
-  // 4. Upsert into D1 — single multi-row INSERT (one HTTP call)
-  const { sql, params } = buildMultiRowUpsert(
-    userId,
-    records as IngestRecord[]
-  );
+  // 4. Upsert into D1 — chunked multi-row INSERTs to respect param limit
+  const validRecords = records as IngestRecord[];
 
   try {
-    await client.execute(sql, params);
+    for (let i = 0; i < validRecords.length; i += CHUNK_SIZE) {
+      const chunk = validRecords.slice(i, i + CHUNK_SIZE);
+      const { sql, params } = buildMultiRowUpsert(userId, chunk);
+      await client.execute(sql, params);
+    }
   } catch (err) {
     console.error("Failed to ingest records:", err);
     return NextResponse.json(
