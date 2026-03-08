@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3.0
+
+### Features
+
+- **Sidebar overhaul** — 3 collapsible NavGroups (Overview, Analytics, Account) using Radix Collapsible + CSS Grid animation; collapsed mode flattens to icon-only tooltipped buttons
+- **Dashboard period selector** — "All Time / This Month / This Week" pill selector with dynamic stat cards and charts
+- **Daily Usage page** — Usage trend chart, source + model filter dropdowns, monthly pagination with prev/next buttons
+- **By Model page** — Added ModelBreakdownChart (horizontal stacked bar) above the detail table
+- **`useUsageData` hook** — Now supports explicit `from`/`to` date params for flexible date range queries
+- **D1 schema** — Added `nickname` column to `users`, created `teams` and `team_members` tables for upcoming team features
+
+### Refactoring
+
+- Renamed "Daily Details" → "Daily Usage" across sidebar and route labels
+- Removed ModelBreakdownChart from dashboard (moved to dedicated By Model page)
+- Sidebar rewritten from flat nav list to data-driven `NavGroup[]` architecture
+
+### Infrastructure
+
+- Test suite: 32 test files, 403 tests passing
+
 ## v0.2.0
 
 ### Breaking Changes

@@ -18,9 +18,9 @@ describe("version", () => {
     expect(APP_VERSION).toBe("1.2.3");
   });
 
-  it("should fallback to 0.2.0 when env is not set", async () => {
+  it("should fallback to 0.3.0 when env is not set", async () => {
     delete process.env.NEXT_PUBLIC_APP_VERSION;
     const { APP_VERSION } = await import("@/lib/version");
-    expect(APP_VERSION).toBe("0.2.0");
+    expect(APP_VERSION).toBe("0.3.0");
   });
 });
