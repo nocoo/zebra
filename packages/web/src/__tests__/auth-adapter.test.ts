@@ -44,6 +44,44 @@ describe("D1AuthAdapter", () => {
       expect(sql).toContain("INSERT INTO users");
       expect(params).toContain("test@example.com");
     });
+
+    it("should generate id when user has no id", async () => {
+      vi.mocked(mockClient.execute).mockResolvedValueOnce({
+        changes: 1,
+        duration: 0.01,
+      });
+
+      const result = await adapter.createUser!({
+        email: "noid@example.com",
+        name: "No ID",
+        image: null,
+        emailVerified: null,
+      } as Parameters<NonNullable<typeof adapter.createUser>>[0]);
+
+      // Should have a generated UUID
+      expect(result.id).toBeDefined();
+      expect(typeof result.id).toBe("string");
+      expect(result.email).toBe("noid@example.com");
+    });
+
+    it("should pass null for optional name, image, emailVerified", async () => {
+      vi.mocked(mockClient.execute).mockResolvedValueOnce({
+        changes: 1,
+        duration: 0.01,
+      });
+
+      await adapter.createUser!({
+        id: "u2",
+        email: "minimal@example.com",
+        emailVerified: null,
+      } as Parameters<NonNullable<typeof adapter.createUser>>[0]);
+
+      const [, params] = vi.mocked(mockClient.execute).mock.calls[0]!;
+      // name, image, emailVerified should be null
+      expect(params![2]).toBeNull(); // name
+      expect(params![3]).toBeNull(); // image
+      expect(params![4]).toBeNull(); // emailVerified
+    });
   });
 
   describe("getUser()", () => {
@@ -98,6 +136,13 @@ describe("D1AuthAdapter", () => {
         expect.stringContaining("WHERE email = ?"),
         ["test@example.com"]
       );
+    });
+
+    it("should return null when email not found", async () => {
+      vi.mocked(mockClient.firstOrNull).mockResolvedValueOnce(null);
+
+      const result = await adapter.getUserByEmail!("nobody@example.com");
+      expect(result).toBeNull();
     });
   });
 
@@ -166,6 +211,29 @@ describe("D1AuthAdapter", () => {
       expect(sql).toContain("INSERT INTO accounts");
       expect(params).toContain("google");
       expect(params).toContain("google-123");
+    });
+
+    it("should pass null for missing optional fields", async () => {
+      vi.mocked(mockClient.execute).mockResolvedValueOnce({
+        changes: 1,
+        duration: 0.01,
+      });
+
+      await adapter.linkAccount!({
+        userId: "u1",
+        type: "oauth" as const,
+        provider: "github",
+        providerAccountId: "gh-456",
+      });
+
+      const [, params] = vi.mocked(mockClient.execute).mock.calls[0]!;
+      // access_token, refresh_token, expires_at, token_type, scope, id_token → all null
+      expect(params![5]).toBeNull(); // access_token
+      expect(params![6]).toBeNull(); // refresh_token
+      expect(params![7]).toBeNull(); // expires_at
+      expect(params![8]).toBeNull(); // token_type
+      expect(params![9]).toBeNull(); // scope
+      expect(params![10]).toBeNull(); // id_token
     });
   });
 
