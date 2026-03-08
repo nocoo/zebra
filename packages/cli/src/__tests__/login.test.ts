@@ -2,7 +2,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { executeLogin } from "../commands/login.js";
+import { executeLogin, resolveHost, DEFAULT_HOST, DEV_HOST } from "../commands/login.js";
+
+// ---------------------------------------------------------------------------
+// resolveHost
+// ---------------------------------------------------------------------------
+
+describe("resolveHost", () => {
+  it("should return DEFAULT_HOST when dev is false", () => {
+    expect(resolveHost(false)).toBe(DEFAULT_HOST);
+  });
+
+  it("should return DEV_HOST when dev is true", () => {
+    expect(resolveHost(true)).toBe(DEV_HOST);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeLogin
+// ---------------------------------------------------------------------------
 
 describe("executeLogin", () => {
   let tempDir: string;
