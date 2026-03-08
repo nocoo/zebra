@@ -21,6 +21,31 @@ Claude Code, Gemini CLI, OpenCode, OpenClaw
 - **Commits**: Conventional Commits, atomic, auto-commit after changes
 - **`@zebra/core` is NOT published**: Pure types, `import type` only, `devDependencies`
 
+## CLI Dev Workflow
+
+```bash
+# Build all packages (core types → CLI → web → worker)
+bun run build
+
+# Start dev server (port 7030)
+bun run --filter '@zebra/web' dev
+
+# Run sync against dev server
+NODE_TLS_REJECT_UNAUTHORIZED=0 bun packages/cli/dist/bin.js sync --dev
+
+# Full reset sync (delete cursors + queue, then sync)
+rm -f ~/.config/zebra/cursors.json ~/.config/zebra/queue.jsonl ~/.config/zebra/queue.state.json
+NODE_TLS_REJECT_UNAUTHORIZED=0 bun packages/cli/dist/bin.js sync --dev
+```
+
+### State Files
+
+- `~/.config/zebra/config.json` — prod API key (`zk_...`)
+- `~/.config/zebra/config.dev.json` — dev API key
+- `~/.config/zebra/cursors.json` — per-file byte offsets + dir mtimes (shared across dev/prod)
+- `~/.config/zebra/queue.jsonl` — pending upload records
+- `~/.config/zebra/queue.state.json` — upload queue metadata
+
 ## npm Publish Procedure
 
 CLI package `@nocoo/zebra` is published to npm. Steps:
