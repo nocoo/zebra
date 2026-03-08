@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -473,6 +473,113 @@ describe("executeSync", () => {
     expect(events.some((e) => e.source === "openclaw" && e.phase === "parse")).toBe(true);
     expect(events.some((e) => e.source === "all" && e.phase === "aggregate")).toBe(true);
     expect(events.some((e) => e.source === "all" && e.phase === "done")).toBe(true);
+  });
+
+  // ===== Error isolation tests =====
+
+  it("should continue syncing other Claude files when one file's parser throws", async () => {
+    // Set up two Claude project dirs with one file each
+    const proj1 = join(dataDir, ".claude", "projects", "proj-good");
+    const proj2 = join(dataDir, ".claude", "projects", "proj-bad");
+    await mkdir(proj1, { recursive: true });
+    await mkdir(proj2, { recursive: true });
+
+    // Good file: valid JSONL
+    await writeFile(
+      join(proj1, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    // Bad file: starts with valid-looking content but will cause readline to
+    // emit a line that triggers an unhandled error deeper in the parser.
+    // We write binary content that createReadStream will read but cannot
+    // be processed by readline without error on certain Node versions.
+    // Instead, we use vi.spyOn to make the parser throw for one specific file.
+    await writeFile(
+      join(proj2, "bad.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 2000, 200) + "\n",
+    );
+
+    // Spy on the parser module to throw for the bad file path
+    const claudeParser = await import("../parsers/claude.js");
+    const origParse = claudeParser.parseClaudeFile;
+    const spy = vi.spyOn(claudeParser, "parseClaudeFile").mockImplementation(
+      async (opts) => {
+        if (opts.filePath.includes("proj-bad")) {
+          throw new Error("Simulated parser explosion");
+        }
+        return origParse(opts);
+      },
+    );
+
+    // Collect progress events to verify warning is emitted
+    const events: Array<{ source: string; phase: string; message?: string }> = [];
+
+    try {
+      const result = await executeSync({
+        stateDir,
+        claudeDir: join(dataDir, ".claude"),
+        onProgress: (e) => events.push({ source: e.source, phase: e.phase, message: e.message }),
+      });
+
+      // The good file's data should still be synced
+      expect(result.totalDeltas).toBe(1);
+      expect(result.sources.claude).toBe(1);
+
+      // Verify queue was written (not lost)
+      const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+      const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+      expect(records).toHaveLength(1);
+      expect(records[0].input_tokens).toBe(1000);
+
+      // Verify a warning was emitted for the bad file
+      expect(events.some((e) => e.phase === "warn")).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("should continue syncing other sources when one source's parser throws", async () => {
+    // Claude: will have a file that throws
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    // OpenClaw: healthy data
+    const agentDir = join(dataDir, ".openclaw", "agents", "a1", "sessions");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      join(agentDir, "session.jsonl"),
+      openclawLine("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    // Make ALL Claude parses throw
+    const claudeParser = await import("../parsers/claude.js");
+    const spy = vi.spyOn(claudeParser, "parseClaudeFile").mockRejectedValue(
+      new Error("Claude parser crash"),
+    );
+
+    try {
+      const result = await executeSync({
+        stateDir,
+        claudeDir: join(dataDir, ".claude"),
+        openclawDir: join(dataDir, ".openclaw"),
+      });
+
+      // OpenClaw data should still be synced despite Claude failure
+      expect(result.sources.openclaw).toBe(1);
+      expect(result.totalRecords).toBeGreaterThanOrEqual(1);
+
+      // Verify queue has the OpenClaw record
+      const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+      const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+      expect(records.some((r) => r.source === "openclaw")).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("should sync all four sources simultaneously", async () => {
