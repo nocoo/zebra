@@ -10,9 +10,10 @@
 // Source: Supported AI coding tools
 // ---------------------------------------------------------------------------
 
-/** The 4 supported AI coding tools */
+/** The 5 supported AI coding tools */
 export type Source =
   | "claude-code"
+  | "codex"
   | "gemini-cli"
   | "opencode"
   | "openclaw";
@@ -78,7 +79,7 @@ export interface FileCursorBase {
   updatedAt: string;
 }
 
-/** Cursor for byte-offset-based JSONL files (Claude, Codex, OpenClaw) */
+/** Cursor for byte-offset-based JSONL files (Claude, Codex CLI, OpenClaw) */
 export interface ByteOffsetCursor extends FileCursorBase {
   /** Byte offset where we last stopped reading */
   offset: number;

@@ -143,3 +143,15 @@ export async function discoverOpenClawFiles(
   const agentsDir = join(openclawDir, "agents");
   return collectFiles(agentsDir, (name) => name.endsWith(".jsonl"));
 }
+
+/**
+ * Discover Codex CLI rollout files.
+ * Path pattern: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+ */
+export async function discoverCodexFiles(
+  codexSessionsDir: string,
+): Promise<string[]> {
+  return collectFiles(codexSessionsDir, (name) =>
+    name.startsWith("rollout-") && name.endsWith(".jsonl"),
+  );
+}

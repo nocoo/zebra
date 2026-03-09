@@ -6,11 +6,14 @@ import { join } from "node:path";
  * All paths can be overridden for testing.
  */
 export function resolveDefaultPaths(home = homedir()) {
+  const codexHome = process.env.CODEX_HOME || join(home, ".codex");
   return {
     /** Pew state directory: ~/.config/pew/ */
     stateDir: join(home, ".config", "pew"),
     /** Claude Code data: ~/.claude */
     claudeDir: join(home, ".claude"),
+    /** Codex CLI sessions: ~/.codex/sessions (or $CODEX_HOME/sessions) */
+    codexSessionsDir: join(codexHome, "sessions"),
     /** Gemini CLI data: ~/.gemini */
     geminiDir: join(home, ".gemini"),
     /** OpenCode message storage: ~/.local/share/opencode/storage/message */

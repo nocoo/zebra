@@ -25,14 +25,20 @@ describe("resolveDefaultPaths", () => {
     expect(paths.claudeDir).toBe(join(home, ".claude"));
   });
 
-  it("should return exactly 6 path properties", () => {
+  it("should resolve codexSessionsDir with default CODEX_HOME", () => {
+    const paths = resolveDefaultPaths("/fakehome");
+    expect(paths.codexSessionsDir).toBe(join("/fakehome", ".codex", "sessions"));
+  });
+
+  it("should return exactly 7 path properties", () => {
     const paths = resolveDefaultPaths("/fakehome");
     const keys = Object.keys(paths);
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(7);
     expect(keys).toEqual(
       expect.arrayContaining([
         "stateDir",
         "claudeDir",
+        "codexSessionsDir",
         "geminiDir",
         "openCodeMessageDir",
         "openCodeDbPath",
