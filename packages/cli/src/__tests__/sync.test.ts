@@ -706,10 +706,17 @@ describe("executeSync", () => {
    * Helper: create a mock openMessageDb factory that returns rows from an in-memory array.
    * Simulates the bun:sqlite adapter without requiring the actual runtime.
    */
-  function mockOpenMessageDb(rows: Array<{ id: string; session_id: string; time_created: number; data: string }>) {
+  function mockOpenMessageDb(rows: Array<{ id: string; session_id: string; time_created: number; role?: string | null; data: string }>) {
+    // Auto-populate role from data JSON if not explicitly provided
+    const enrichedRows = rows.map((r) => ({
+      ...r,
+      role: r.role !== undefined ? r.role : (() => {
+        try { return (JSON.parse(r.data) as Record<string, unknown>).role as string ?? null; } catch { return null; }
+      })(),
+    }));
     return (_dbPath: string) => ({
       queryMessages: (lastTimeCreated: number) =>
-        rows.filter((r) => r.time_created > lastTimeCreated),
+        enrichedRows.filter((r) => r.time_created > lastTimeCreated),
       close: () => {},
     });
   }

@@ -340,15 +340,11 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
             }
           }
 
-          // Filter rows: exclude assistant messages already tracked by JSON parser
+          // Filter rows: exclude assistant messages already tracked by JSON parser.
+          // row.role is extracted at the SQL level via json_extract — no need to
+          // parse the full data JSON here.
           const filteredRows = rows.filter((row) => {
-            let msg: Record<string, unknown>;
-            try {
-              msg = JSON.parse(row.data);
-            } catch {
-              return true; // keep — processOpenCodeMessages will skip non-parseable rows
-            }
-            if (msg.role !== "assistant") return true; // non-assistant rows don't produce deltas
+            if (row.role !== "assistant") return true; // non-assistant rows don't produce deltas
             const key = `${row.session_id}|${row.id}`;
             return !jsonMessageKeys.has(key);
           });
@@ -366,12 +362,11 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
           sourceCounts.opencode += result.deltas.length;
 
           // Update SQLite cursor — advance past ALL rows (including deduped)
-          // so we don't re-query them next time. Max time_created from
-          // unfiltered rows is the correct watermark.
-          let maxTime = lastTimeCreated;
-          for (const row of rows) {
-            if (row.time_created > maxTime) maxTime = row.time_created;
-          }
+          // so we don't re-query them next time. Rows are ORDER BY time_created ASC,
+          // so the last row has the highest time_created.
+          const maxTime = rows.length > 0
+            ? rows[rows.length - 1].time_created
+            : lastTimeCreated;
           cursors.openCodeSqlite = {
             lastTimeCreated: maxTime,
             lastSessionUpdated: prevSqlite?.lastSessionUpdated ?? 0,

@@ -20,7 +20,7 @@ export function openMessageDb(
   }
 
   const stmt = db.query<MessageRow, [number]>(
-    `SELECT id, session_id, time_created, data
+    `SELECT id, session_id, time_created, json_extract(data, '$.role') as role, data
      FROM message
      WHERE time_created > ?
      ORDER BY time_created ASC`,
@@ -71,16 +71,26 @@ export function openSessionDb(
 
     querySessionMessages: (sessionIds: string[]) => {
       if (sessionIds.length === 0) return [];
-      // Build IN clause with placeholders.
-      // role is stored inside the JSON data blob, extract via json_extract.
-      const placeholders = sessionIds.map(() => "?").join(",");
-      const stmt = db.query<SessionMessageRow, string[]>(
-        `SELECT session_id, json_extract(data, '$.role') as role, time_created, data
-         FROM message
-         WHERE session_id IN (${placeholders})
-         ORDER BY time_created ASC`,
-      );
-      return stmt.all(...sessionIds);
+      // SQLite has a 999 parameter limit. Batch session IDs into chunks
+      // of 500 to stay well under the limit.
+      const CHUNK_SIZE = 500;
+      const results: SessionMessageRow[] = [];
+      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => "?").join(",");
+        const stmt = db.query<SessionMessageRow, string[]>(
+          `SELECT session_id, json_extract(data, '$.role') as role, time_created, data
+           FROM message
+           WHERE session_id IN (${placeholders})
+           ORDER BY time_created ASC`,
+        );
+        results.push(...stmt.all(...chunk));
+      }
+      // Re-sort across chunks to maintain global time_created order
+      if (sessionIds.length > CHUNK_SIZE) {
+        results.sort((a, b) => a.time_created - b.time_created);
+      }
+      return results;
     },
 
     close: () => db.close(),

@@ -20,6 +20,8 @@ export interface MessageRow {
   id: string;
   session_id: string;
   time_created: number;
+  /** Extracted via json_extract(data, '$.role') at the SQL level */
+  role: string | null;
   data: string;
 }
 
@@ -70,6 +72,9 @@ export function processOpenCodeMessages(
       maxTimeCreated = row.time_created;
     }
 
+    // Only process assistant messages (role is pre-extracted at SQL level)
+    if (row.role !== "assistant") continue;
+
     // Parse data JSON
     let msg: Record<string, unknown>;
     try {
@@ -77,9 +82,6 @@ export function processOpenCodeMessages(
     } catch {
       continue;
     }
-
-    // Only process assistant messages
-    if (msg.role !== "assistant") continue;
 
     // Build message key for dedup
     messageKeys.add(`${row.session_id}|${row.id}`);

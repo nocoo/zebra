@@ -370,13 +370,11 @@ export async function executeSessionSync(
             });
           }
 
-          // Update session cursor — advance past all queried sessions
-          let maxTimeUpdated = lastTimeUpdated;
-          for (const session of sessions) {
-            if (session.time_updated > maxTimeUpdated) {
-              maxTimeUpdated = session.time_updated;
-            }
-          }
+          // Update session cursor — advance past all queried sessions.
+          // Sessions are ORDER BY time_updated ASC, so last has the max.
+          const maxTimeUpdated = sessions.length > 0
+            ? sessions[sessions.length - 1].time_updated
+            : lastTimeUpdated;
           cursors.openCodeSqlite = {
             lastTimeUpdated: maxTimeUpdated,
             inode: dbInode,

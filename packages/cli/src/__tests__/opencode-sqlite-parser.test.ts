@@ -36,8 +36,13 @@ function msgRow(
   sessionId: string,
   timeCreated: number,
   data: string,
+  role?: string | null,
 ): MessageRow {
-  return { id, session_id: sessionId, time_created: timeCreated, data };
+  // If role not explicitly provided, extract from data JSON
+  const resolvedRole = role !== undefined ? role : (() => {
+    try { return (JSON.parse(data) as Record<string, unknown>).role as string ?? null; } catch { return null; }
+  })();
+  return { id, session_id: sessionId, time_created: timeCreated, role: resolvedRole, data };
 }
 
 /**

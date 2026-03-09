@@ -46,9 +46,11 @@ const syncCommand = defineCommand({
     // Dynamic import: opencode-sqlite-db.ts uses bun:sqlite which is
     // only available at runtime under Bun, not in Vitest/Node test env.
     let openMessageDb: typeof import("./parsers/opencode-sqlite-db.js").openMessageDb | undefined;
+    let openSessionDb: typeof import("./parsers/opencode-sqlite-db.js").openSessionDb | undefined;
     try {
       const mod = await import("./parsers/opencode-sqlite-db.js");
       openMessageDb = mod.openMessageDb;
+      openSessionDb = mod.openSessionDb;
     } catch {
       // bun:sqlite not available — SQLite sync will be skipped
     }
@@ -109,15 +111,6 @@ const syncCommand = defineCommand({
     // ---------- Session sync ----------
     consola.log("");
     consola.start("Syncing session statistics...\n");
-
-    // Dynamic import for session DB adapter (same bun:sqlite constraint)
-    let openSessionDb: typeof import("./parsers/opencode-sqlite-db.js").openSessionDb | undefined;
-    try {
-      const mod = await import("./parsers/opencode-sqlite-db.js");
-      openSessionDb = mod.openSessionDb;
-    } catch {
-      // bun:sqlite not available — SQLite session sync will be skipped
-    }
 
     const sessionResult = await executeSessionSync({
       stateDir: paths.stateDir,
