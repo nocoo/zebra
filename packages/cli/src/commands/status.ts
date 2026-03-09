@@ -36,6 +36,7 @@ export async function executeStatus(opts: {
   for (const filePath of Object.keys(cursors.files)) {
     let source = "unknown";
     if (filePath.includes(".claude")) source = "claude-code";
+    else if (filePath.includes(".codex")) source = "codex";
     else if (filePath.includes(".gemini")) source = "gemini-cli";
     else if (filePath.includes("opencode")) source = "opencode";
     else if (filePath.includes(".openclaw")) source = "openclaw";

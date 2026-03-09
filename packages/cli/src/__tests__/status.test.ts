@@ -94,16 +94,26 @@ describe("executeStatus", () => {
           size: 70,
           mtimeMs: 4000,
         },
+        "/home/.codex/sessions/2026/03/07/rollout-abc.jsonl": {
+          type: "codex",
+          offset: 200,
+          inode: 6,
+          size: 200,
+          mtimeMs: 5000,
+          lastTotals: null,
+          lastModel: null,
+        },
       },
       updatedAt: "2026-03-07T12:00:00.000Z",
     });
 
     const result = await executeStatus({ stateDir });
-    expect(result.trackedFiles).toBe(5);
+    expect(result.trackedFiles).toBe(6);
     expect(result.sources["claude-code"]).toBe(2);
     expect(result.sources["gemini-cli"]).toBe(1);
     expect(result.sources["opencode"]).toBe(1);
     expect(result.sources["openclaw"]).toBe(1);
+    expect(result.sources["codex"]).toBe(1);
   });
 
   it("should count pending records from queue", async () => {
