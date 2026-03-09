@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   ByteOffsetCursor,
+  CodexCursor,
   CursorState,
   GeminiCursor,
   HourBucket,
@@ -24,14 +25,15 @@ import type {
 } from "../types.js";
 
 describe("Source type", () => {
-  it("should accept all 4 supported AI tools", () => {
+  it("should accept all 5 supported AI tools", () => {
     const sources: Source[] = [
       "claude-code",
+      "codex",
       "gemini-cli",
       "opencode",
       "openclaw",
     ];
-    expect(sources).toHaveLength(4);
+    expect(sources).toHaveLength(5);
   });
 
   it("should reject unsupported tools at type level", () => {
@@ -161,6 +163,24 @@ describe("SyncCursor types", () => {
     };
     expect(cursor.size).toBe(2048);
     expect(cursor.messageKey).toBe("ses_123|msg_456");
+  });
+
+  it("should hold Codex cursor with offset + cumulative diff state", () => {
+    const cursor: CodexCursor = {
+      inode: 777,
+      offset: 8192,
+      lastTotals: {
+        inputTokens: 5000,
+        cachedInputTokens: 1000,
+        outputTokens: 800,
+        reasoningOutputTokens: 200,
+      },
+      lastModel: "gpt-5.4",
+      updatedAt: "2026-03-07T10:00:00Z",
+    };
+    expect(cursor.offset).toBe(8192);
+    expect(cursor.lastTotals?.inputTokens).toBe(5000);
+    expect(cursor.lastModel).toBe("gpt-5.4");
   });
 
   it("should compose into CursorState", () => {

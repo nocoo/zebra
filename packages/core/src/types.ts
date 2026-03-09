@@ -79,10 +79,20 @@ export interface FileCursorBase {
   updatedAt: string;
 }
 
-/** Cursor for byte-offset-based JSONL files (Claude, Codex CLI, OpenClaw) */
+/** Cursor for byte-offset-based JSONL files (Claude, OpenClaw) */
 export interface ByteOffsetCursor extends FileCursorBase {
   /** Byte offset where we last stopped reading */
   offset: number;
+}
+
+/** Cursor for Codex CLI (byte-offset + cumulative diff state) */
+export interface CodexCursor extends FileCursorBase {
+  /** Byte offset where we last stopped reading */
+  offset: number;
+  /** Last seen cumulative token totals (for diff computation) */
+  lastTotals: TokenDelta | null;
+  /** Last seen model identifier */
+  lastModel: string | null;
 }
 
 /** Cursor for Gemini (array-index-based JSON files) */
@@ -122,7 +132,7 @@ export interface OpenCodeSqliteCursor {
 }
 
 /** Union of all cursor types, keyed by absolute file path */
-export type FileCursor = ByteOffsetCursor | GeminiCursor | OpenCodeCursor;
+export type FileCursor = ByteOffsetCursor | CodexCursor | GeminiCursor | OpenCodeCursor;
 
 /** Top-level cursor store persisted to disk */
 export interface CursorState {

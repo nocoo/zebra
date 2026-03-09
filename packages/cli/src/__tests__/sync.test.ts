@@ -75,6 +75,37 @@ function openclawLine(ts: string, input: number, output: number): string {
   });
 }
 
+/** Helper: create Codex CLI JSONL content (session_meta + turn_context + token_count) */
+function codexLines(ts: string, input: number, output: number): string {
+  const meta = JSON.stringify({
+    timestamp: ts,
+    type: "session_meta",
+    payload: { id: "ses-codex-001", cwd: "/tmp/project", model: "gpt-5.4" },
+  });
+  const ctx = JSON.stringify({
+    timestamp: ts,
+    type: "turn_context",
+    payload: { model: "gpt-5.4", cwd: "/tmp/project" },
+  });
+  const tok = JSON.stringify({
+    timestamp: ts,
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        total_token_usage: {
+          input_tokens: input,
+          cached_input_tokens: 0,
+          output_tokens: output,
+          reasoning_output_tokens: 0,
+          total_tokens: input + output,
+        },
+      },
+    },
+  });
+  return [meta, ctx, tok].join("\n");
+}
+
 describe("executeSync", () => {
   let tempDir: string;
   let dataDir: string;
@@ -255,6 +286,113 @@ describe("executeSync", () => {
     expect(result.sources.gemini).toBe(1);
   });
 
+  // ===== Codex CLI sync =====
+
+  it("should sync Codex data files to queue", async () => {
+    const codexDir = join(dataDir, ".codex", "sessions", "2026", "03", "07");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, "rollout-abc123.jsonl"),
+      codexLines("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    const result = await executeSync({
+      stateDir,
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
+    });
+
+    expect(result.totalDeltas).toBe(1);
+    expect(result.totalRecords).toBe(1);
+    expect(result.sources.codex).toBe(1);
+    expect(result.filesScanned.codex).toBe(1);
+
+    // Verify queue file was created
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records).toHaveLength(1);
+    expect(records[0].source).toBe("codex");
+    expect(records[0].model).toBe("gpt-5.4");
+    expect(records[0].input_tokens).toBe(5000);
+    expect(records[0].output_tokens).toBe(800);
+  });
+
+  it("should be incremental for Codex (second sync with no changes produces no new data)", async () => {
+    const codexDir = join(dataDir, ".codex", "sessions", "2026", "03", "07");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, "rollout-abc123.jsonl"),
+      codexLines("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    const r1 = await executeSync({
+      stateDir,
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
+    });
+    expect(r1.totalDeltas).toBe(1);
+    expect(r1.sources.codex).toBe(1);
+
+    // Second sync: no new data
+    const r2 = await executeSync({
+      stateDir,
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
+    });
+    expect(r2.totalDeltas).toBe(0);
+    expect(r2.totalRecords).toBe(0);
+  });
+
+  it("should sync only new Codex lines appended after first sync", async () => {
+    const codexDir = join(dataDir, ".codex", "sessions", "2026", "03", "07");
+    await mkdir(codexDir, { recursive: true });
+    const filePath = join(codexDir, "rollout-abc123.jsonl");
+    await writeFile(
+      filePath,
+      codexLines("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    const r1 = await executeSync({
+      stateDir,
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
+    });
+    expect(r1.totalDeltas).toBe(1);
+
+    // Append a new token_count line (cumulative totals increase)
+    const existing = await readFile(filePath, "utf-8");
+    const newTokenLine = JSON.stringify({
+      timestamp: "2026-03-07T11:15:00.000Z",
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: {
+            input_tokens: 8000,
+            cached_input_tokens: 0,
+            output_tokens: 1200,
+            reasoning_output_tokens: 0,
+            total_tokens: 9200,
+          },
+        },
+      },
+    });
+    await writeFile(filePath, existing + newTokenLine + "\n");
+
+    const r2 = await executeSync({
+      stateDir,
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
+    });
+    // Should get the diff: 8000-5000=3000 input, 1200-800=400 output
+    expect(r2.totalDeltas).toBe(1);
+    expect(r2.sources.codex).toBe(1);
+
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    // Second record should be the diff
+    const codexRecords = records.filter((r) => r.source === "codex");
+    expect(codexRecords).toHaveLength(2);
+    // The second record should have the diff tokens
+    expect(codexRecords[1].input_tokens).toBe(3000);
+    expect(codexRecords[1].output_tokens).toBe(400);
+  });
+
   // ===== OpenCode incremental sync + triple-check skip =====
 
   it("should be incremental for OpenCode (second sync with no file changes skips parsing)", async () => {
@@ -419,9 +557,9 @@ describe("executeSync", () => {
     expect(parseEvent?.message).toContain("1 dirs skipped");
   });
 
-  // ===== All four sources in one run =====
+  // ===== All five sources in one run =====
 
-  it("should fire progress events for all four sources", async () => {
+  it("should fire progress events for all five sources", async () => {
     // Claude
     const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
     await mkdir(claudeDir, { recursive: true });
@@ -450,6 +588,13 @@ describe("executeSync", () => {
       join(agentDir, "session.jsonl"),
       openclawLine("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
     );
+    // Codex
+    const codexDir = join(dataDir, ".codex", "sessions", "2026", "03", "07");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, "rollout-abc123.jsonl"),
+      codexLines("2026-03-07T10:15:00.000Z", 3000, 500) + "\n",
+    );
 
     const events: Array<{ source: string; phase: string }> = [];
 
@@ -459,10 +604,11 @@ describe("executeSync", () => {
       geminiDir: join(dataDir, ".gemini"),
       openCodeMessageDir: join(dataDir, "opencode", "message"),
       openclawDir: join(dataDir, ".openclaw"),
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
       onProgress: (e) => events.push({ source: e.source, phase: e.phase }),
     });
 
-    // Verify all four sources emit discover + parse events
+    // Verify all five sources emit discover + parse events
     expect(events.some((e) => e.source === "claude-code" && e.phase === "discover")).toBe(true);
     expect(events.some((e) => e.source === "claude-code" && e.phase === "parse")).toBe(true);
     expect(events.some((e) => e.source === "gemini-cli" && e.phase === "discover")).toBe(true);
@@ -471,6 +617,8 @@ describe("executeSync", () => {
     expect(events.some((e) => e.source === "opencode" && e.phase === "parse")).toBe(true);
     expect(events.some((e) => e.source === "openclaw" && e.phase === "discover")).toBe(true);
     expect(events.some((e) => e.source === "openclaw" && e.phase === "parse")).toBe(true);
+    expect(events.some((e) => e.source === "codex" && e.phase === "discover")).toBe(true);
+    expect(events.some((e) => e.source === "codex" && e.phase === "parse")).toBe(true);
     expect(events.some((e) => e.source === "all" && e.phase === "aggregate")).toBe(true);
     expect(events.some((e) => e.source === "all" && e.phase === "done")).toBe(true);
   });
@@ -651,7 +799,7 @@ describe("executeSync", () => {
     expect(queueRecordCount).toBe(0);
   });
 
-  it("should sync all four sources simultaneously", async () => {
+  it("should sync all five sources simultaneously", async () => {
     // Claude
     const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
     await mkdir(claudeDir, { recursive: true });
@@ -680,6 +828,13 @@ describe("executeSync", () => {
       join(agentDir, "session.jsonl"),
       openclawLine("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
     );
+    // Codex
+    const codexDir = join(dataDir, ".codex", "sessions", "2026", "03", "07");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, "rollout-abc123.jsonl"),
+      codexLines("2026-03-07T10:15:00.000Z", 3000, 500) + "\n",
+    );
 
     const result = await executeSync({
       stateDir,
@@ -687,17 +842,20 @@ describe("executeSync", () => {
       geminiDir: join(dataDir, ".gemini"),
       openCodeMessageDir: join(dataDir, "opencode", "message"),
       openclawDir: join(dataDir, ".openclaw"),
+      codexSessionsDir: join(dataDir, ".codex", "sessions"),
     });
 
-    expect(result.totalDeltas).toBe(4);
+    expect(result.totalDeltas).toBe(5);
     expect(result.sources.claude).toBe(1);
     expect(result.sources.gemini).toBe(1);
     expect(result.sources.opencode).toBe(1);
     expect(result.sources.openclaw).toBe(1);
+    expect(result.sources.codex).toBe(1);
     expect(result.filesScanned.claude).toBe(1);
     expect(result.filesScanned.gemini).toBe(1);
     expect(result.filesScanned.opencode).toBe(1);
     expect(result.filesScanned.openclaw).toBe(1);
+    expect(result.filesScanned.codex).toBe(1);
   });
 
   // ===== OpenCode SQLite integration =====

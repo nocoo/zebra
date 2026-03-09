@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import type {
   ByteOffsetCursor,
+  CodexCursor,
   CursorState,
   GeminiCursor,
   OpenCodeCursor,
@@ -13,12 +14,14 @@ import { CursorStore } from "../storage/cursor-store.js";
 import { LocalQueue } from "../storage/local-queue.js";
 import {
   discoverClaudeFiles,
+  discoverCodexFiles,
   discoverGeminiFiles,
   discoverOpenCodeFiles,
   discoverOpenClawFiles,
 } from "../discovery/sources.js";
 import type { OpenCodeDiscoveryResult } from "../discovery/sources.js";
 import { parseClaudeFile } from "../parsers/claude.js";
+import { parseCodexFile } from "../parsers/codex.js";
 import { parseGeminiFile } from "../parsers/gemini.js";
 import { parseOpenCodeFile } from "../parsers/opencode.js";
 import { parseOpenClawFile } from "../parsers/openclaw.js";
@@ -33,6 +36,8 @@ export interface SyncOptions {
   stateDir: string;
   /** Override: Claude data directory (~/.claude) */
   claudeDir?: string;
+  /** Override: Codex CLI sessions directory (~/.codex/sessions) */
+  codexSessionsDir?: string;
   /** Override: Gemini data directory (~/.gemini) */
   geminiDir?: string;
   /** Override: OpenCode message directory (~/.local/share/opencode/storage/message) */
@@ -62,6 +67,7 @@ export interface SyncResult {
   totalRecords: number;
   sources: {
     claude: number;
+    codex: number;
     gemini: number;
     opencode: number;
     openclaw: number;
@@ -69,6 +75,7 @@ export interface SyncResult {
   /** Total files scanned per source */
   filesScanned: {
     claude: number;
+    codex: number;
     gemini: number;
     opencode: number;
     openclaw: number;
@@ -97,8 +104,8 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
   const cursors = await cursorStore.load();
 
   const allDeltas: ParsedDelta[] = [];
-  const sourceCounts = { claude: 0, gemini: 0, opencode: 0, openclaw: 0 };
-  const filesScanned = { claude: 0, gemini: 0, opencode: 0, openclaw: 0 };
+  const sourceCounts = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0 };
+  const filesScanned = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0 };
 
   // ---------- Claude Code ----------
   if (opts.claudeDir) {
@@ -459,6 +466,71 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
       onProgress?.({
         source: "openclaw",
+        phase: "parse",
+        current: i + 1,
+        total: files.length,
+      });
+    }
+  }
+
+  // ---------- Codex CLI ----------
+  if (opts.codexSessionsDir) {
+    onProgress?.({
+      source: "codex",
+      phase: "discover",
+      message: "Discovering Codex CLI files...",
+    });
+    const files = await discoverCodexFiles(opts.codexSessionsDir);
+    filesScanned.codex = files.length;
+    onProgress?.({
+      source: "codex",
+      phase: "parse",
+      total: files.length,
+      message: `Parsing ${files.length} Codex files...`,
+    });
+
+    for (let i = 0; i < files.length; i++) {
+      const filePath = files[i];
+      const prev = cursors.files[filePath] as CodexCursor | undefined;
+      const st = await stat(filePath).catch(() => null);
+      if (!st) continue;
+
+      const inode = st.ino;
+      const startOffset =
+        prev && prev.inode === inode ? (prev.offset ?? 0) : 0;
+      const lastTotals =
+        prev && prev.inode === inode ? (prev.lastTotals ?? null) : null;
+      const lastModel =
+        prev && prev.inode === inode ? (prev.lastModel ?? null) : null;
+
+      const result = await parseCodexFile({
+        filePath,
+        startOffset,
+        lastTotals,
+        lastModel,
+      }).catch((err: unknown) => {
+        onProgress?.({
+          source: "codex",
+          phase: "warn",
+          message: `Skipping ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        return null;
+      });
+      if (!result) continue;
+
+      cursors.files[filePath] = {
+        inode,
+        offset: result.endOffset,
+        lastTotals: result.lastTotals,
+        lastModel: result.lastModel,
+        updatedAt: new Date().toISOString(),
+      } satisfies CodexCursor;
+
+      allDeltas.push(...result.deltas);
+      sourceCounts.codex += result.deltas.length;
+
+      onProgress?.({
+        source: "codex",
         phase: "parse",
         current: i + 1,
         total: files.length,
