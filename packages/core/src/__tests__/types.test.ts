@@ -8,20 +8,24 @@ import { describe, expect, it } from "vitest";
 import type {
   ByteOffsetCursor,
   CodexCursor,
+  CoordinatorRunResult,
   CursorState,
   GeminiCursor,
   HourBucket,
+  NotifierOperationResult,
+  NotifierStatus,
   OpenCodeCursor,
   QueueRecord,
+  PewConfig,
+  SessionCursorState,
+  SessionFileCursor,
+  SessionKind,
+  SessionQueueRecord,
+  SessionSnapshot,
   Source,
+  SyncTrigger,
   TokenDelta,
   UsageRecord,
-  PewConfig,
-  SessionKind,
-  SessionSnapshot,
-  SessionQueueRecord,
-  SessionFileCursor,
-  SessionCursorState,
 } from "../types.js";
 
 describe("Source type", () => {
@@ -214,6 +218,54 @@ describe("QueueRecord type", () => {
     };
     expect(record.source).toBe("claude-code");
     expect(record.total_tokens).toBe(8000);
+  });
+});
+
+describe("Notifier types", () => {
+  it("should represent notify triggers with source and file hint", () => {
+    const trigger: SyncTrigger = {
+      kind: "notify",
+      source: "codex",
+      fileHint: "/tmp/rollout.jsonl",
+    };
+    expect(trigger.kind).toBe("notify");
+    expect(trigger.source).toBe("codex");
+    expect(trigger.fileHint).toBe("/tmp/rollout.jsonl");
+  });
+
+  it("should represent coordinator run results", () => {
+    const result: CoordinatorRunResult = {
+      runId: "2026-03-09T10:00:00.000Z-abc123",
+      triggers: [{ kind: "startup" }],
+      hadFollowUp: false,
+      waitedForLock: true,
+      skippedSync: false,
+    };
+    expect(result.waitedForLock).toBe(true);
+    expect(result.triggers).toHaveLength(1);
+  });
+
+  it("should constrain notifier status values", () => {
+    const statuses: NotifierStatus[] = [
+      "installed",
+      "not-installed",
+      "outdated",
+      "error",
+    ];
+    expect(statuses).toHaveLength(4);
+  });
+
+  it("should describe notifier operation results", () => {
+    const operation: NotifierOperationResult = {
+      source: "gemini-cli",
+      action: "install",
+      changed: true,
+      detail: "Hook installed",
+      backupPath: "/tmp/settings.json.bak",
+      warnings: ["matcher normalized"],
+    };
+    expect(operation.source).toBe("gemini-cli");
+    expect(operation.warnings).toContain("matcher normalized");
   });
 });
 

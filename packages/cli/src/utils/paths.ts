@@ -10,6 +10,10 @@ export function resolveDefaultPaths(home = homedir()) {
   return {
     /** Pew state directory: ~/.config/pew/ */
     stateDir: join(home, ".config", "pew"),
+    /** Pew bin directory: ~/.config/pew/bin/ */
+    binDir: join(home, ".config", "pew", "bin"),
+    /** notify.cjs path: ~/.config/pew/bin/notify.cjs */
+    notifyPath: join(home, ".config", "pew", "bin", "notify.cjs"),
     /** Claude Code data: ~/.claude */
     claudeDir: join(home, ".claude"),
     /** Codex CLI sessions: ~/.codex/sessions (or $CODEX_HOME/sessions) */

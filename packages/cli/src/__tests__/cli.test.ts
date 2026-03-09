@@ -9,7 +9,7 @@ import { main } from "../cli.js";
 describe("CLI main command", () => {
   it("should have correct meta", () => {
     expect(main.meta?.name).toBe("pew");
-    expect(main.meta?.version).toBe("0.6.1");
+    expect(main.meta?.version).toBe("0.6.2");
     expect(main.meta?.description).toBeDefined();
   });
 
@@ -21,10 +21,13 @@ describe("CLI main command", () => {
     expect(names).toContain("sync");
     expect(names).toContain("status");
     expect(names).toContain("login");
+    expect(names).toContain("notify");
+    expect(names).toContain("init");
+    expect(names).toContain("uninstall");
   });
 
-  it("should have exactly 3 subcommands", () => {
+  it("should have exactly 6 subcommands", () => {
     const names = Object.keys(main.subCommands!);
-    expect(names).toHaveLength(3);
+    expect(names).toHaveLength(6);
   });
 });

@@ -260,3 +260,47 @@ export interface PewConfig {
   /** Auth token obtained via `pew login` */
   token?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Notifier / Trigger types
+// ---------------------------------------------------------------------------
+
+/** Trigger that initiates a sync cycle */
+export type SyncTrigger =
+  | { kind: "manual"; command: string }
+  | { kind: "notify"; source: Source; fileHint?: string | null }
+  | { kind: "startup" }
+  | { kind: "scheduled" };
+
+/** Result of a single Coordinator run */
+export interface CoordinatorRunResult {
+  /** Unique ID for this run (ISO timestamp + random suffix) */
+  runId: string;
+  /** Triggers that were coalesced into this run */
+  triggers: SyncTrigger[];
+  /** Whether a follow-up run was triggered by dirty signal */
+  hadFollowUp: boolean;
+  /** Whether this process had to wait for another sync to finish before acquiring the lock */
+  waitedForLock: boolean;
+  /** Whether sync was skipped because a previous follow-up already consumed the signal */
+  skippedSync: boolean;
+  /** Error message if the run failed */
+  error?: string;
+}
+
+/** Status of a notifier hook/plugin for a specific source */
+export type NotifierStatus = "installed" | "not-installed" | "outdated" | "error";
+
+/** Result of a notifier install/uninstall operation */
+export interface NotifierOperationResult {
+  source: Source;
+  action: "install" | "uninstall" | "skip";
+  /** Whether the config was actually changed */
+  changed: boolean;
+  /** Human-readable detail */
+  detail: string;
+  /** Path to backup file if one was created */
+  backupPath?: string;
+  /** Warning messages (non-fatal) */
+  warnings?: string[];
+}

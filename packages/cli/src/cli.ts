@@ -1,6 +1,8 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
 import pc from "picocolors";
+import { homedir } from "node:os";
+import type { Source } from "@pew/core";
 import { resolveDefaultPaths } from "./utils/paths.js";
 import { executeSync } from "./commands/sync.js";
 import { executeSessionSync } from "./commands/session-sync.js";
@@ -8,6 +10,11 @@ import { executeStatus } from "./commands/status.js";
 import { executeLogin, resolveHost } from "./commands/login.js";
 import { executeUpload } from "./commands/upload.js";
 import { executeSessionUpload } from "./commands/session-upload.js";
+import { executeNotify } from "./commands/notify.js";
+import { executeInit } from "./commands/init.js";
+import { executeUninstall } from "./commands/uninstall.js";
+import { resolveNotifierPaths } from "./notifier/paths.js";
+import { statusAll } from "./notifier/registry.js";
 
 // ---------------------------------------------------------------------------
 // Dev mode detection (otter pattern)
@@ -15,6 +22,16 @@ import { executeSessionUpload } from "./commands/session-upload.js";
 
 function isDevMode(): boolean {
   return process.argv.includes("--dev");
+}
+
+function isSource(value: string): value is Source {
+  return [
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "opencode",
+    "openclaw",
+  ].includes(value);
 }
 
 // Allow self-signed certs (mkcert) in dev mode
@@ -174,6 +191,8 @@ const statusCommand = defineCommand({
   },
   async run() {
     const paths = resolveDefaultPaths();
+    const notifierPaths = resolveNotifierPaths(homedir(), process.env);
+    const notifierStatuses = await statusAll(notifierPaths);
     const result = await executeStatus({
       stateDir: paths.stateDir,
       sourceDirs: {
@@ -183,6 +202,7 @@ const statusCommand = defineCommand({
         openCodeMessageDir: paths.openCodeMessageDir,
         openclawDir: paths.openclawDir,
       },
+      notifierStatuses,
     });
 
     consola.log("");
@@ -201,6 +221,22 @@ const statusCommand = defineCommand({
       consola.log(pc.bold("  Files by source:"));
       for (const [source, count] of Object.entries(result.sources)) {
         consola.log(`    ${pc.cyan(source.padEnd(14))} ${count}`);
+      }
+    }
+
+    if (Object.keys(result.notifiers).length > 0) {
+      consola.log("");
+      consola.log(pc.bold("  Notifiers:"));
+      for (const [source, status] of Object.entries(result.notifiers)) {
+        const renderedStatus =
+          status === "installed"
+            ? pc.green(status)
+            : status === "error"
+              ? pc.red(status)
+              : status === "outdated"
+                ? pc.yellow(status)
+                : pc.dim(status);
+        consola.log(`    ${pc.cyan(source.padEnd(14))} ${renderedStatus}`);
       }
     }
     consola.log("");
@@ -266,6 +302,161 @@ const loginCommand = defineCommand({
       consola.error(`Login failed: ${result.error}`);
       process.exitCode = 1;
     }
+  },
+});
+
+const notifyCommand = defineCommand({
+  meta: {
+    name: "notify",
+    description: "Run a coordinated sync from an AI tool hook",
+  },
+  args: {
+    source: {
+      type: "string",
+      description: "Source that triggered the notify hook",
+      required: true,
+    },
+    file: {
+      type: "string",
+      description: "Optional file path hint from the hook",
+      required: false,
+    },
+  },
+  async run({ args }) {
+    if (!args.source || !isSource(args.source)) {
+      consola.error(`Invalid source: ${String(args.source ?? "")}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const paths = resolveDefaultPaths();
+
+    let openMessageDb: typeof import("./parsers/opencode-sqlite-db.js").openMessageDb | undefined;
+    try {
+      const mod = await import("./parsers/opencode-sqlite-db.js");
+      openMessageDb = mod.openMessageDb;
+    } catch {
+      // bun:sqlite not available — SQLite sync will be skipped
+    }
+
+    const result = await executeNotify({
+      source: args.source,
+      fileHint: args.file ?? null,
+      stateDir: paths.stateDir,
+      claudeDir: paths.claudeDir,
+      codexSessionsDir: paths.codexSessionsDir,
+      geminiDir: paths.geminiDir,
+      openCodeMessageDir: paths.openCodeMessageDir,
+      openCodeDbPath: paths.openCodeDbPath,
+      openMessageDb,
+      openclawDir: paths.openclawDir,
+    });
+
+    if (result.error) {
+      consola.warn(`notify finished with warning: ${result.error}`);
+    }
+  },
+});
+
+const initCommand = defineCommand({
+  meta: {
+    name: "init",
+    description: "Install notifier hooks for supported AI tools",
+  },
+  args: {
+    dryRun: {
+      type: "boolean",
+      description: "Preview changes without writing files",
+      default: false,
+    },
+    source: {
+      type: "string",
+      description: "Only install hooks for a specific source",
+      required: false,
+    },
+  },
+  async run({ args }) {
+    const selectedSources =
+      args.source && isSource(args.source) ? [args.source] : undefined;
+    if (args.source && !selectedSources) {
+      consola.error(`Invalid source: ${args.source}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const result = await executeInit({
+      stateDir: resolveDefaultPaths().stateDir,
+      home: homedir(),
+      env: process.env,
+      dryRun: args.dryRun,
+      sources: selectedSources,
+    });
+
+    consola.log("");
+    consola.log(pc.bold(args.dryRun ? "Pew Init (Dry Run)" : "Pew Init"));
+    consola.log(`  pew binary: ${pc.cyan(result.pewBin)}`);
+    consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}`);
+    for (const hook of result.hooks) {
+      const symbol = hook.changed ? pc.green("✓") : pc.dim("•");
+      consola.log(`  ${symbol} ${hook.source}  ${hook.detail}`);
+      if (hook.warnings?.length) {
+        for (const warning of hook.warnings) {
+          consola.log(`    ${pc.yellow(warning)}`);
+        }
+      }
+    }
+    consola.log("");
+  },
+});
+
+const uninstallCommand = defineCommand({
+  meta: {
+    name: "uninstall",
+    description: "Remove notifier hooks for supported AI tools",
+  },
+  args: {
+    dryRun: {
+      type: "boolean",
+      description: "Preview changes without writing files",
+      default: false,
+    },
+    source: {
+      type: "string",
+      description: "Only uninstall hooks for a specific source",
+      required: false,
+    },
+  },
+  async run({ args }) {
+    const selectedSources =
+      args.source && isSource(args.source) ? [args.source] : undefined;
+    if (args.source && !selectedSources) {
+      consola.error(`Invalid source: ${args.source}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const result = await executeUninstall({
+      stateDir: resolveDefaultPaths().stateDir,
+      home: homedir(),
+      env: process.env,
+      dryRun: args.dryRun,
+      sources: selectedSources,
+    });
+
+    consola.log("");
+    consola.log(pc.bold(args.dryRun ? "Pew Uninstall (Dry Run)" : "Pew Uninstall"));
+    consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}  ${result.notifyHandler.detail}`);
+    consola.log(`  codex backup: ${pc.dim(result.codexBackup.path)}  ${result.codexBackup.detail}`);
+    for (const hook of result.hooks) {
+      const symbol = hook.changed ? pc.green("✓") : pc.dim("•");
+      consola.log(`  ${symbol} ${hook.source}  ${hook.detail}`);
+      if (hook.warnings?.length) {
+        for (const warning of hook.warnings) {
+          consola.log(`    ${pc.yellow(warning)}`);
+        }
+      }
+    }
+    consola.log("");
   },
 });
 
@@ -362,12 +553,15 @@ async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean):
 export const main = defineCommand({
   meta: {
     name: "pew",
-    version: "0.6.1",
+    version: "0.6.2",
     description: "Track token usage from your local AI coding tools",
   },
   subCommands: {
     sync: syncCommand,
     status: statusCommand,
     login: loginCommand,
+    notify: notifyCommand,
+    init: initCommand,
+    uninstall: uninstallCommand,
   },
 });
