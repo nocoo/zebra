@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.2
+
+### Features
+
+- **Notifier automation** — Added installable notifier drivers for Claude Code, Gemini CLI, OpenCode, OpenClaw, and Codex, plus shared `notify.cjs`, coordinated `pew notify`, `pew init`, and `pew uninstall`
+- **Notifier lifecycle visibility** — `pew status` now reports installed / not-installed / error notifier state per source
+
+### Fixes
+
+- **Coordinator runtime fallback** — `pew notify` now degrades safely when Bun runtime file handles do not expose `lock()`, avoiding crash-on-notify under Bun
+- **OpenClaw trigger control** — Generated OpenClaw plugin now includes a 15s trigger throttle and better config/CLI error handling
+- **Dry-run and uninstall safety** — `pew init --dry-run` no longer creates directories, and `pew uninstall` only removes generated `notify.cjs` files that match the pew marker
+
 ## v0.6.1
 
 ### Fixes
