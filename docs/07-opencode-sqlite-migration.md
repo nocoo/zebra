@@ -152,10 +152,24 @@ Changes needed:
 | Commit 4: Session collector + tests | done | `9d1ef4a` |
 | Commit 5: Token sync integration | done | `b270f37` |
 | Commit 6: Session sync integration | done | `2eb5e3b` |
-| Commit 7: Build verification | done | see below |
+| Commit 7: Build verification | done | `7934f16` |
+| Commit 8: Multi-agent review fixes | done | `460eea8` |
+| Commit 9: Watermark boundary dedup + skip warnings | done | `3a8c095` |
 
-### Build Verification (Commit 7)
+### Build Verification (Commit 9)
 
-- **Tests**: 44 files, 581 tests — all passing
+- **Tests**: 44 files, 589 tests — all passing
 - **TypeScript**: `tsc --noEmit` clean for core, cli, web, worker
 - **Build**: `bun run build` — all packages compile, Next.js production build succeeds
+
+### Commit 8: Multi-agent review fixes
+
+- Merged imports, IN clause batching (500), json_extract role at SQL level, simplified maxTime
+
+### Commit 9: Watermark boundary dedup + silent skip warnings
+
+- Changed queries from `>` to `>=` for `time_created`/`time_updated` watermarks
+- Added `lastProcessedIds` tracking to both token (`OpenCodeSqliteCursor`) and session (`OpenCodeSqliteSessionCursor`) cursor types
+- Emit explicit `warn`-phase progress events when `bun:sqlite` is unavailable or DB open fails but DB file exists on disk
+- Updated mock helpers in tests to match `>=` semantics
+- Added 7 new tests: same-ms boundary dedup (3), warning emissions (4)
