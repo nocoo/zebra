@@ -49,26 +49,8 @@ export default function LandingPage() {
 
       {/* Footer — single compact line */}
       <footer className="border-t border-border/50 px-6 py-3">
-        <div className="mx-auto flex max-w-6xl items-center justify-between text-xs text-muted-foreground">
-          <span>pew — AI token usage tracker</span>
-          <div className="flex items-center gap-4">
-            <a
-              href="https://github.com/nicnocquee/pew"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              GitHub
-            </a>
-            <a
-              href="https://www.npmjs.com/package/@nocoo/pew"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              npm
-            </a>
-          </div>
+        <div className="mx-auto max-w-6xl text-center text-xs text-muted-foreground">
+          © {new Date().getFullYear()} pew.md
         </div>
       </footer>
     </div>

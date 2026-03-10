@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Terminal,
   BarChart3,
@@ -8,9 +9,7 @@ import {
   Shield,
   Copy,
   Check,
-  ArrowRight,
 } from "lucide-react";
-import Link from "next/link";
 
 // ---------------------------------------------------------------------------
 // Install command copy button
@@ -29,10 +28,10 @@ function InstallCommand() {
   return (
     <button
       onClick={handleCopy}
-      className="group flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-3 text-sm font-mono transition-colors hover:border-primary/40 hover:bg-card/80 cursor-pointer"
+      className="group flex w-full max-w-md items-center gap-3 rounded-xl border border-border bg-card px-5 py-3 text-sm font-mono transition-colors hover:border-primary/40 hover:bg-card/80 cursor-pointer"
     >
       <span className="text-muted-foreground">$</span>
-      <span className="text-foreground">{command}</span>
+      <span className="flex-1 text-foreground">{command}</span>
       {copied ? (
         <Check className="h-4 w-4 text-success shrink-0" strokeWidth={1.5} />
       ) : (
@@ -51,10 +50,10 @@ function InstallCommand() {
 
 const TOOLS = [
   { name: "Claude Code" },
+  { name: "Codex" },
   { name: "Gemini CLI" },
   { name: "OpenCode" },
   { name: "OpenClaw" },
-  { name: "Codex" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -98,6 +97,14 @@ export function LandingContent() {
       <div className="grid w-full gap-12 lg:grid-cols-2">
         {/* Left — copy */}
         <div className="flex flex-col gap-5">
+          <Image
+            src="/logo-80.png"
+            alt="Pew"
+            width={80}
+            height={80}
+            className="h-16 w-16"
+          />
+
           <div className="flex flex-wrap items-center gap-1.5">
             {TOOLS.map((tool) => (
               <span
@@ -109,28 +116,19 @@ export function LandingContent() {
             ))}
           </div>
 
-          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Track your AI
             <br />
             <span className="text-primary">token usage</span>
           </h1>
 
-          <p className="max-w-md text-base leading-relaxed text-muted-foreground">
+          <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
             Pew reads local log files from your AI coding tools and gives you a
             clear dashboard of token consumption, costs, and trends — without
             touching your conversations.
           </p>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <InstallCommand />
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Sign in
-              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
-            </Link>
-          </div>
+          <InstallCommand />
         </div>
 
         {/* Right — feature grid */}
