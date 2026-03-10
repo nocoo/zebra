@@ -46,7 +46,7 @@ describe("sidebar navigation", () => {
 
     it("should contain all expected nav items across groups", () => {
       const allHrefs = BASE_NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
-      expect(allHrefs).toContain("/");
+      expect(allHrefs).toContain("/dashboard");
       expect(allHrefs).toContain("/leaderboard");
       expect(allHrefs).toContain("/details");
       expect(allHrefs).toContain("/sessions");
@@ -108,6 +108,7 @@ describe("route labels", () => {
 
   it("should include all expected routes", () => {
     expect(ROUTE_LABELS).toEqual({
+      dashboard: "Dashboard",
       settings: "General",
       teams: "Teams",
       details: "Daily Usage",
@@ -120,13 +121,13 @@ describe("route labels", () => {
 
 describe("breadcrumbsFromPathname", () => {
   it("should return Home for root path", () => {
-    expect(breadcrumbsFromPathname("/")).toEqual([{ label: "Home", href: "/" }]);
+    expect(breadcrumbsFromPathname("/")).toEqual([{ label: "Home", href: "/dashboard" }]);
   });
 
   it("should return breadcrumbs for /settings", () => {
     const crumbs = breadcrumbsFromPathname("/settings");
     expect(crumbs).toEqual([
-      { label: "Home", href: "/" },
+      { label: "Home", href: "/dashboard" },
       { label: "General" },
     ]);
   });
@@ -134,7 +135,7 @@ describe("breadcrumbsFromPathname", () => {
   it("should return breadcrumbs for /teams", () => {
     const crumbs = breadcrumbsFromPathname("/teams");
     expect(crumbs).toEqual([
-      { label: "Home", href: "/" },
+      { label: "Home", href: "/dashboard" },
       { label: "Teams" },
     ]);
   });
@@ -142,7 +143,7 @@ describe("breadcrumbsFromPathname", () => {
   it("should return breadcrumbs for nested routes", () => {
     const crumbs = breadcrumbsFromPathname("/admin/pricing");
     expect(crumbs).toEqual([
-      { label: "Home", href: "/" },
+      { label: "Home", href: "/dashboard" },
       { label: "admin", href: "/admin" },
       { label: "pricing" },
     ]);
@@ -151,7 +152,7 @@ describe("breadcrumbsFromPathname", () => {
   it("should use route label for known segments", () => {
     const crumbs = breadcrumbsFromPathname("/details");
     expect(crumbs).toEqual([
-      { label: "Home", href: "/" },
+      { label: "Home", href: "/dashboard" },
       { label: "Daily Usage" },
     ]);
   });

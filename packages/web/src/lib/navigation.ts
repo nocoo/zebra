@@ -31,7 +31,7 @@ export const BASE_NAV_GROUPS: NavGroupDef[] = [
     label: "Overview",
     defaultOpen: true,
     items: [
-      { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
+      { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
       { href: "/leaderboard", label: "Leaderboard", icon: "Trophy" },
     ],
   },
@@ -73,6 +73,7 @@ export function getNavGroups(isAdmin: boolean): NavGroupDef[] {
 // ---------------------------------------------------------------------------
 
 export const ROUTE_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
   settings: "General",
   teams: "Teams",
   details: "Daily Usage",
@@ -83,7 +84,7 @@ export const ROUTE_LABELS: Record<string, string> = {
 
 export function breadcrumbsFromPathname(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
-  const items: { label: string; href?: string }[] = [{ label: "Home", href: "/" }];
+  const items: { label: string; href?: string }[] = [{ label: "Home", href: "/dashboard" }];
 
   let href = "";
   for (let i = 0; i < segments.length; i++) {

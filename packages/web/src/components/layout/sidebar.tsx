@@ -127,8 +127,8 @@ function NavGroupSection({
           <div className="flex flex-col gap-0.5 px-3">
             {group.items.map((item) => {
               const isActive =
-                item.href === "/"
-                  ? pathname === "/"
+                item.href === "/dashboard"
+                  ? pathname === "/dashboard"
                   : pathname.startsWith(item.href);
 
               return (
@@ -221,8 +221,8 @@ export function Sidebar() {
             <nav className="flex-1 flex flex-col items-center gap-1 overflow-y-auto pt-1">
               {allNavItems.map((item) => {
                 const isActive =
-                  item.href === "/"
-                    ? pathname === "/"
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
                     : pathname.startsWith(item.href);
 
                 return (

@@ -23,6 +23,7 @@ export function buildRedirectUrl(req: NextRequest, pathname: string): URL {
 /** Routes that are always public (no auth required). */
 export function isPublicRoute(pathname: string): boolean {
   return (
+    pathname === "/" ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/ingest") ||
     pathname.startsWith("/api/users/") ||
@@ -36,17 +37,17 @@ export function isPublicRoute(pathname: string): boolean {
  *
  * Returns:
  * - "next"              → allow through
- * - "redirect:/"        → redirect to home (logged-in user on login page)
- * - "redirect:/login"   → redirect to login (unauthenticated user)
+ * - "redirect:/dashboard" → redirect to dashboard (logged-in user on login page)
+ * - "redirect:/login"    → redirect to login (unauthenticated user)
  */
 export function resolveProxyAction(
   pathname: string,
   isLoggedIn: boolean,
   skipAuth: boolean,
-): "next" | "redirect:/" | "redirect:/login" {
+): "next" | "redirect:/dashboard" | "redirect:/login" {
   if (skipAuth) return "next";
   if (isPublicRoute(pathname)) return "next";
-  if (pathname === "/login" && isLoggedIn) return "redirect:/";
+  if (pathname === "/login" && isLoggedIn) return "redirect:/dashboard";
   if (pathname !== "/login" && !isLoggedIn) return "redirect:/login";
   return "next";
 }
@@ -68,7 +69,7 @@ export async function proxy(request: NextRequest) {
     );
 
     if (action === "next") return NextResponse.next();
-    const target = action === "redirect:/" ? "/" : "/login";
+    const target = action === "redirect:/dashboard" ? "/dashboard" : "/login";
     return NextResponse.redirect(buildRedirectUrl(req, target));
   });
 
