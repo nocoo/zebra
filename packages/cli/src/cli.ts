@@ -371,6 +371,16 @@ const notifyCommand = defineCommand({
     if (result.error) {
       consola.warn(`notify finished with warning: ${result.error}`);
     }
+
+    for (const [i, cycle] of result.cycles.entries()) {
+      const prefix = result.cycles.length > 1 ? `cycle ${i + 1}: ` : "";
+      if (cycle.tokenSyncError) {
+        consola.warn(`${prefix}token sync failed: ${cycle.tokenSyncError}`);
+      }
+      if (cycle.sessionSyncError) {
+        consola.warn(`${prefix}session sync failed: ${cycle.sessionSyncError}`);
+      }
+    }
   },
 });
 
