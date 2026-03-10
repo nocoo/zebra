@@ -112,12 +112,12 @@ describe("executeNotify", () => {
     await executeNotify({
       source: "codex",
       stateDir: "/tmp/pew",
-      version: "0.7.0",
+      version: "0.8.0",
       executeSyncFn: vi.fn(async () => ({})),
       coordinatedSyncFn,
     });
 
-    expect(capturedVersion).toBe("0.7.0");
+    expect(capturedVersion).toBe("0.8.0");
   });
 
   it("custom executeSyncFn result flows through coordinator to final result", async () => {
