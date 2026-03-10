@@ -15,7 +15,9 @@ import { formatTokens, cn } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates } from "@/lib/cost-helpers";
 import { compareWeekdayWeekend, computeMoMGrowth, computeStreak } from "@/lib/usage-helpers";
+import { generateInsights } from "@/lib/insights";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
+import { InsightCards } from "@/components/dashboard/insight-cards";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { CostTrendChart } from "@/components/dashboard/cost-trend-chart";
 import { CacheRateChart } from "@/components/dashboard/cache-rate-chart";
@@ -103,6 +105,18 @@ export default function DashboardPage() {
     () => (yearHalfHourData.data ? computeStreak(yearHalfHourData.data.records, undefined, tzOffset) : null),
     [yearHalfHourData.data, tzOffset],
   );
+
+  // Personal insight cards
+  const insights = useMemo(() => {
+    if (!data || !halfHourData.data) return [];
+    return generateInsights({
+      rows: halfHourData.data.records,
+      summary: data.summary,
+      models,
+      pricingMap,
+      tzOffset,
+    });
+  }, [data, halfHourData.data, models, pricingMap, tzOffset]);
 
   const showForecast = (period === "month" || period === "all") && costForecast !== null;
 
@@ -217,6 +231,9 @@ export default function DashboardPage() {
               icon={Database}
             />
           </StatGrid>
+
+          {/* Personal insight cards */}
+          <InsightCards insights={insights} />
 
           {/* Charts row */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 md:gap-4">
