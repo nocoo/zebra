@@ -53,13 +53,14 @@ export function resolveProxyAction(
 
 // Next.js 16 proxy convention (replaces middleware.ts)
 //
-// The auth() wrapper is called inside proxy() rather than at module scope.
-// With NextAuth's lazy-init pattern (`NextAuth((req) => config)`), calling
-// `auth(callback)` at the top level can return a non-function value in
-// Turbopack production builds due to module evaluation order differences.
-// Deferring the call to request time avoids this.
-export function proxy(request: NextRequest) {
-  const authHandler = auth((req) => {
+// With NextAuth's lazy-init pattern (`NextAuth((req) => config)`), the
+// `initAuth()` inner function is async (lib/index.js:42). When `auth` is
+// called with a callback (`auth((req) => {...})`), the `isReqWrapper` branch
+// (line 60-69) returns a function — but because the outer function is async,
+// the actual return value is `Promise<Function>`, not `Function`.
+// We must `await` the result before calling it.
+export async function proxy(request: NextRequest) {
+  const authHandler = await auth((req) => {
     const action = resolveProxyAction(
       req.nextUrl.pathname,
       !!req.auth,
