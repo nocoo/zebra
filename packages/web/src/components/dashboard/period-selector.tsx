@@ -1,53 +1,12 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { PERIOD_OPTIONS } from "@/lib/date-helpers";
+import type { Period } from "@/lib/date-helpers";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type Period = "all" | "month" | "week";
-
-export const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: "all", label: "All Time" },
-  { value: "month", label: "This Month" },
-  { value: "week", label: "This Week" },
-];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Compute from/to date strings for a given period */
-export function periodToDateRange(period: Period): { from: string; to?: string } {
-  const now = new Date();
-
-  switch (period) {
-    case "all":
-      return { from: "2020-01-01" };
-    case "month": {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: firstOfMonth.toISOString().slice(0, 10) };
-    }
-    case "week": {
-      const day = now.getDay();
-      const sunday = new Date(now);
-      sunday.setDate(now.getDate() - day);
-      return { from: sunday.toISOString().slice(0, 10) };
-    }
-  }
-}
-
-export function periodLabel(period: Period): string {
-  switch (period) {
-    case "all":
-      return "All time";
-    case "month":
-      return new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    case "week":
-      return "This week";
-  }
-}
+// Re-export for backward compatibility with existing imports
+export { periodToDateRange, periodLabel, PERIOD_OPTIONS } from "@/lib/date-helpers";
+export type { Period } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
 // Component

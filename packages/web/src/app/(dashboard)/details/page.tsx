@@ -12,116 +12,13 @@ import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/
 import type { PricingMap } from "@/hooks/use-pricing";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { UsageRow } from "@/hooks/use-usage-data";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface DailyGroup {
-  date: string;
-  records: UsageRow[];
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-}
-
-// ---------------------------------------------------------------------------
-// Month navigation helpers
-// ---------------------------------------------------------------------------
-
-function getMonthRange(year: number, month: number) {
-  const from = new Date(year, month, 1);
-  // Last day of the month
-  const to = new Date(year, month + 1, 0);
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  };
-}
-
-function formatMonth(year: number, month: number): string {
-  const d = new Date(year, month, 1);
-  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function groupByDate(records: UsageRow[], pricingMap: PricingMap): DailyGroup[] {
-  const byDate = new Map<string, UsageRow[]>();
-
-  for (const r of records) {
-    const date = r.hour_start.slice(0, 10);
-    const existing = byDate.get(date);
-    if (existing) {
-      existing.push(r);
-    } else {
-      byDate.set(date, [r]);
-    }
-  }
-
-  return Array.from(byDate.entries())
-    .map(([date, recs]) => {
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let cachedTokens = 0;
-      let totalTokens = 0;
-      let cost = 0;
-
-      for (const r of recs) {
-        inputTokens += r.input_tokens;
-        outputTokens += r.output_tokens;
-        cachedTokens += r.cached_input_tokens;
-        totalTokens += r.total_tokens;
-        const pricing = lookupPricing(pricingMap, r.model, r.source);
-        const c = estimateCost(
-          r.input_tokens,
-          r.output_tokens,
-          r.cached_input_tokens,
-          pricing
-        );
-        cost += c.totalCost;
-      }
-
-      return {
-        date,
-        records: recs,
-        inputTokens,
-        outputTokens,
-        cachedTokens,
-        totalTokens,
-        estimatedCost: cost,
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
-}
-
-function formatDate(date: string): string {
-  const d = new Date(date + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-/** Extract unique sources from records */
-function extractSources(records: UsageRow[]): string[] {
-  const set = new Set<string>();
-  for (const r of records) set.add(r.source);
-  return Array.from(set).sort();
-}
-
-/** Extract unique models from records */
-function extractModels(records: UsageRow[]): string[] {
-  const set = new Set<string>();
-  for (const r of records) set.add(r.model);
-  return Array.from(set).sort();
-}
+import {
+  groupByDate,
+  extractSources,
+  extractModels,
+} from "@/lib/usage-helpers";
+import type { DailyGroup } from "@/lib/usage-helpers";
+import { getMonthRange, formatMonth, formatDate } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
 // Expandable day row

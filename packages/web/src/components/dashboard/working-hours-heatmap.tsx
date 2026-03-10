@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { withAlpha } from "@/lib/palette";
+import { getHeatmapColor, HOUR_LABELS, EMPTY_COLOR } from "@/lib/heatmap-helpers";
 import type { WorkingHoursDay } from "@/lib/session-helpers";
 
 // ---------------------------------------------------------------------------
@@ -26,28 +27,6 @@ interface WorkingHoursHeatmapProps {
 
 const CELL_SIZE = 28;
 const CELL_GAP = 2;
-
-const EMPTY_COLOR = "hsl(var(--muted))";
-
-function getColor(value: number, maxValue: number): string {
-  if (value === 0) return EMPTY_COLOR;
-  if (maxValue === 0) return EMPTY_COLOR;
-
-  // 4 intensity levels
-  const ratio = value / maxValue;
-  if (ratio <= 0.25) return withAlpha("chart-1", 0.3);
-  if (ratio <= 0.5) return withAlpha("chart-1", 0.5);
-  if (ratio <= 0.75) return withAlpha("chart-1", 0.75);
-  return withAlpha("chart-1", 1);
-}
-
-// Hour labels for the X axis
-const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => {
-  if (i === 0) return "12a";
-  if (i < 12) return `${i}a`;
-  if (i === 12) return "12p";
-  return `${i - 12}p`;
-});
 
 // ---------------------------------------------------------------------------
 // Component
@@ -159,7 +138,7 @@ export function WorkingHoursHeatmap({
                           style={{
                             width: CELL_SIZE,
                             height: CELL_SIZE,
-                            backgroundColor: getColor(count, maxValue),
+                            backgroundColor: getHeatmapColor(count, maxValue),
                           }}
                         />
                       </TooltipTrigger>

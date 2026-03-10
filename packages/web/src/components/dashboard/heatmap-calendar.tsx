@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getYearWeeks, getColorIndex, formatDateISO } from "@/lib/calendar-helpers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,62 +46,11 @@ export const heatmapColorScales = {
 
 const defaultColorScale = heatmapColorScales.green;
 
-// ---------------------------------------------------------------------------
-// Calendar layout helpers
-// ---------------------------------------------------------------------------
-
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
-
-function getYearWeeks(year: number): Date[][] {
-  const weeks: Date[][] = [];
-  const endDate = new Date(year, 11, 31);
-
-  // Start from first Sunday on or before Jan 1
-  const firstDay = new Date(year, 0, 1);
-  firstDay.setDate(firstDay.getDate() - firstDay.getDay());
-
-  const currentDate = new Date(firstDay);
-  let currentWeek: Date[] = [];
-
-  while (currentDate <= endDate || currentWeek.length > 0) {
-    if (currentWeek.length === 7) {
-      weeks.push(currentWeek);
-      currentWeek = [];
-    }
-    if (currentDate > endDate) break;
-
-    currentWeek.push(new Date(currentDate));
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-
-  if (currentWeek.length > 0) {
-    weeks.push(currentWeek);
-  }
-
-  return weeks;
-}
-
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function getColorIndex(
-  value: number,
-  maxValue: number,
-  colorScale: readonly string[]
-): number {
-  if (value === 0) return 0;
-  const levels = colorScale.length - 1;
-  const normalized = Math.min(value / maxValue, 1);
-  return Math.ceil(normalized * levels);
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -197,7 +147,7 @@ export function HeatmapCalendar({
                   style={{ gap: cellGap }}
                 >
                   {week.map((date, dayIndex) => {
-                    const dateStr = formatDate(date);
+                    const dateStr = formatDateISO(date);
                     const value = dataMap.get(dateStr) ?? 0;
                     const isCurrentYear = date.getFullYear() === year;
                     const colorIndex = getColorIndex(

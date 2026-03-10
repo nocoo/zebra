@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { usePublicProfile } from "@/hooks/use-public-profile";
 import { formatTokens } from "@/lib/utils";
-import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/use-pricing";
-import type { PricingMap } from "@/hooks/use-pricing";
+import { usePricingMap, formatCost } from "@/hooks/use-pricing";
+import { computeTotalCost } from "@/lib/cost-helpers";
+import { formatMemberSince } from "@/lib/date-helpers";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
@@ -23,26 +24,6 @@ import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { ModelAggregate } from "@/hooks/use-usage-data";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function computeTotalCost(models: ModelAggregate[], pricingMap: PricingMap): number {
-  let total = 0;
-  for (const m of models) {
-    const pricing = lookupPricing(pricingMap, m.model, m.source);
-    const cost = estimateCost(m.input, m.output, m.cached, pricing);
-    total += cost.totalCost;
-  }
-  return total;
-}
-
-function formatMemberSince(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
 
 // ---------------------------------------------------------------------------
 // Component
