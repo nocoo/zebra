@@ -4,7 +4,7 @@ import { LandingContent } from "@/components/landing/landing-content";
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden">
+    <div className="relative flex h-screen flex-col bg-background overflow-hidden">
       {/* Subtle radial glow */}
       <div
         className="pointer-events-none fixed inset-0"
@@ -19,7 +19,7 @@ export default function LandingPage() {
       />
 
       {/* Nav */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b border-border/50">
+      <header className="z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Image src="/logo-24.png" alt="Pew" width={24} height={24} />
@@ -44,16 +44,13 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Main — fills remaining space */}
       <LandingContent />
 
-      {/* Footer */}
-      <footer className="border-t border-border/50 py-8 px-6">
-        <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Image src="/logo-24.png" alt="Pew" width={16} height={16} className="opacity-50" />
-            <span>pew - AI token usage tracker</span>
-          </div>
+      {/* Footer — single compact line */}
+      <footer className="border-t border-border/50 px-6 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between text-xs text-muted-foreground">
+          <span>pew — AI token usage tracker</span>
           <div className="flex items-center gap-4">
             <a
               href="https://github.com/nicnocquee/pew"
