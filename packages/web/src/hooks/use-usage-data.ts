@@ -170,6 +170,8 @@ interface UseUsageDataOptions {
   to?: string;
   /** Source filter (optional) */
   source?: string;
+  /** Granularity for the API query (default "day"). Use "half-hour" for time-of-day analysis. */
+  granularity?: "day" | "half-hour";
 }
 
 interface UseUsageDataResult {
@@ -185,7 +187,7 @@ interface UseUsageDataResult {
 export function useUsageData(
   options: UseUsageDataOptions = {}
 ): UseUsageDataResult {
-  const { days = 30, from: fromDate, to: toDate, source } = options;
+  const { days = 30, from: fromDate, to: toDate, source, granularity = "day" } = options;
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +209,7 @@ export function useUsageData(
 
       const params = new URLSearchParams({
         from: fromStr,
-        granularity: "day",
+        granularity,
       });
       if (toDate) params.set("to", toDate);
       if (source) params.set("source", source);
@@ -227,7 +229,7 @@ export function useUsageData(
     } finally {
       setLoading(false);
     }
-  }, [days, fromDate, toDate, source]);
+  }, [days, fromDate, toDate, source, granularity]);
 
   useEffect(() => {
     fetchData();
