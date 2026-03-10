@@ -182,9 +182,9 @@ export function LandingContent() {
           <span>
             Run{" "}
             <code className="rounded bg-foreground/[0.05] px-1.5 py-0.5 font-mono text-xs text-foreground">
-              pew sync
+              pew init
             </code>{" "}
-            to upload usage data
+            to install auto-sync plugins
           </span>
         </li>
       </ol>
