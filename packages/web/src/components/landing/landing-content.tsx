@@ -31,7 +31,7 @@ function InstallCommand() {
       className="group flex w-full max-w-md items-center gap-3 rounded-xl border border-border bg-card px-5 py-3 text-sm font-mono transition-colors hover:border-primary/40 hover:bg-card/80 cursor-pointer"
     >
       <span className="text-muted-foreground">$</span>
-      <span className="flex-1 text-foreground">{command}</span>
+      <span className="flex-1 text-left text-foreground">{command}</span>
       {copied ? (
         <Check className="h-4 w-4 text-success shrink-0" strokeWidth={1.5} />
       ) : (
@@ -98,11 +98,11 @@ export function LandingContent() {
         {/* Left — copy */}
         <div className="flex flex-col gap-5">
           <Image
-            src="/logo-80.png"
+            src="/logo-256.png"
             alt="Pew"
-            width={80}
-            height={80}
-            className="h-16 w-16"
+            width={256}
+            height={256}
+            className="h-24 w-24"
           />
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -117,8 +117,13 @@ export function LandingContent() {
           </div>
 
           <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Track your AI
+            <span className="inline-flex items-center gap-2">
+              <span className="rounded-lg bg-primary/10 px-2.5 py-0.5 text-primary border border-primary/20">
+                pew
+              </span>
+            </span>
             <br />
+            Track your AI{" "}
             <span className="text-primary">token usage</span>
           </h1>
 
