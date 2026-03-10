@@ -7,6 +7,7 @@ import {
   sourceLabel,
   type UsageRow,
 } from "@/hooks/use-usage-data";
+import { toLocalDailyBuckets } from "@/lib/usage-helpers";
 
 // ---------------------------------------------------------------------------
 // Test data factory
@@ -177,5 +178,76 @@ describe("sourceLabel", () => {
 
   it("should return raw string for unknown sources", () => {
     expect(sourceLabel("something-else")).toBe("something-else");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toLocalDailyBuckets
+// ---------------------------------------------------------------------------
+
+describe("toLocalDailyBuckets", () => {
+  it("should return empty array for empty input", () => {
+    expect(toLocalDailyBuckets([])).toEqual([]);
+  });
+
+  it("should bucket rows by UTC date when tzOffset is 0", () => {
+    const rows = [
+      makeRow({ hour_start: "2026-03-07T10:00:00Z", total_tokens: 100, input_tokens: 80, output_tokens: 20, cached_input_tokens: 10 }),
+      makeRow({ hour_start: "2026-03-07T22:00:00Z", total_tokens: 200, input_tokens: 160, output_tokens: 40, cached_input_tokens: 20 }),
+      makeRow({ hour_start: "2026-03-08T05:00:00Z", total_tokens: 300, input_tokens: 240, output_tokens: 60, cached_input_tokens: 30 }),
+    ];
+
+    const result = toLocalDailyBuckets(rows, 0);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.totalTokens).toBe(300);
+    expect(result[1]!.date).toBe("2026-03-08");
+    expect(result[1]!.totalTokens).toBe(300);
+  });
+
+  it("should shift records across midnight for positive tzOffset (west of UTC)", () => {
+    // tzOffset=480 means UTC-8 (PST). A record at 2026-03-08T03:00Z is
+    // 2026-03-07T19:00 PST — should land in 2026-03-07 bucket.
+    const rows = [
+      makeRow({ hour_start: "2026-03-08T03:00:00Z", total_tokens: 500, input_tokens: 400, output_tokens: 100, cached_input_tokens: 50 }),
+    ];
+
+    const result = toLocalDailyBuckets(rows, 480);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.totalTokens).toBe(500);
+  });
+
+  it("should shift records across midnight for negative tzOffset (east of UTC)", () => {
+    // tzOffset=-540 means UTC+9 (JST). A record at 2026-03-07T20:00Z is
+    // 2026-03-08T05:00 JST — should land in 2026-03-08 bucket.
+    const rows = [
+      makeRow({ hour_start: "2026-03-07T20:00:00Z", total_tokens: 700, input_tokens: 560, output_tokens: 140, cached_input_tokens: 70 }),
+    ];
+
+    const result = toLocalDailyBuckets(rows, -540);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-08");
+    expect(result[0]!.totalTokens).toBe(700);
+  });
+
+  it("should aggregate multiple rows into same local day", () => {
+    // Both are UTC-8, same local day 2026-03-07
+    const rows = [
+      makeRow({ hour_start: "2026-03-07T18:00:00Z", total_tokens: 100, input_tokens: 80, output_tokens: 20, cached_input_tokens: 10 }),
+      makeRow({ hour_start: "2026-03-08T02:00:00Z", total_tokens: 200, input_tokens: 160, output_tokens: 40, cached_input_tokens: 20 }),
+    ];
+
+    const result = toLocalDailyBuckets(rows, 480);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.totalTokens).toBe(300);
+    expect(result[0]!.inputTokens).toBe(240);
+    expect(result[0]!.outputTokens).toBe(60);
+    expect(result[0]!.cachedTokens).toBe(30);
   });
 });

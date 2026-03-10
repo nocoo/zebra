@@ -56,6 +56,16 @@ export interface DailyGroup {
   estimatedCost: number;
 }
 
+/** Local-day bucket with aggregated token counts. */
+export interface LocalDailyBucket {
+  /** Local date string "YYYY-MM-DD" */
+  date: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+}
+
 // ---------------------------------------------------------------------------
 // groupByModel
 // ---------------------------------------------------------------------------
@@ -255,4 +265,53 @@ export function extractModels(records: UsageRow[]): string[] {
   const set = new Set<string>();
   for (const r of records) set.add(r.model);
   return Array.from(set).sort();
+}
+
+// ---------------------------------------------------------------------------
+// toLocalDailyBuckets
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-bucket half-hour UsageRow[] into local-day totals.
+ *
+ * Applies `tzOffset` (minutes, from `new Date().getTimezoneOffset()`) to shift
+ * each row's `hour_start` from UTC to local time, then groups by local date.
+ * Results are sorted ascending by date.
+ *
+ * @param rows     — raw UsageRow[] (should be half-hour granularity for accuracy)
+ * @param tzOffset — minutes offset from UTC (positive = west, e.g. 480 for PST)
+ */
+export function toLocalDailyBuckets(
+  rows: UsageRow[],
+  tzOffset: number = 0,
+): LocalDailyBucket[] {
+  const byDate = new Map<string, LocalDailyBucket>();
+
+  for (const r of rows) {
+    // Shift UTC time by tzOffset to get local time
+    const utcMs = new Date(r.hour_start).getTime();
+    const localMs = utcMs - tzOffset * 60_000;
+    const localDate = new Date(localMs);
+    const date = localDate.toISOString().slice(0, 10);
+
+    const existing = byDate.get(date);
+    if (existing) {
+      existing.inputTokens += r.input_tokens;
+      existing.outputTokens += r.output_tokens;
+      existing.cachedTokens += r.cached_input_tokens;
+      existing.totalTokens += r.total_tokens;
+    } else {
+      byDate.set(date, {
+        date,
+        inputTokens: r.input_tokens,
+        outputTokens: r.output_tokens,
+        cachedTokens: r.cached_input_tokens,
+        totalTokens: r.total_tokens,
+      });
+    }
+  }
+
+  return Array.from(byDate.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 }
