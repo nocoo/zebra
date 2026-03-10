@@ -373,14 +373,16 @@ Each step is an atomic commit. Tests must pass after each step.
 **Goal**: Establish the driver contracts without changing any runtime behavior.
 
 **Files changed**:
-- `packages/core/src/types.ts` — Add interfaces:
-  - `FileFingerprint`
-  - `SyncContext`
+- `packages/cli/src/drivers/types.ts` — New file: all driver interfaces and internal types:
+  - `SyncContext`, `DiscoverOpts`, `OnProgress`
+  - `FileFingerprint` (re-exported from `utils/file-changed.ts`)
   - `FileTokenDriver<TCursor>`, `FileSessionDriver<TCursor>`
   - `DbTokenDriver<TCursor>`, `DbTokenResult<TCursor>`, `DbSessionDriver<TCursor>`, `DbSessionResult<TCursor>`
   - `TokenDriver` (union), `SessionDriver` (union)
-  - `TokenParseResult`, `ResumeState`
-- `packages/cli/src/drivers/types.ts` — New file: internal types (`DiscoverOpts`, driver-specific `ResumeState` variants)
+  - `TokenParseResult`, `ResumeState` (discriminated union with `ByteOffsetResumeState`, `ArrayIndexResumeState`, `OpenCodeJsonResumeState`, `CodexResumeState`)
+  - `ParsedDelta` (re-exported from `parsers/claude.ts`)
+
+> **Design decision**: Driver interfaces live in CLI (`drivers/types.ts`) rather than `@pew/core` because they reference `ParsedDelta` (defined in CLI's `parsers/claude.ts`). This keeps `@pew/core` lean with only shared data types.
 
 **Behavior change**: None. Types only.
 
@@ -478,7 +480,9 @@ Each step is an atomic commit. Tests must pass after each step.
 - `packages/cli/src/commands/session-sync.ts` — Same two-phase pattern for `executeSessionSync()`
 - Delete inline `discoverOpenCodeSessionDirs()` and `fileChanged()` from `session-sync.ts` (replaced by drivers)
 
-**Source-agnostic orchestrator**: `sync.ts` no longer contains any source-specific code. It doesn't know what `messageKeys` or `dirMtimes` mean — it just passes `ctx` through and persists `ctx.dirMtimes` because it came from the cursor state.
+**Mostly source-agnostic orchestrator**: The generic file loop and DB driver dispatch are fully source-agnostic. However, two categories of source-specific logic remain at the orchestrator level:
+1. **OpenCode progress messages**: The discover-phase message includes `ctx.dirMtimes` skip count for OpenCode JSON, since this detail is useful for user-facing output but doesn't belong in the driver interface.
+2. **SQLite pre-probe warnings**: Both `sync.ts` and `session-sync.ts` have explicit `openCodeDbPath`/`openMessageDb` checks to emit "bun:sqlite not available" or "Failed to open" warnings *before* the DB driver loop. This is an orchestrator-level concern because the registry simply omits the driver when the adapter is missing — no driver exists to emit the warning.
 
 **Files changed (tests)**:
 - `packages/cli/src/__tests__/sync.test.ts` — Update for driver-based architecture
@@ -566,13 +570,12 @@ Total: ~80-90 new tests.
 
 | File | Steps | Nature |
 |------|-------|--------|
-| `packages/core/src/types.ts` | 1, 3 | Extend `FileCursorBase`; add driver interfaces, `SyncContext` |
+| `packages/core/src/types.ts` | 1 | Extend `FileCursorBase` with `mtimeMs`/`size`; make `SessionFileCursor.size` optional |
 | `packages/cli/src/utils/file-changed.ts` | 1 | New: `fileUnchanged()` |
 | `packages/cli/src/storage/base-cursor-store.ts` | 2 | New: generic base class |
 | `packages/cli/src/storage/cursor-store.ts` | 2 | Refactor: extend base |
 | `packages/cli/src/storage/session-cursor-store.ts` | 2 | Refactor: extend base |
-| `packages/cli/src/drivers/types.ts` | 3 | New: internal driver types |
-| `packages/cli/src/drivers/context.ts` | 3 | New: `SyncContext` runtime helpers |
+| `packages/cli/src/drivers/types.ts` | 3 | New: all driver interfaces, `SyncContext`, `DiscoverOpts`, `ResumeState`, `TokenParseResult` |
 | `packages/cli/src/drivers/token/*.ts` | 4 | New: 5 file + 1 db token driver |
 | `packages/cli/src/drivers/session/*.ts` | 5 | New: 5 file + 1 db session driver |
 | `packages/cli/src/drivers/registry.ts` | 6 | New: driver registry |
