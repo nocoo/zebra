@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const rootPkg = require("../../package.json") as { version: string };
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -10,6 +14,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["pew.dev.hexly.ai"],
   images: {
     imageSizes: [16, 32, 48, 64, 80, 96, 128, 160, 256, 384],
+  },
+  env: {
+    NEXT_PUBLIC_APP_VERSION: rootPkg.version,
   },
 };
 
