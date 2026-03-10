@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, computeCostPerToken } from "@/lib/cost-helpers";
+import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, computeCostPerToken, toDailyCacheRates } from "@/lib/cost-helpers";
 import type { DailyCostPoint } from "@/lib/cost-helpers";
 import type { ModelAggregate, UsageRow } from "@/hooks/use-usage-data";
 import { getDefaultPricingMap } from "@/lib/pricing";
@@ -360,5 +360,71 @@ describe("computeCostPerToken", () => {
     const result = computeCostPerToken(models, pm);
     expect(result).toHaveLength(1);
     expect(result[0]!.model).toBe("gemini-2.5-pro");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toDailyCacheRates
+// ---------------------------------------------------------------------------
+
+describe("toDailyCacheRates", () => {
+  it("returns empty array for empty rows", () => {
+    expect(toDailyCacheRates([])).toEqual([]);
+  });
+
+  it("computes 100% cache rate when all input is cached", () => {
+    const rows = [
+      makeRow({ hour_start: "2026-03-10", input_tokens: 100_000, cached_input_tokens: 100_000 }),
+    ];
+    const result = toDailyCacheRates(rows);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-10");
+    expect(result[0]!.cacheRate).toBeCloseTo(100, 1);
+    expect(result[0]!.cachedTokens).toBe(100_000);
+    expect(result[0]!.inputTokens).toBe(100_000);
+  });
+
+  it("computes 0% cache rate when nothing is cached", () => {
+    const rows = [
+      makeRow({ hour_start: "2026-03-10", input_tokens: 200_000, cached_input_tokens: 0 }),
+    ];
+    const result = toDailyCacheRates(rows);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.cacheRate).toBe(0);
+    expect(result[0]!.cachedTokens).toBe(0);
+    expect(result[0]!.inputTokens).toBe(200_000);
+  });
+
+  it("aggregates mixed days and sorts ascending", () => {
+    const rows = [
+      makeRow({ hour_start: "2026-03-12", input_tokens: 100_000, cached_input_tokens: 80_000 }),
+      makeRow({ hour_start: "2026-03-10", input_tokens: 200_000, cached_input_tokens: 100_000 }),
+      makeRow({ hour_start: "2026-03-10", input_tokens: 100_000, cached_input_tokens: 50_000 }),
+      makeRow({ hour_start: "2026-03-11", input_tokens: 400_000, cached_input_tokens: 0 }),
+    ];
+    const result = toDailyCacheRates(rows);
+    expect(result).toHaveLength(3);
+    // Mar 10: 300k input, 150k cached → 50%
+    expect(result[0]!.date).toBe("2026-03-10");
+    expect(result[0]!.cacheRate).toBeCloseTo(50, 1);
+    expect(result[0]!.inputTokens).toBe(300_000);
+    expect(result[0]!.cachedTokens).toBe(150_000);
+    // Mar 11: 400k input, 0 cached → 0%
+    expect(result[1]!.date).toBe("2026-03-11");
+    expect(result[1]!.cacheRate).toBe(0);
+    // Mar 12: 100k input, 80k cached → 80%
+    expect(result[2]!.date).toBe("2026-03-12");
+    expect(result[2]!.cacheRate).toBeCloseTo(80, 1);
+  });
+
+  it("returns 0% cache rate for days with zero input tokens", () => {
+    const rows = [
+      makeRow({ hour_start: "2026-03-10", input_tokens: 0, cached_input_tokens: 0 }),
+    ];
+    const result = toDailyCacheRates(rows);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.cacheRate).toBe(0);
+    expect(result[0]!.inputTokens).toBe(0);
+    expect(result[0]!.cachedTokens).toBe(0);
   });
 });
