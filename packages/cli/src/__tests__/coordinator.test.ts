@@ -318,21 +318,62 @@ describe("coordinatedSync", () => {
     expect(result.hadFollowUp).toBe(false);
   });
 
-  it("rethrows unexpected signal stat errors while holding the lock", async () => {
+  it("captures unexpected signal stat errors and writes error run log", async () => {
     const handle = createHandle(vi.fn(async () => {}));
     const fake = createFakeFs(handle, { signalSize: 1 });
     fake.fs.stat = vi.fn(async () => {
       throw Object.assign(new Error("denied"), { code: "EACCES" });
     });
 
-    await expect(
-      coordinatedSync(createTrigger(), {
-        stateDir: "/tmp/pew",
-        executeSyncFn: vi.fn(async () => ({})),
-        fs: fake.fs,
-      }),
-    ).rejects.toThrow("denied");
+    const result = await coordinatedSync(createTrigger(), {
+      stateDir: "/tmp/pew",
+      executeSyncFn: vi.fn(async () => ({})),
+      version: "0.7.0",
+      fs: fake.fs,
+    });
+
+    // Exception is captured, not rethrown
+    expect(result.error).toContain("denied");
+    expect(result.cycles).toHaveLength(0);
     expect(handle.close).toHaveBeenCalledTimes(1);
+
+    // Run log is written even for coordinator-level exceptions
+    const log = extractRunLog(fake.fs);
+    expect(log).toBeDefined();
+    expect(log!.status).toBe("error");
+    expect(log!.error).toContain("denied");
+  });
+
+  it("captures signal stat errors during post-wait check and writes error run log", async () => {
+    const busyErr = new Error("busy") as NodeJS.ErrnoException;
+    busyErr.code = "EAGAIN";
+    let statCallCount = 0;
+    const handle = createHandle(
+      vi.fn(async (_mode?: string, opts?: { nonBlocking?: boolean }) => {
+        if (opts?.nonBlocking) throw busyErr;
+      }),
+    );
+    const fake = createFakeFs(handle, { signalSize: 1 });
+    // First stat (appendSignal path) succeeds, second (post-wait check) fails
+    fake.fs.stat = vi.fn(async () => {
+      statCallCount += 1;
+      if (statCallCount >= 1) {
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      }
+      return { size: 1 };
+    });
+
+    const result = await coordinatedSync(createTrigger(), {
+      stateDir: "/tmp/pew",
+      executeSyncFn: vi.fn(async () => ({})),
+      version: "0.7.0",
+      fs: fake.fs,
+    });
+
+    expect(result.error).toContain("EPERM");
+    const log = extractRunLog(fake.fs);
+    expect(log).toBeDefined();
+    expect(log!.status).toBe("error");
   });
 
   it("treats EWOULDBLOCK like EAGAIN", async () => {

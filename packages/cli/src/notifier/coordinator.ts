@@ -59,7 +59,12 @@ export async function coordinatedSync(
 
   await fs.mkdir(opts.stateDir, { recursive: true });
 
-  const result = await runCoordinator(trigger, opts, fs, now, maxFollowUps, lockTimeoutMs, baseResult);
+  let result: CoordinatorRunResult;
+  try {
+    result = await runCoordinator(trigger, opts, fs, now, maxFollowUps, lockTimeoutMs, baseResult);
+  } catch (err) {
+    result = { ...baseResult, error: toErrorMessage(err) };
+  }
   await writeRunLog(result, trigger, startTime, now, opts.version ?? "unknown", opts.stateDir, fs);
   return result;
 }
@@ -215,6 +220,9 @@ async function runUnlocked(
 
 function deriveStatus(result: CoordinatorRunResult): RunLogEntry["status"] {
   if (result.skippedSync) return "skipped";
+
+  // Coordinator-level error with no cycles means the run itself failed
+  if (result.error != null && result.cycles.length === 0) return "error";
   if (result.cycles.length === 0) return "skipped";
 
   const hasError = result.cycles.some(
