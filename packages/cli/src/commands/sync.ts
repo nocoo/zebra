@@ -146,6 +146,8 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
       cursors.files[filePath] = {
         inode,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
         offset: result.endOffset,
         updatedAt: new Date().toISOString(),
       } satisfies ByteOffsetCursor;
@@ -206,6 +208,8 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
       cursors.files[filePath] = {
         inode,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
         lastIndex: result.lastIndex,
         lastTotals: result.lastTotals,
         lastModel: result.lastModel,
@@ -457,6 +461,8 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
       cursors.files[filePath] = {
         inode,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
         offset: result.endOffset,
         updatedAt: new Date().toISOString(),
       } satisfies ByteOffsetCursor;
@@ -520,6 +526,8 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
       cursors.files[filePath] = {
         inode,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
         offset: result.endOffset,
         lastTotals: result.lastTotals,
         lastModel: result.lastModel,

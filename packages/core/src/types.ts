@@ -75,6 +75,10 @@ export interface HourBucket {
 export interface FileCursorBase {
   /** File inode for detecting file rotation/replacement */
   inode: number;
+  /** File mtime in ms (for fast-skip change detection) */
+  mtimeMs: number;
+  /** File size in bytes (for fast-skip change detection) */
+  size: number;
   /** ISO 8601 timestamp of last update */
   updatedAt: string;
 }
@@ -107,10 +111,6 @@ export interface GeminiCursor extends FileCursorBase {
 
 /** Cursor for OpenCode (individual message files with change detection) */
 export interface OpenCodeCursor extends FileCursorBase {
-  /** File size in bytes (for unchanged detection) */
-  size: number;
-  /** File mtime in ms (for unchanged detection) */
-  mtimeMs: number;
   /** Last seen cumulative token totals (for diff computation) */
   lastTotals: TokenDelta | null;
   /** Composite key "sessionId|messageId" */

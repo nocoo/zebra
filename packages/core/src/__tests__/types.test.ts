@@ -133,6 +133,8 @@ describe("SyncCursor types", () => {
   it("should hold byte-offset cursor for JSONL files", () => {
     const cursor: ByteOffsetCursor = {
       inode: 123456,
+      mtimeMs: 1709827200000,
+      size: 4096,
       offset: 4096,
       updatedAt: "2026-03-07T10:00:00Z",
     };
@@ -143,6 +145,8 @@ describe("SyncCursor types", () => {
   it("should hold Gemini cursor with array index", () => {
     const cursor: GeminiCursor = {
       inode: 789,
+      mtimeMs: 1709827200000,
+      size: 8192,
       lastIndex: 42,
       lastTotals: {
         inputTokens: 1000,
@@ -173,6 +177,8 @@ describe("SyncCursor types", () => {
   it("should hold Codex cursor with offset + cumulative diff state", () => {
     const cursor: CodexCursor = {
       inode: 777,
+      mtimeMs: 1709827200000,
+      size: 16384,
       offset: 8192,
       lastTotals: {
         inputTokens: 5000,
@@ -194,6 +200,8 @@ describe("SyncCursor types", () => {
       files: {
         "/path/to/file.jsonl": {
           inode: 1,
+          mtimeMs: 1709827200000,
+          size: 1024,
           offset: 0,
           updatedAt: "2026-03-07T10:00:00Z",
         } satisfies ByteOffsetCursor,
