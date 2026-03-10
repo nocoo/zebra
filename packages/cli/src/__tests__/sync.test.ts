@@ -1437,4 +1437,25 @@ describe("executeSync", () => {
     expect(parseEvents[0].message).toContain("Parsed");
     expect(parseEvents[0].message).toContain("deltas");
   });
+
+  // ===== OpenCode SQLite with no rows at all (line 395: rawRows empty fallback) =====
+
+  it("should handle empty SQLite queryMessages result gracefully", async () => {
+    const dbDir = join(dataDir, "opencode-sqlempty");
+    await mkdir(dbDir, { recursive: true });
+    const dbPath = join(dbDir, "opencode.db");
+    await writeFile(dbPath, "dummy");
+
+    const result = await executeSync({
+      stateDir,
+      openCodeDbPath: dbPath,
+      openMessageDb: (_p: string) => ({
+        queryMessages: (_lastTs: number) => [],
+        close: () => {},
+      }),
+    });
+
+    expect(result.totalDeltas).toBe(0);
+    expect(result.sources.opencode).toBe(0);
+  });
 });

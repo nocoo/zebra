@@ -139,4 +139,225 @@ describe("Gemini hook installer", () => {
     expect(command).toContain('"');
     expect(command).toContain("my pew dir");
   });
+
+  describe("install edge cases", () => {
+    it("skips install when settings.json contains invalid JSON", async () => {
+      const fs = {
+        readFile: async () => "not valid json {{{",
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await installGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Invalid Gemini settings.json");
+    });
+
+    it("skips install when settings.json parses to a JSON array", async () => {
+      const fs = {
+        readFile: async () => "[]",
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await installGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Invalid Gemini settings.json");
+    });
+
+    it("skips install when settings.json parses to a primitive", async () => {
+      const fs = {
+        readFile: async () => '"just a string"',
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await installGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+    });
+  });
+
+  describe("uninstall edge cases", () => {
+    it("skips uninstall when settings.json is missing (ENOENT)", async () => {
+      const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      const fs = {
+        readFile: async () => { throw enoent; },
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await uninstallGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Gemini settings.json not found");
+    });
+
+    it("skips uninstall when settings.json contains invalid JSON", async () => {
+      const fs = {
+        readFile: async () => "{{broken",
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await uninstallGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Invalid Gemini settings.json");
+    });
+
+    it("skips uninstall when hook is not installed in valid settings", async () => {
+      const fs = {
+        readFile: async () => JSON.stringify({ tools: { enableHooks: true }, hooks: {} }),
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await uninstallGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Gemini hook not installed");
+    });
+
+    it("skips uninstall when SessionEnd has entries but none match pew hook", async () => {
+      const fs = {
+        readFile: async () => JSON.stringify({
+          tools: { enableHooks: true },
+          hooks: {
+            SessionEnd: [
+              { matcher: "exit", hooks: [{ name: "other-tool", type: "command", command: "echo hi" }] },
+            ],
+          },
+        }),
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const result = await uninstallGeminiHook({ settingsPath, notifyPath, fs });
+      expect(result.action).toBe("skip");
+      expect(result.changed).toBe(false);
+      expect(result.detail).toBe("Gemini hook not installed");
+    });
+  });
+
+  describe("status edge cases", () => {
+    it("returns not-installed for valid settings without hook", async () => {
+      const fs = {
+        readFile: async () => JSON.stringify({ tools: { enableHooks: true } }),
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const status = await getGeminiHookStatus({ settingsPath, notifyPath, fs });
+      expect(status).toBe("not-installed");
+    });
+
+    it("returns error for invalid settings", async () => {
+      const fs = {
+        readFile: async () => "not json",
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const status = await getGeminiHookStatus({ settingsPath, notifyPath, fs });
+      expect(status).toBe("error");
+    });
+
+    it("returns error when settings parses to an array", async () => {
+      const fs = {
+        readFile: async () => "[]",
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      const status = await getGeminiHookStatus({ settingsPath, notifyPath, fs });
+      expect(status).toBe("error");
+    });
+  });
+
+  describe("loadSettings edge cases", () => {
+    it("rethrows non-ENOENT errors from readFile", async () => {
+      const eperm = Object.assign(new Error("EPERM"), { code: "EPERM" });
+      const fs = {
+        readFile: async () => { throw eperm; },
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      // loadSettings is internal, but we can trigger it via installGeminiHook
+      await expect(installGeminiHook({ settingsPath, notifyPath, fs })).rejects.toThrow("EPERM");
+    });
+
+    it("rethrows non-ENOENT errors via uninstallGeminiHook", async () => {
+      const eacces = Object.assign(new Error("EACCES"), { code: "EACCES" });
+      const fs = {
+        readFile: async () => { throw eacces; },
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      await expect(uninstallGeminiHook({ settingsPath, notifyPath, fs })).rejects.toThrow("EACCES");
+    });
+
+    it("rethrows non-ENOENT errors via getGeminiHookStatus", async () => {
+      const eio = Object.assign(new Error("EIO"), { code: "EIO" });
+      const fs = {
+        readFile: async () => { throw eio; },
+        writeFile: async () => {},
+        mkdir: async () => {},
+      };
+      await expect(getGeminiHookStatus({ settingsPath, notifyPath, fs })).rejects.toThrow("EIO");
+    });
+  });
+
+  describe("normalizeEntry edge cases", () => {
+    it("repairs hook name when it differs but command matches", async () => {
+      // Hook has wrong name but matching command — should be repaired to "pew-tracker"
+      const command = `/usr/bin/env node ${notifyPath} --source=gemini-cli`;
+      await writeFile(
+        settingsPath,
+        `${JSON.stringify(
+          {
+            tools: { enableHooks: true },
+            hooks: {
+              SessionEnd: [
+                {
+                  matcher: "exit|clear|logout|prompt_input_exit|other",
+                  hooks: [{ name: "wrong-name", type: "command", command }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const result = await installGeminiHook({ settingsPath, notifyPath });
+      const saved = JSON.parse(await readFile(settingsPath, "utf8"));
+
+      expect(result.changed).toBe(true);
+      expect(saved.hooks.SessionEnd[0].hooks[0].name).toBe("pew-tracker");
+    });
+
+    it("does not modify entries without hooks array", async () => {
+      // Entry with no hooks property — normalizeEntry should return it unchanged
+      await writeFile(
+        settingsPath,
+        `${JSON.stringify(
+          {
+            tools: { enableHooks: true },
+            hooks: {
+              SessionEnd: [
+                { matcher: "exit" },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const result = await installGeminiHook({ settingsPath, notifyPath });
+      const saved = JSON.parse(await readFile(settingsPath, "utf8"));
+
+      expect(result.changed).toBe(true);
+      // Original entry preserved, plus new pew hook entry appended
+      expect(saved.hooks.SessionEnd).toHaveLength(2);
+      expect(saved.hooks.SessionEnd[0].matcher).toBe("exit");
+      expect(saved.hooks.SessionEnd[1].hooks[0].name).toBe("pew-tracker");
+    });
+  });
 });
