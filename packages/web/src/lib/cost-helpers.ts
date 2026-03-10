@@ -6,6 +6,7 @@
  */
 
 import type { ModelAggregate } from "@/hooks/use-usage-data";
+import type { UsageRow } from "@/hooks/use-usage-data";
 import { lookupPricing, estimateCost } from "@/lib/pricing";
 import type { PricingMap } from "@/lib/pricing";
 
@@ -21,4 +22,62 @@ export function computeTotalCost(
     total += cost.totalCost;
   }
   return total;
+}
+
+// ---------------------------------------------------------------------------
+// Daily cost aggregation
+// ---------------------------------------------------------------------------
+
+/** A single day's cost breakdown for the cost trend chart. */
+export interface DailyCostPoint {
+  date: string;       // "2026-03-10"
+  inputCost: number;  // USD
+  outputCost: number; // USD
+  cachedCost: number; // USD
+  totalCost: number;  // USD
+}
+
+/**
+ * Aggregate usage rows into daily cost points.
+ *
+ * Groups rows by `hour_start.slice(0, 10)` (date portion), computes
+ * per-model cost via `lookupPricing` + `estimateCost`, and sums into
+ * daily buckets. Returns sorted ascending by date.
+ */
+export function toDailyCostPoints(
+  rows: UsageRow[],
+  pricingMap: PricingMap,
+): DailyCostPoint[] {
+  const byDate = new Map<string, DailyCostPoint>();
+
+  for (const r of rows) {
+    const date = r.hour_start.slice(0, 10);
+    const pricing = lookupPricing(pricingMap, r.model, r.source);
+    const cost = estimateCost(
+      r.input_tokens,
+      r.output_tokens,
+      r.cached_input_tokens,
+      pricing,
+    );
+
+    const existing = byDate.get(date);
+    if (existing) {
+      existing.inputCost += cost.inputCost;
+      existing.outputCost += cost.outputCost;
+      existing.cachedCost += cost.cachedCost;
+      existing.totalCost += cost.totalCost;
+    } else {
+      byDate.set(date, {
+        date,
+        inputCost: cost.inputCost,
+        outputCost: cost.outputCost,
+        cachedCost: cost.cachedCost,
+        totalCost: cost.totalCost,
+      });
+    }
+  }
+
+  return Array.from(byDate.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 }
