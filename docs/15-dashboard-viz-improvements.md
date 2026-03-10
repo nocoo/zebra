@@ -142,14 +142,18 @@ All timestamps in the database and API are **UTC ISO 8601** (e.g., `2026-03-10T2
 2. **Day bucketing** for user-facing labels (peak hours, weekday/weekend, streaks) must convert UTC → local before extracting day-of-week or hour-of-day. Use `new Date(utcString)` which auto-converts to local in the browser, then call `getDay()`/`getHours()` (NOT `getUTCDay()`/`getUTCHours()`).
 3. **Pure helper functions** under test must accept an optional `tzOffset` parameter (default `0` for UTC in tests, real offset injected from the UI layer) so tests remain deterministic.
 
-**Critical: `DailyPoint` is a UTC-day bucket and cannot be used for local-time features.** The API's `granularity=day` groups rows via `date(hour_start)` (SQLite, UTC), and `toDailyPoints()` slices `hour_start` to `YYYY-MM-DD` in UTC. Once records are collapsed into UTC dates, the user's true local weekday near midnight boundaries is lost. Therefore:
+**Critical: `DailyPoint` is a UTC-day bucket and cannot be used for local-time features.** The API's `granularity=day` groups rows via `date(hour_start)` (SQLite, UTC), and `toDailyPoints()` slices `hour_start` to `YYYY-MM-DD` in UTC. Once records are collapsed into UTC dates, the user's true local weekday near midnight boundaries is lost.
+
+**Equally critical: day-granularity `UsageRow[]` also loses time information.** When `granularity=day`, the SQL query uses `date(hour_start) AS hour_start` (`route.ts:114`), so the `hour_start` field in each `UsageRow` is a bare date string (`"2026-03-10"`), NOT a full ISO timestamp. `toLocalDailyBuckets()` cannot shift records across midnight boundaries without a time component. **Any feature requiring local-day accuracy must fetch with half-hour (default) granularity** to get full timestamps like `"2026-03-10T14:30:00.000Z"`.
+
+Therefore:
 
 - **Peak hours (3a)**: Must use raw `UsageRow[]` from half-hour granularity — already correct.
-- **Weekday/weekend (3b)**: Must accept raw `UsageRow[]` and re-bucket by local day, NOT `DailyPoint[]`.
-- **Streaks (3d)**: Must accept raw `UsageRow[]` and re-bucket by local day, NOT `DailyPoint[]`.
-- **Cost trend (1a)**, **MoM (3c)**: These aggregate by calendar date where ±1 day error is acceptable for a trend chart, so `DailyPoint[]` / UTC bucketing is fine.
+- **Weekday/weekend (3b)**: Must fetch with **half-hour granularity** and accept raw `UsageRow[]` — NOT day-granularity rows or `DailyPoint[]`.
+- **Streaks (3d)**: Must fetch with **half-hour granularity** (separate from the heatmap's day-granularity fetch) and accept raw `UsageRow[]` — NOT day-granularity rows or `DailyPoint[]`.
+- **Cost trend (1a)**, **MoM (3c)**: These aggregate by calendar date where ±1 day error is acceptable for a trend chart, so `DailyPoint[]` / UTC day bucketing is fine.
 
-A new shared helper `toLocalDailyBuckets(rows: UsageRow[], tzOffset?: number): Map<string, number>` should be introduced to handle UTC → local day bucketing for features that need it. This avoids duplicating the conversion logic across weekday/weekend, streaks, and future features.
+A new shared helper `toLocalDailyBuckets(rows: UsageRow[], tzOffset?: number): Map<string, number>` should be introduced to handle UTC → local day bucketing for features that need it. This helper **requires rows with full ISO timestamps** (half-hour granularity) — it will not produce correct results with bare date strings from day-granularity queries. This avoids duplicating the conversion logic across weekday/weekend, streaks, and future features.
 
 **Pre-existing bug**: `toWorkingHoursGrid()` in `session-helpers.ts` uses `getUTCDay()`/`getUTCHours()` instead of local time. This is fixed as Category 3 commit #2 (`fix: use local time in toWorkingHoursGrid`).
 
@@ -390,7 +394,7 @@ function detectPeakHours(
 
 **What**: Side-by-side bar chart comparing average daily token usage on weekdays vs weekends.
 
-**Data pipeline**: Requires raw `UsageRow[]` (NOT pre-bucketed `DailyPoint[]`) to correctly determine the user's local weekday near midnight boundaries. Fetch with `granularity=day` — the rows still carry `hour_start` as a UTC date string, which is sufficient for local-day re-bucketing via `toLocalDailyBuckets()`.
+**Data pipeline**: Requires raw `UsageRow[]` with **full UTC timestamps** (NOT pre-bucketed `DailyPoint[]`) to correctly determine the user's local weekday near midnight boundaries. Must fetch with **default (half-hour) granularity** — NOT `granularity=day`, which collapses `hour_start` to a bare UTC date string (`"2026-03-10"`) via `date(hour_start)` in the API query (`route.ts:114`). Without a time component, `toLocalDailyBuckets()` cannot shift records across midnight boundaries. Use the `granularity` param added in commit #0 to request half-hour data: `useUsageData({ days: 30, granularity: "half-hour" })`.
 
 **New function** (`packages/web/src/lib/usage-helpers.ts`):
 ```ts
@@ -447,13 +451,15 @@ function computeMoMGrowth(
 
 **What**: Count consecutive days with at least one usage record, similar to GitHub contribution streaks.
 
-**Data pipeline**: The yearly heatmap already fetches 365 days of data via `useUsageData({ days: 365 })`. Reuse the raw `UsageRow[]` (not `DailyPoint[]`) to re-bucket by local day for accurate streak counting near midnight boundaries.
+**Data pipeline**: Must use raw `UsageRow[]` with **full UTC timestamps** (NOT the yearly heatmap's `DailyPoint[]` or day-granularity rows). The yearly heatmap fetches with `granularity=day`, which collapses `hour_start` to a bare UTC date string (`"2026-03-10"`) — `toLocalDailyBuckets()` cannot recover local calendar days from these. Instead, fetch 365 days with **half-hour granularity**: `useUsageData({ days: 365, granularity: "half-hour" })`. This is a separate fetch from the heatmap's existing one.
+
+> **Performance note**: 365 days of half-hour data is significantly more rows than 365 days of day-granularity data. If the payload is too large, consider (a) a dedicated `/api/usage/active-days` endpoint that returns distinct local dates server-side, or (b) streaming/pagination. Start with the naive approach (half-hour fetch) and optimize if needed — the streak helper itself is O(n) and cheap.
 
 **New function** (`packages/web/src/lib/usage-helpers.ts`):
 ```ts
 interface StreakInfo {
   currentStreak: number;       // consecutive days ending today (or yesterday)
-  longestStreak: number;       // longest within available data (up to 365 days from heatmap)
+  longestStreak: number;       // longest within available data (up to 365 days)
   longestStreakStart: string;  // start date of longest streak
   longestStreakEnd: string;    // end date of longest streak
   isActiveToday: boolean;      // has usage today
@@ -572,7 +578,7 @@ interface Insight {
 }
 
 interface InsightInputs {
-  rows: UsageRow[];              // raw usage records (needed for peak hours, MoM cost, local-day features)
+  rows: UsageRow[];              // raw usage records — MUST be half-hour granularity (full timestamps) for peak-hour, streak, and local-day features
   summary: UsageSummary;         // pre-computed totals
   models: ModelAggregate[];      // per-model breakdown
   pricingMap: PricingMap;        // for cost calculations
@@ -584,7 +590,7 @@ interface InsightInputs {
 function generateInsights(inputs: InsightInputs): Insight[];
 ```
 
-**Why `rows` is required**: The insight catalog includes `peak-hour` (needs raw rows for `detectPeakHours()`) and `cost-trend` (needs raw rows for `computeMoMGrowth()`). Pre-aggregated `summary`/`models`/`dailyPoints` are insufficient for these. The `rows` field should contain half-hour granularity data when peak-hour insights are desired; if only daily rows are available, the `peak-hour` insight is skipped (returns null).
+**Why `rows` is required**: The insight catalog includes `peak-hour` (needs raw rows for `detectPeakHours()`), `streak` (needs raw rows for `computeStreak()` with local-day re-bucketing), and `cost-trend` (needs raw rows for `computeMoMGrowth()`). Pre-aggregated `summary`/`models`/`dailyPoints` are insufficient for these. The `rows` field **must contain half-hour granularity data** (full UTC timestamps) — day-granularity rows have bare date strings and cannot be used for local-time features. If half-hour rows are unavailable, `peak-hour` and `streak` insights are skipped (return null).
 
 #### Insight Catalog
 
@@ -594,7 +600,7 @@ function generateInsights(inputs: InsightInputs): Insight[];
 | `top-source` | Source with highest token share (from `models`) | "You use **Claude Code** for **82%** of your AI coding" |
 | `cache-rate` | Overall `cached_input_tokens / input_tokens` (from `summary`) | "Your cache hit rate is **73%** — saving you **$12.40** this month" |
 | `peak-hour` | `detectPeakHours(rows, 1, tzOffset)[0]` — skipped if rows lack half-hour granularity | "Your most productive slot: **Wednesday 9–10 PM**" |
-| `streak` | `computeStreak(rows, today, tzOffset).currentStreak` | "You're on a **12-day streak** — keep it going!" |
+| `streak` | `computeStreak(rows, today, tzOffset).currentStreak` — skipped if rows lack half-hour granularity | "You're on a **12-day streak** — keep it going!" |
 | `big-day` | Day with highest total tokens (from `toLocalDailyBuckets(rows, tzOffset)`) | "Your biggest day was **Mar 5** with **2.1M tokens**" |
 | `reasoning-depth` | Reasoning ratio when > 20% (from `summary`) | "**38%** of your output is deep reasoning" |
 | `cost-trend` | `computeMoMGrowth(rows, pricingMap)` direction | "Your costs are **down 15%** vs last month" |
@@ -756,7 +762,7 @@ function useBudget(month: string): {
 | 7 | `feat: add PeakHoursCard component` | `peak-hours-card.tsx` | No unit test (presentational). |
 | 8 | `feat: add WeekdayWeekendChart component` | `weekday-weekend-chart.tsx` | No unit test (presentational). |
 | 9 | `feat: add StreakBadge component` | `streak-badge.tsx` | No unit test (presentational). |
-| 10 | `feat: integrate time analysis on dashboard + sessions pages` | `dashboard/page.tsx`, `sessions/page.tsx` | No unit test (wiring). |
+| 10 | `feat: integrate time analysis on dashboard + sessions pages` | `dashboard/page.tsx`, `sessions/page.tsx` | No unit test (wiring). **Note**: 3b (weekday/weekend) and 3d (streaks) each need a `useUsageData({ granularity: "half-hour" })` call — they cannot reuse the heatmap's day-granularity fetch. Consider sharing a single half-hour fetch between 3a/3b/3d on the same page, or using a dedicated hook. |
 
 ### Category 4: Model/Tool Comparison (6 commits)
 
