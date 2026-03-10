@@ -3,7 +3,9 @@ import {
   toSessionOverview,
   toWorkingHoursGrid,
   toMessageDailyStats,
+  computeTokensPerHour,
   type SessionRow,
+  type SessionOverview,
 } from "@/lib/session-helpers";
 
 // ---------------------------------------------------------------------------
@@ -204,5 +206,60 @@ describe("toMessageDailyStats", () => {
       "2026-03-09",
       "2026-03-10",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeTokensPerHour
+// ---------------------------------------------------------------------------
+
+function makeOverview(
+  overrides: Partial<SessionOverview> = {},
+): SessionOverview {
+  return {
+    totalSessions: 10,
+    totalHours: 5,
+    avgDurationMinutes: 30,
+    avgMessages: 15,
+    ...overrides,
+  };
+}
+
+describe("computeTokensPerHour", () => {
+  it("should compute tokens per hour from total tokens and session overview", () => {
+    // 500K tokens over 5 hours = 100K tok/hr
+    const result = computeTokensPerHour(500_000, makeOverview({ totalHours: 5 }));
+
+    expect(result.tokensPerHour).toBe(100_000);
+    expect(result.totalCodingHours).toBe(5);
+    expect(result.totalTokens).toBe(500_000);
+  });
+
+  it("should return zero tokens/hour when totalHours is zero", () => {
+    const result = computeTokensPerHour(100_000, makeOverview({ totalHours: 0 }));
+
+    expect(result.tokensPerHour).toBe(0);
+    expect(result.totalCodingHours).toBe(0);
+    expect(result.totalTokens).toBe(100_000);
+  });
+
+  it("should handle high throughput values", () => {
+    // 10M tokens over 2 hours = 5M tok/hr
+    const result = computeTokensPerHour(
+      10_000_000,
+      makeOverview({ totalHours: 2 }),
+    );
+
+    expect(result.tokensPerHour).toBe(5_000_000);
+    expect(result.totalCodingHours).toBe(2);
+    expect(result.totalTokens).toBe(10_000_000);
+  });
+
+  it("should handle zero tokens", () => {
+    const result = computeTokensPerHour(0, makeOverview({ totalHours: 3 }));
+
+    expect(result.tokensPerHour).toBe(0);
+    expect(result.totalCodingHours).toBe(3);
+    expect(result.totalTokens).toBe(0);
   });
 });

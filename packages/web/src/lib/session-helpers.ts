@@ -114,3 +114,25 @@ export function toMessageDailyStats(records: SessionRow[]): MessageDailyStat[] {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, stats]) => ({ date, ...stats }));
 }
+
+// ---------------------------------------------------------------------------
+// computeTokensPerHour
+// ---------------------------------------------------------------------------
+
+export type EfficiencyMetrics = {
+  tokensPerHour: number;
+  totalCodingHours: number;
+  totalTokens: number;
+};
+
+export function computeTokensPerHour(
+  totalTokens: number,
+  sessionOverview: SessionOverview,
+): EfficiencyMetrics {
+  const { totalHours } = sessionOverview;
+  return {
+    tokensPerHour: totalHours === 0 ? 0 : totalTokens / totalHours,
+    totalCodingHours: totalHours,
+    totalTokens,
+  };
+}
