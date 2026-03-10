@@ -185,4 +185,120 @@ describe("GET /api/leaderboard", () => {
       expect(body.error).toBe("Failed to load leaderboard");
     });
   });
+
+  describe("team filter", () => {
+    it("should add team JOIN when team param is provided", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeRequest({ team: "team-abc" }));
+
+      expect(res.status).toBe(200);
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).toContain("JOIN team_members tm");
+      expect(sqlCall[0]).toContain("tm.team_id = ?");
+      expect(sqlCall[1]).toContain("team-abc");
+    });
+
+    it("should not include slug IS NOT NULL when team is set", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      await GET(makeRequest({ team: "team-abc" }));
+
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).not.toContain("u.slug IS NOT NULL");
+    });
+  });
+
+  describe("nickname fallback", () => {
+    it("should retry without nickname when first query throws 'no such column'", async () => {
+      mockClient.query
+        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(mockClient.query).toHaveBeenCalledTimes(2);
+      // Fallback SQL should NOT contain u.nickname
+      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
+      expect(fallbackSql).not.toContain("u.nickname");
+    });
+
+    it("should retry when first query throws 'no such table'", async () => {
+      mockClient.query
+        .mockRejectedValueOnce(new Error("no such table: team_members"))
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeRequest({ team: "t1" }));
+
+      expect(res.status).toBe(200);
+      expect(mockClient.query).toHaveBeenCalledTimes(2);
+    });
+
+    it("should re-throw non-column/table errors", async () => {
+      mockClient.query.mockRejectedValueOnce(new Error("connection refused"));
+
+      const res = await GET(makeRequest());
+
+      expect(res.status).toBe(500);
+    });
+
+    it("should use nickname when available", async () => {
+      mockClient.query.mockResolvedValueOnce({
+        results: [
+          {
+            user_id: "u1",
+            name: "Alice Smith",
+            nickname: "alice",
+            image: null,
+            slug: "alice-s",
+            total_tokens: 1000,
+            input_tokens: 500,
+            output_tokens: 400,
+            cached_input_tokens: 100,
+          },
+        ],
+      });
+
+      const res = await GET(makeRequest());
+      const body = await res.json();
+
+      expect(body.entries[0].user.name).toBe("alice");
+    });
+
+    it("should fall back to name when nickname is null", async () => {
+      mockClient.query.mockResolvedValueOnce({
+        results: [
+          {
+            user_id: "u1",
+            name: "Bob Jones",
+            nickname: null,
+            image: null,
+            slug: "bob",
+            total_tokens: 1000,
+            input_tokens: 500,
+            output_tokens: 400,
+            cached_input_tokens: 100,
+          },
+        ],
+      });
+
+      const res = await GET(makeRequest());
+      const body = await res.json();
+
+      expect(body.entries[0].user.name).toBe("Bob Jones");
+    });
+
+    it("should include fromDate in fallback when period is not all", async () => {
+      mockClient.query
+        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeRequest({ period: "month" }));
+
+      expect(res.status).toBe(200);
+      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
+      expect(fallbackSql).toContain("ur.hour_start >= ?");
+    });
+  });
 });

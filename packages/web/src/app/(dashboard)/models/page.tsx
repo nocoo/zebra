@@ -1,85 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useUsageData, sourceLabel, type UsageRow } from "@/hooks/use-usage-data";
+import { useUsageData, sourceLabel } from "@/hooks/use-usage-data";
 import { formatTokens } from "@/lib/utils";
-import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/use-pricing";
-import type { PricingMap } from "@/hooks/use-pricing";
+import { usePricingMap, formatCost } from "@/hooks/use-pricing";
+import { groupByModel } from "@/lib/usage-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CHART_COLORS } from "@/lib/palette";
 import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
-import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
-import type { Period } from "@/components/dashboard/period-selector";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ModelGroup {
-  model: string;
-  sources: string[];
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  pctOfTotal: number;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function groupByModel(records: UsageRow[], pricingMap: PricingMap): ModelGroup[] {
-  const byModel = new Map<string, {
-    sources: Set<string>;
-    inputTokens: number;
-    outputTokens: number;
-    cachedTokens: number;
-    totalTokens: number;
-    estimatedCost: number;
-  }>();
-
-  let grandTotal = 0;
-
-  for (const r of records) {
-    grandTotal += r.total_tokens;
-    const existing = byModel.get(r.model);
-    const pricing = lookupPricing(pricingMap, r.model, r.source);
-    const cost = estimateCost(r.input_tokens, r.output_tokens, r.cached_input_tokens, pricing);
-
-    if (existing) {
-      existing.sources.add(r.source);
-      existing.inputTokens += r.input_tokens;
-      existing.outputTokens += r.output_tokens;
-      existing.cachedTokens += r.cached_input_tokens;
-      existing.totalTokens += r.total_tokens;
-      existing.estimatedCost += cost.totalCost;
-    } else {
-      byModel.set(r.model, {
-        sources: new Set([r.source]),
-        inputTokens: r.input_tokens,
-        outputTokens: r.output_tokens,
-        cachedTokens: r.cached_input_tokens,
-        totalTokens: r.total_tokens,
-        estimatedCost: cost.totalCost,
-      });
-    }
-  }
-
-  return Array.from(byModel.entries())
-    .map(([model, data]) => ({
-      model,
-      sources: Array.from(data.sources),
-      inputTokens: data.inputTokens,
-      outputTokens: data.outputTokens,
-      cachedTokens: data.cachedTokens,
-      totalTokens: data.totalTokens,
-      estimatedCost: data.estimatedCost,
-      pctOfTotal: grandTotal > 0 ? (data.totalTokens / grandTotal) * 100 : 0,
-    }))
-    .sort((a, b) => b.totalTokens - a.totalTokens);
-}
+import { PeriodSelector } from "@/components/dashboard/period-selector";
+import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
+import type { Period } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
 // Skeleton

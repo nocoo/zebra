@@ -143,6 +143,54 @@ describe("D1Client", () => {
         client.query("SELECT * FROM users")
       ).rejects.toThrow(D1Error);
     });
+
+    it("should include message when fetch rejects with non-Error value", async () => {
+      mockFetch.mockRejectedValueOnce("string rejection");
+
+      const err = await client
+        .query("SELECT 1")
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(D1Error);
+      expect((err as D1Error).message).toBe(
+        "D1 network error: string rejection",
+      );
+    });
+
+    it("should fallback to D1 HTTP status when errors array is empty", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () =>
+          Promise.resolve({
+            success: false,
+            errors: [],
+          }),
+      });
+
+      const err = await client
+        .query("SELECT 1")
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(D1Error);
+      expect((err as D1Error).message).toBe("D1 HTTP 403");
+      expect((err as D1Error).status).toBe(403);
+    });
+
+    it("should handle response where result[0] has no results or meta", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            result: [{}],
+          }),
+      });
+
+      const result = await client.query("SELECT 1");
+      expect(result.results).toEqual([]);
+      expect(result.meta).toEqual({ changes: 0, duration: 0 });
+    });
   });
 
   describe("execute()", () => {

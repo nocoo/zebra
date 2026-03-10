@@ -2,111 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useUsageData, sourceLabel, type UsageRow } from "@/hooks/use-usage-data";
+import { useUsageData } from "@/hooks/use-usage-data";
 import { formatTokens } from "@/lib/utils";
-import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/use-pricing";
-import type { PricingMap } from "@/hooks/use-pricing";
+import { usePricingMap, formatCost } from "@/hooks/use-pricing";
+import { groupByApp } from "@/lib/usage-helpers";
+import type { AppGroup } from "@/lib/usage-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CHART_COLORS } from "@/lib/palette";
-import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
-import type { Period } from "@/components/dashboard/period-selector";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface AppGroup {
-  source: string;
-  label: string;
-  records: UsageRow[];
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  models: ModelRow[];
-}
-
-interface ModelRow {
-  model: string;
-  input: number;
-  output: number;
-  cached: number;
-  total: number;
-  cost: number;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function groupByApp(records: UsageRow[], pricingMap: PricingMap): AppGroup[] {
-  const bySource = new Map<string, UsageRow[]>();
-
-  for (const r of records) {
-    const existing = bySource.get(r.source);
-    if (existing) {
-      existing.push(r);
-    } else {
-      bySource.set(r.source, [r]);
-    }
-  }
-
-  return Array.from(bySource.entries())
-    .map(([source, records]) => {
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let cachedTokens = 0;
-      let totalTokens = 0;
-      let estimatedCost = 0;
-
-      const byModel = new Map<string, ModelRow>();
-
-      for (const r of records) {
-        inputTokens += r.input_tokens;
-        outputTokens += r.output_tokens;
-        cachedTokens += r.cached_input_tokens;
-        totalTokens += r.total_tokens;
-
-        const pricing = lookupPricing(pricingMap, r.model, r.source);
-        const cost = estimateCost(r.input_tokens, r.output_tokens, r.cached_input_tokens, pricing);
-        estimatedCost += cost.totalCost;
-
-        const existing = byModel.get(r.model);
-        if (existing) {
-          existing.input += r.input_tokens;
-          existing.output += r.output_tokens;
-          existing.cached += r.cached_input_tokens;
-          existing.total += r.total_tokens;
-          existing.cost += cost.totalCost;
-        } else {
-          byModel.set(r.model, {
-            model: r.model,
-            input: r.input_tokens,
-            output: r.output_tokens,
-            cached: r.cached_input_tokens,
-            total: r.total_tokens,
-            cost: cost.totalCost,
-          });
-        }
-      }
-
-      const models = Array.from(byModel.values()).sort((a, b) => b.total - a.total);
-
-      return {
-        source,
-        label: sourceLabel(source),
-        records,
-        inputTokens,
-        outputTokens,
-        cachedTokens,
-        totalTokens,
-        estimatedCost,
-        models,
-      };
-    })
-    .sort((a, b) => b.totalTokens - a.totalTokens);
-}
+import { PeriodSelector } from "@/components/dashboard/period-selector";
+import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
+import type { Period } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
 // App card

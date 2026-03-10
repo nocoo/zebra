@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatTokens } from "@/lib/utils";
 import { chart, chartAxis, CHART_COLORS } from "@/lib/palette";
+import { shortModel } from "@/lib/model-helpers";
 import type { ModelAggregate } from "@/hooks/use-usage-data";
 import { sourceLabel } from "@/hooks/use-usage-data";
 
@@ -26,19 +27,6 @@ const colorCached = CHART_COLORS[2]!;
 interface ModelBreakdownChartProps {
   data: ModelAggregate[];
   className?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Truncate long model names for the Y-axis */
-function shortModel(model: string): string {
-  // Remove common prefixes and suffixes for readability
-  const cleaned = model
-    .replace(/^models\//, "")
-    .replace(/-\d{8}$/, "");
-  return cleaned.length > 24 ? cleaned.slice(0, 22) + "..." : cleaned;
 }
 
 // ---------------------------------------------------------------------------

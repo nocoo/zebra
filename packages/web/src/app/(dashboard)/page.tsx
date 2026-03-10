@@ -10,32 +10,17 @@ import {
 } from "lucide-react";
 import { useUsageData, toHeatmapData } from "@/hooks/use-usage-data";
 import { formatTokens } from "@/lib/utils";
-import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/use-pricing";
-import type { PricingMap } from "@/hooks/use-pricing";
+import { usePricingMap, formatCost } from "@/hooks/use-pricing";
+import { computeTotalCost } from "@/lib/cost-helpers";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
 import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
-import { PeriodSelector, periodToDateRange, periodLabel } from "@/components/dashboard/period-selector";
-import type { Period } from "@/components/dashboard/period-selector";
+import { PeriodSelector } from "@/components/dashboard/period-selector";
+import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
+import type { Period } from "@/lib/date-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ModelAggregate } from "@/hooks/use-usage-data";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Compute total estimated cost from model aggregates */
-function computeTotalCost(models: ModelAggregate[], pricingMap: PricingMap): number {
-  let total = 0;
-  for (const m of models) {
-    const pricing = lookupPricing(pricingMap, m.model, m.source);
-    const cost = estimateCost(m.input, m.output, m.cached, pricing);
-    total += cost.totalCost;
-  }
-  return total;
-}
 
 // ---------------------------------------------------------------------------
 // Page

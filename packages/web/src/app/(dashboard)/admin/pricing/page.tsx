@@ -7,56 +7,12 @@ import { cn } from "@/lib/utils";
 import { useAdmin } from "@/hooks/use-admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DbPricingRow } from "@/lib/pricing";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface FormData {
-  model: string;
-  input: string;
-  output: string;
-  cached: string;
-  source: string;
-  note: string;
-}
-
-const EMPTY_FORM: FormData = {
-  model: "",
-  input: "",
-  output: "",
-  cached: "",
-  source: "",
-  note: "",
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function rowToForm(row: DbPricingRow): FormData {
-  return {
-    model: row.model,
-    input: String(row.input),
-    output: String(row.output),
-    cached: row.cached != null ? String(row.cached) : "",
-    source: row.source ?? "",
-    note: row.note ?? "",
-  };
-}
-
-function validateForm(form: FormData): string | null {
-  if (!form.model.trim()) return "Model is required.";
-  const input = parseFloat(form.input);
-  if (isNaN(input) || input < 0) return "Input price must be a non-negative number.";
-  const output = parseFloat(form.output);
-  if (isNaN(output) || output < 0) return "Output price must be a non-negative number.";
-  if (form.cached.trim()) {
-    const cached = parseFloat(form.cached);
-    if (isNaN(cached) || cached < 0) return "Cached price must be a non-negative number.";
-  }
-  return null;
-}
+import {
+  type PricingFormData as FormData,
+  EMPTY_PRICING_FORM as EMPTY_FORM,
+  rowToForm,
+  validatePricingForm as validateForm,
+} from "@/lib/pricing-form-helpers";
 
 // ---------------------------------------------------------------------------
 // Skeleton

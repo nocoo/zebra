@@ -296,5 +296,19 @@ describe("POST /api/ingest/sessions", () => {
       const body = await res.json();
       expect(body.error).toContain("ingest");
     });
+
+    it("should derive /sessions URL from WORKER_INGEST_URL ending with /ingest", async () => {
+      vi.stubEnv(
+        "WORKER_INGEST_URL",
+        "https://worker.example.com/ingest",
+      );
+      stubWorkerOk();
+
+      const res = await POST(makeRequest([VALID_SESSION]));
+
+      expect(res.status).toBe(200);
+      const [url] = mockFetch.mock.calls[0]!;
+      expect(url).toBe("https://worker.example.com/ingest/sessions");
+    });
   });
 });
