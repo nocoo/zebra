@@ -23,17 +23,36 @@ would require char-based estimation. **This was wrong.**
 - `promptTokens` — exact input tokens (server-side, includes full context)
 - `outputTokens` — exact output tokens
 
-Verified against 5 real session files:
+Verified against 5 real session files (4 workspace + 1 empty-window):
 
-| Metric | Count |
-|--------|-------|
-| Total requests with `result` | 30 |
-| Requests with exact token fields | 25 (83.3%) |
-| Requests missing token fields | 5 (failed/incomplete turns) |
+| Category | Count | % |
+|----------|-------|---|
+| Total requests | 31 | 100% |
+| With exact token fields | 25 | 80.6% |
+| Has `result` but no token fields | 3 | 9.7% |
+| Empty `result` (`{}`) | 2 | 6.5% |
+| No `result` line at all | 1 | 3.2% |
 
-The 5 missing requests have no `promptTokens`/`outputTokens` keys at all in their
-metadata — these are incomplete turns (no model response received) and should be
-treated as non-billable.
+### Requests Without Tokens Are NOT Necessarily Non-Billable
+
+The 3 "has result, no tokens" requests had **substantial partial output** and
+multiple tool-call rounds (up to 70 response items, 35 tool-call rounds, 10+
+minutes elapsed). These consumed real API quota — the server simply did not
+report token counts in the metadata. They correlate with `modelState` values
+2 and 3 (vs. value 1 for all 25 exact-token requests).
+
+| `modelState` | Meaning (inferred) | Token fields? | Count |
+|-------------|-------------------|---------------|-------|
+| `1` | Normal completion | Always present | 25 |
+| `2` | Abnormal completion | Missing | 3 (1 no-tokens + 2 empty) |
+| `3` | Abnormal completion (different?) | Missing | 2 |
+| (none) | In-progress / abandoned | No result line | 1 |
+
+**Implementation consequence**: the parser must NOT silently skip these. Options:
+1. Emit records with `inputTokens: 0, outputTokens: 0` and an `estimated: true`
+   or `incomplete: true` flag so the dashboard can surface them
+2. Attempt char/4 estimation from response text as a rough lower bound
+3. At minimum, log a warning so users know some turns are unaccounted for
 
 ---
 
@@ -95,16 +114,37 @@ line N (kind=2): append(state, line.k, line.v)    # e.g. state.requests.push(...
 
 The `k` field is a JSON path array like `["requests", 0, "response"]`.
 
-**Optimization**: For token extraction, we do NOT need full CRDT replay. We can
-stream the JSONL and extract token data directly from `kind=1` lines where
-`k[2] == "result"`, plus `kind=2` lines where `k == ["requests"]` for modelId
-and timestamp. This avoids materializing the full session state.
+**Optimization**: Full CRDT replay (materializing the entire session state including
+response bodies) is NOT needed. However, the parser MUST maintain a **per-file
+request-index → metadata mapping** (`index → { modelId, timestamp }`) because:
+
+- `kind=1` result lines only carry the request **index** (e.g. `k = ["requests", 3, "result"]`)
+  — they do NOT contain `modelId` or `timestamp`
+- `modelId` and `timestamp` come from earlier `kind=2` appends to `["requests"]`
+  or from the `kind=0` snapshot
+
+On **first parse** of a file, the parser scans all lines and builds this mapping
+naturally. On **incremental sync** (resuming from a byte offset), the mapping from
+prior lines is no longer in memory. Two options:
+
+1. **Persist the index→metadata mapping** alongside the byte-offset cursor
+   (e.g. in `cursors.json`), so incremental reads can correlate new `kind=1`
+   result lines with their request metadata
+2. **Always replay from the start of each file** but skip emitting records for
+   already-processed request indices (tracked via cursor)
+
+Option 1 is more efficient for large session files. Option 2 is simpler but
+re-reads the entire file each sync cycle.
+
+In either case, the parser does NOT need to materialize response bodies
+(`kind=2` appends to `["requests", N, "response"]`), which are the bulk of
+the file size.
 
 ---
 
 ## Token Extraction Strategy
 
-### Primary: Exact Server-Reported Tokens (83%+ coverage)
+### Primary: Exact Server-Reported Tokens (~81% coverage)
 
 Token data lives in `kind=1` Set operations targeting `['requests', N, 'result']`:
 
@@ -143,13 +183,25 @@ or `kind=2` append to `['requests']`):
 }
 ```
 
-### Fallback: Estimation (only for missing fields)
+### Fallback: Requests Without Token Fields (~19%)
 
-For the ~17% of requests lacking `promptTokens`/`outputTokens` (incomplete turns):
+The ~19% of requests lacking `promptTokens`/`outputTokens` fall into three categories:
 
-1. **Skip by default** — treat as non-billable / incomplete
-2. **Optional**: if `response[].value` text exists, estimate output as chars/4
-3. Mark with `estimated: true` flag
+| Category | Count | Has partial output? | Billable? |
+|----------|-------|-------------------|-----------|
+| Has `result` with metadata, no token fields | 3 | Yes (up to 70 response items) | Likely yes |
+| Empty `result` (`{}`) | 2 | Check response items | Unknown |
+| No `result` line at all | 1 | Possibly in-progress | Unknown |
+
+These are NOT uniformly "incomplete/non-billable" — several had extensive tool-call
+rounds and elapsed times >10 minutes.
+
+**Strategy**:
+1. **Always emit a record** — never silently skip
+2. Set `inputTokens: 0, outputTokens: 0` with `incomplete: true` flag
+3. **Optional**: if `response[].value` text exists, estimate output as chars/4
+   and set `estimated: true`
+4. Log a warning so the user knows some turns lack exact counts
 
 ### char/4 Estimation Accuracy (measured against real data)
 
@@ -170,8 +222,8 @@ fields are available for the vast majority of requests.
 
 | Field | Description | Availability |
 |-------|-------------|-------------|
-| `promptTokens` | Exact input tokens (full context) | 83%+ of requests |
-| `outputTokens` | Exact output tokens | 83%+ of requests |
+| `promptTokens` | Exact input tokens (full context) | ~81% of requests (`modelState=1`) |
+| `outputTokens` | Exact output tokens | ~81% of requests (`modelState=1`) |
 
 ### Request Metadata
 
@@ -205,7 +257,7 @@ fields are available for the vast majority of requests.
 | Gemini CLI | Exact | Exact | Cumulative in session JSON |
 | OpenCode | Exact | Exact | Per-message in JSON/SQLite |
 | OpenClaw | Exact | Exact | API-reported per message |
-| **VSCode Copilot** | **Exact** | **Exact** | **Server-reported, 83%+ coverage** |
+| **VSCode Copilot** | **Exact** | **Exact** | **Server-reported, ~81% coverage; ~19% missing (abnormal completions)** |
 
 ---
 
@@ -219,17 +271,39 @@ source: "vscode-copilot"  // new Source enum value
 
 ### Parser Design
 
-Unlike other parsers that process raw API responses, the VSCode Copilot parser:
+Unlike other parsers that process raw API responses, the VSCode Copilot parser
+must handle CRDT-style operation logs with an index-based correlation challenge:
 
 1. **Scans** `workspaceStorage/*/chatSessions/*.jsonl` + `emptyWindowChatSessions/*.jsonl`
-2. **Streams** JSONL lines (no full CRDT replay needed)
-3. **Extracts** from `kind=1` lines where `k[2] == "result"`:
+2. **Builds index→metadata mapping** from `kind=0` snapshot requests and
+   `kind=2` appends to `["requests"]` — extracts `modelId`, `timestamp` per index
+3. **Extracts tokens** from `kind=1` lines where `k[2] == "result"`:
    - `v.metadata.promptTokens` → `inputTokens`
    - `v.metadata.outputTokens` → `outputTokens`
-4. **Correlates** with `kind=2` (or `kind=0`) request data for:
-   - `modelId` → strip `copilot/` prefix
-   - `timestamp` → for hour bucket assignment
-5. **Skips** requests without token fields (incomplete turns)
+   - Uses request index (`k[1]`) to look up `modelId` and `timestamp` from the mapping
+4. **Emits all requests** — including those without token fields (with `incomplete: true`)
+5. **Persists** the index→metadata mapping in cursor state for incremental sync
+   (so new `kind=1` result lines arriving after the offset can still be correlated)
+
+#### Incremental Sync Strategy
+
+The JSONL file is append-only, so byte-offset cursoring works. But new `kind=1`
+result lines reference request indices whose `kind=2` definitions may be before
+the saved offset. The cursor must therefore persist:
+
+```typescript
+interface VscodeCopilotFileCursor {
+  offset: number;                                    // byte offset for next read
+  processedRequestIndices: Set<number>;              // indices already emitted
+  requestMeta: Record<number, {                      // index → metadata mapping
+    modelId: string;
+    timestamp: number;
+  }>;
+}
+```
+
+On incremental read, the parser reads from `offset`, encounters new `kind=1`
+result lines, and joins against the persisted `requestMeta` to produce records.
 
 ### Token Mapping
 
@@ -247,13 +321,10 @@ exact count is not provided.
 
 ### Cursor Type
 
-Byte-offset cursor (same as Claude Code / OpenClaw) since JSONL is append-only:
-
-```typescript
-interface VscodeCopilotCursor extends FileCursorBase {
-  offset: number;  // byte offset into JSONL file
-}
-```
+Byte-offset cursor with persisted request metadata (see Parser Design above).
+Unlike simpler byte-offset cursors (Claude Code / OpenClaw), this cursor must
+also store `requestMeta` and `processedRequestIndices` to support index→metadata
+correlation across incremental reads.
 
 ### Open Questions
 
