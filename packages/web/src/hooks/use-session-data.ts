@@ -5,10 +5,12 @@ import {
   toSessionOverview,
   toWorkingHoursGrid,
   toMessageDailyStats,
+  toProjectBreakdown,
   type SessionRow,
   type SessionOverview,
   type WorkingHoursDay,
   type MessageDailyStat,
+  type ProjectBreakdownItem,
 } from "@/lib/session-helpers";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +24,8 @@ interface UseSessionDataOptions {
   to?: string;
   /** Source filter (optional) */
   source?: string;
+  /** Project filter — project name, or "_unassigned" for no-project sessions */
+  project?: string;
 }
 
 interface UseSessionDataResult {
@@ -29,6 +33,7 @@ interface UseSessionDataResult {
   overview: SessionOverview;
   hoursGrid: WorkingHoursDay[];
   dailyMessages: MessageDailyStat[];
+  projectBreakdown: ProjectBreakdownItem[];
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -41,7 +46,7 @@ interface UseSessionDataResult {
 export function useSessionData(
   options: UseSessionDataOptions = {}
 ): UseSessionDataResult {
-  const { from: fromDate, to: toDate, source } = options;
+  const { from: fromDate, to: toDate, source, project } = options;
   const [records, setRecords] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +60,7 @@ export function useSessionData(
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
       if (source) params.set("source", source);
+      if (project) params.set("project", project);
 
       const qs = params.toString();
       const url = qs ? `/api/sessions?${qs}` : "/api/sessions";
@@ -74,7 +80,7 @@ export function useSessionData(
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, source]);
+    }, [fromDate, toDate, source, project]);
 
   useEffect(() => {
     fetchData();
@@ -83,12 +89,14 @@ export function useSessionData(
   const overview = toSessionOverview(records);
   const hoursGrid = toWorkingHoursGrid(records);
   const dailyMessages = toMessageDailyStats(records);
+  const projectBreakdown = toProjectBreakdown(records);
 
   return {
     records,
     overview,
     hoursGrid,
     dailyMessages,
+    projectBreakdown,
     loading,
     error,
     refetch: fetchData,
