@@ -13,7 +13,7 @@ import {
 import { useUsageData, toHeatmapData } from "@/hooks/use-usage-data";
 import { formatTokens, cn } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
-import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates } from "@/lib/cost-helpers";
+import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates, computeCurrentMonthTokens } from "@/lib/cost-helpers";
 import { compareWeekdayWeekend, computeMoMGrowth, computeStreak } from "@/lib/usage-helpers";
 import { computeBudgetStatus } from "@/lib/budget-helpers";
 import { generateInsights } from "@/lib/insights";
@@ -93,16 +93,21 @@ export default function DashboardPage() {
   );
 
   // Budget status (only meaningful when budget exists + forecast available)
+  const currentMonthTokens = useMemo(
+    () => (yearHalfHourData.data ? computeCurrentMonthTokens(yearHalfHourData.data.records) : 0),
+    [yearHalfHourData.data],
+  );
+
   const budgetStatus = useMemo(() => {
     if (!budget || !costForecast) return null;
     if (budget.budget_usd === null && budget.budget_tokens === null) return null;
     return computeBudgetStatus(
       budget,
       costForecast.currentMonthCost,
-      data?.summary.total_tokens ?? 0,
+      currentMonthTokens,
       costForecast,
     );
-  }, [budget, costForecast, data]);
+  }, [budget, costForecast, currentMonthTokens]);
 
   const dailyCacheRates = useMemo(
     () => (data ? toDailyCacheRates(data.records) : []),

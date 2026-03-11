@@ -167,6 +167,36 @@ export function forecastMonthlyCost(
 }
 
 // ---------------------------------------------------------------------------
+// Current-month token total
+// ---------------------------------------------------------------------------
+
+/**
+ * Sum `total_tokens` for the current month only.
+ *
+ * Mirrors the same month-filtering logic as `forecastMonthlyCost` so that
+ * budget comparisons use a consistent basis (current month) regardless of
+ * the dashboard's active period selector.
+ *
+ * @param rows — UsageRow[] (any granularity)
+ * @param now  — reference date (defaults to current date)
+ */
+export function computeCurrentMonthTokens(
+  rows: UsageRow[],
+  now?: Date,
+): number {
+  const ref = now ?? new Date();
+  const monthPrefix = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
+
+  let total = 0;
+  for (const r of rows) {
+    if (r.hour_start.startsWith(monthPrefix)) {
+      total += r.total_tokens;
+    }
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
 // Cost-per-token comparison
 // ---------------------------------------------------------------------------
 
