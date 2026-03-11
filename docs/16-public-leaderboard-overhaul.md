@@ -7,23 +7,23 @@
 
 | # | Commit | Description | Status |
 |---|--------|-------------|--------|
-| 1 | `docs: add public leaderboard overhaul plan` | This document | |
-| 2 | `feat: add is_public column to users table` | Migration script + `no such column` fallbacks | |
-| 3 | `feat: add is_public to settings API` | GET returns `is_public`, PATCH accepts it | |
-| 4 | `test: add L1 tests for is_public settings` | Settings API unit tests | |
-| 5 | `feat: add is_public toggle to settings page` | Toggle switch in Public Profile section | |
-| 6 | `feat: filter leaderboard by is_public` | API uses `is_public = 1` instead of `slug IS NOT NULL` | |
-| 7 | `test: update leaderboard tests for is_public` | Updated SQL assertions + new test cases | |
-| 8 | `feat: add admin mode to leaderboard API` | `admin=true` param with `resolveAdmin()` guard | |
-| 9 | `test: add L1 tests for admin leaderboard` | Admin param tests (authorized + unauthorized) | |
-| 10 | `refactor: move leaderboard out of dashboard layout` | `(dashboard)/leaderboard/` → `app/leaderboard/` | |
-| 11 | `feat: redesign leaderboard as standalone public page` | New layout matching `/u/[slug]` style | |
-| 12 | `feat: add admin toggle to leaderboard page` | `useAdmin()` hook + "Show All" switch on UI | |
-| 13 | `feat: gate public profile by is_public` | API + server metadata both return 404 when private | |
-| 14 | `test: add L1 tests for public profile is_public gate` | Profile API + metadata unit tests | |
-| 15 | `feat: update proxy to allow public leaderboard page` | `isPublicRoute` includes `/leaderboard` | |
-| 16 | `test: update proxy tests for /leaderboard` | Public route assertions | |
-| 17 | `refactor: change default leaderboard limit to 10` | Public default 10, admin default 50 | |
+| 1 | `docs: add public leaderboard overhaul plan` | This document | done |
+| 2 | `feat: add is_public column to users table` | Migration script + `no such column` fallbacks | done |
+| 3 | `feat: add is_public to settings API` | GET returns `is_public`, PATCH accepts it | done |
+| 4 | `test: add L1 tests for is_public settings` | Settings API unit tests | done |
+| 5 | `feat: add is_public toggle to settings page` | Toggle switch in Public Profile section | done |
+| 6 | `feat: filter leaderboard by is_public` | API uses `is_public = 1` instead of `slug IS NOT NULL` | done |
+| 7 | `test: update leaderboard tests for is_public` | Updated SQL assertions + new test cases | done |
+| 8 | `feat: add admin mode to leaderboard API` | `admin=true` param with `resolveAdmin()` guard | done |
+| 9 | `test: add L1 tests for admin leaderboard` | Admin param tests (authorized + unauthorized) | done |
+| 10 | `refactor: move leaderboard out of dashboard layout` | `(dashboard)/leaderboard/` → `app/leaderboard/` | done |
+| 11 | `feat: redesign leaderboard as standalone public page` | New layout matching `/u/[slug]` style | done |
+| 12 | `feat: add admin toggle to leaderboard page` | `useAdmin()` hook + "Show All" switch on UI | done |
+| 13 | `feat: gate public profile by is_public` | API + server metadata both return 404 when private | done |
+| 14 | `test: add L1 tests for public profile is_public gate` | Profile API + metadata unit tests | done |
+| 15 | `feat: update proxy to allow public leaderboard page` | `isPublicRoute` includes `/leaderboard` | done |
+| 16 | `test: update proxy tests for /leaderboard` | Public route assertions | done |
+| 17 | `refactor: change default leaderboard limit to 10` | Public default 10, admin default 50 | done |
 
 ---
 
