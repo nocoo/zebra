@@ -336,7 +336,7 @@ export function Sidebar() {
                     height={24}
                     className="shrink-0"
                   />
-                  <span className="text-lg font-bold font-handwriting tracking-tighter">
+                  <span className="text-2xl font-bold font-handwriting tracking-tighter">
                     pew
                   </span>
                   <Badge
