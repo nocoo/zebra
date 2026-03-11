@@ -10,10 +10,18 @@ import { getD1Client } from "@/lib/d1";
 // Types
 // ---------------------------------------------------------------------------
 
+/** Shape returned to the client. */
 interface UserSettings {
   nickname: string | null;
   slug: string | null;
   is_public: boolean;
+}
+
+/** Raw D1 row — is_public is stored as INTEGER (0/1). */
+interface UserSettingsRow {
+  nickname: string | null;
+  slug: string | null;
+  is_public: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -29,7 +37,7 @@ export async function GET(request: Request) {
   const client = getD1Client();
 
   try {
-    const row = await client.firstOrNull<{ nickname: string | null; slug: string | null; is_public: number }>(
+    const row = await client.firstOrNull<UserSettingsRow>(
       "SELECT nickname, slug, is_public FROM users WHERE id = ?",
       [authResult.userId],
     );
@@ -42,7 +50,7 @@ export async function GET(request: Request) {
       nickname: row.nickname,
       slug: row.slug,
       is_public: row.is_public === 1,
-    });
+    } satisfies UserSettings);
   } catch (err) {
     // Fallback if nickname/is_public column doesn't exist yet
     const msg = err instanceof Error ? err.message : "";
@@ -166,14 +174,14 @@ export async function PATCH(request: Request) {
     );
 
     // Return updated settings
-    const row = await client.firstOrNull<{ nickname: string | null; slug: string | null; is_public: number }>(
+    const row = await client.firstOrNull<UserSettingsRow>(
       "SELECT nickname, slug, is_public FROM users WHERE id = ?",
       [authResult.userId],
     );
 
     return NextResponse.json(
       row
-        ? { nickname: row.nickname, slug: row.slug, is_public: row.is_public === 1 }
+        ? { nickname: row.nickname, slug: row.slug, is_public: row.is_public === 1 } satisfies UserSettings
         : null,
     );
   } catch (err) {
