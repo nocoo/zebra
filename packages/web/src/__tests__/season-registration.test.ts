@@ -1,0 +1,242 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+
+vi.mock("@/lib/d1", () => ({
+  getD1Client: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-helpers", () => ({
+  resolveUser: vi.fn(),
+}));
+
+vi.mock("@/auth", () => ({
+  shouldUseSecureCookies: vi.fn(() => false),
+}));
+
+import { POST, DELETE } from "@/app/api/seasons/[seasonId]/register/route";
+import * as d1Module from "@/lib/d1";
+
+const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
+  resolveUser: ReturnType<typeof vi.fn>;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function createMockClient() {
+  return {
+    query: vi.fn(),
+    execute: vi.fn(),
+    batch: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function makeRequest(
+  method: string,
+  url = "http://localhost:7030/api/seasons/season-1/register",
+  body?: unknown
+): Request {
+  const init: RequestInit = { method };
+  if (body !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+  return new Request(url, init);
+}
+
+const USER = { userId: "user-1", email: "user@test.com" };
+const regParams = Promise.resolve({ seasonId: "season-1" });
+
+// ---------------------------------------------------------------------------
+// POST /api/seasons/[seasonId]/register
+// ---------------------------------------------------------------------------
+
+describe("POST /api/seasons/[seasonId]/register", () => {
+  let mockClient: ReturnType<typeof createMockClient>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = createMockClient();
+    vi.mocked(d1Module.getD1Client).mockReturnValue(
+      mockClient as unknown as d1Module.D1Client
+    );
+  });
+
+  it("should register team when user is owner and season is upcoming", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    // Season upcoming
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      // User is team owner
+      .mockResolvedValueOnce({ role: "owner" })
+      // No existing registration
+      .mockResolvedValueOnce(null);
+    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.season_id).toBe("season-1");
+    expect(json.team_id).toBe("team-1");
+  });
+
+  it("should register team when season is active", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2020-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce(null);
+    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("should reject when season is ended", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull.mockResolvedValueOnce({
+      id: "season-1",
+      start_date: "2020-01-01",
+      end_date: "2020-12-31",
+    });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("ended");
+  });
+
+  it("should reject when user is not team owner", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "member" });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error).toContain("owners");
+  });
+
+  it("should reject when team is already registered", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce({ id: "existing-reg" });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error).toContain("already registered");
+  });
+
+  it("should reject when season does not exist", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull.mockResolvedValueOnce(null);
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("should reject unauthenticated requests", async () => {
+    resolveUser.mockResolvedValueOnce(null);
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/seasons/[seasonId]/register
+// ---------------------------------------------------------------------------
+
+describe("DELETE /api/seasons/[seasonId]/register", () => {
+  let mockClient: ReturnType<typeof createMockClient>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = createMockClient();
+    vi.mocked(d1Module.getD1Client).mockReturnValue(
+      mockClient as unknown as d1Module.D1Client
+    );
+  });
+
+  it("should withdraw team from upcoming season", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce({ id: "reg-1" });
+    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+
+    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+
+  it("should reject withdrawal from active season", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull.mockResolvedValueOnce({
+      id: "season-1",
+      start_date: "2020-01-01",
+      end_date: "2099-12-31",
+    });
+
+    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("upcoming");
+  });
+
+  it("should reject when user is not team owner", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "member" });
+
+    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("should reject when registration does not exist", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce(null);
+
+    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error).toContain("not registered");
+  });
+});
