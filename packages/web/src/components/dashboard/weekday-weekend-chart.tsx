@@ -154,6 +154,15 @@ export function WeekdayWeekendChart({
               tickFormatter={(v: number) => formatTokens(v)}
               width={50}
             />
+            <YAxis
+              yAxisId="cost"
+              orientation="right"
+              tick={{ fontSize: 11, fill: chartAxis }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v: number) => formatCost(v)}
+              width={50}
+            />
             <Tooltip content={<WdWeTooltip />} cursor={false} />
             <Bar
               yAxisId="tokens"
@@ -163,7 +172,7 @@ export function WeekdayWeekendChart({
               radius={[4, 4, 0, 0]}
             />
             <Bar
-              yAxisId="tokens"
+              yAxisId="cost"
               dataKey="cost"
               name="cost"
               fill={chart.sky}
