@@ -48,11 +48,11 @@ report token counts in the metadata. They correlate with `modelState` values
 | `3` | Abnormal completion (different?) | Missing | 2 |
 | (none) | In-progress / abandoned | No result line | 1 |
 
-**Implementation consequence**: the parser must NOT silently skip these. Options:
-1. Emit records with `inputTokens: 0, outputTokens: 0` and an `estimated: true`
-   or `incomplete: true` flag so the dashboard can surface them
-2. Attempt char/4 estimation from response text as a rough lower bound
-3. At minimum, log a warning so users know some turns are unaccounted for
+**Implementation decision**: skip these requests — do not emit records. The parser
+logs a debug warning with the request index and `modelState` so users can audit
+skipped turns. No `incomplete`/`estimated` flags in the storage layer — the
+schema change cost is not justified for ~19% of requests whose actual token
+cost is unknown.
 
 ---
 
@@ -196,12 +196,15 @@ The ~19% of requests lacking `promptTokens`/`outputTokens` fall into three categ
 These are NOT uniformly "incomplete/non-billable" — several had extensive tool-call
 rounds and elapsed times >10 minutes.
 
-**Strategy**:
-1. **Always emit a record** — never silently skip
-2. Set `inputTokens: 0, outputTokens: 0` with `incomplete: true` flag
-3. **Optional**: if `response[].value` text exists, estimate output as chars/4
-   and set `estimated: true`
-4. Log a warning so the user knows some turns lack exact counts
+**Strategy**: **Skip** — requests without exact `promptTokens`/`outputTokens`
+are not emitted as records. No `incomplete`/`estimated` flags in the storage
+layer. The parser logs a debug-level warning with the request index and
+`modelState` so users can audit skipped turns if needed.
+
+This means ~19% of requests in the sample set are unaccounted for. This is
+an acceptable trade-off: adding metadata flags would require schema changes
+across core types, queue, D1, worker, and frontend for a minority of
+requests whose actual token cost is unknown anyway.
 
 ### char/4 Estimation Accuracy (measured against real data)
 
@@ -279,22 +282,13 @@ layers of the stack:
 | **Core types** | `packages/core/src/types.ts` | Add `"vscode-copilot"` to `Source` union; add `VscodeCopilotCursor` to `FileCursor` union; extend `CursorState` if needed |
 | **Parser** | `packages/cli/src/parsers/vscode-copilot.ts` | New parser module (CRDT JSONL → `UsageRecord[]`) |
 | **CLI wiring** | `packages/cli/src/parsers/index.ts` | Register new parser in discovery/dispatch |
-| **Queue schema** | `packages/core/src/types.ts` (`QueueRecord`) | Currently no `incomplete`/`estimated` flags — needs new optional fields or a separate handling strategy for partial records |
+| **Queue schema** | `packages/core/src/types.ts` (`QueueRecord`) | No change — requests without exact tokens are skipped, not emitted with flags |
 | **Worker ingest** | `packages/worker/` | D1 `INSERT` must accept `"vscode-copilot"` as a valid source value |
 | **Web dashboard** | `packages/web/` | Source filter UI, color/icon mapping, any `Source`-exhaustive switches |
 | **Notifier** | `packages/cli/src/` | File-watch setup for `workspaceStorage/*/chatSessions/` directories |
 
-The `incomplete`/`estimated` metadata flags referenced in the Fallback Strategy
-section do not exist in the current `UsageRecord` or `QueueRecord` types. Options:
-
-1. **Add optional flags** to `QueueRecord` (`incomplete?: boolean`, `estimated?: boolean`)
-   — requires D1 schema migration and worker/web changes
-2. **Emit zero-token records** without flags — simpler, but dashboard cannot
-   distinguish "actually zero usage" from "tokens unknown"
-3. **Skip emission** for incomplete turns and log a warning — loses data but
-   avoids schema changes
-
-The choice affects storage, API, and frontend — not just the parser.
+**Decision**: no `incomplete`/`estimated` flags in the storage layer. Requests
+without exact token fields are skipped by the parser (see Fallback Strategy above).
 
 ### Parser Design
 
@@ -308,7 +302,7 @@ must handle CRDT-style operation logs with an index-based correlation challenge:
    - `v.metadata.promptTokens` → `inputTokens`
    - `v.metadata.outputTokens` → `outputTokens`
    - Uses request index (`k[1]`) to look up `modelId` and `timestamp` from the mapping
-4. **Emits all requests** — including those without token fields (with `incomplete: true`)
+4. **Skips** requests without exact token fields (logs debug warning with index + `modelState`)
 5. **Persists** the index→metadata mapping in cursor state for incremental sync
    (so new `kind=1` result lines arriving after the offset can still be correlated)
 
