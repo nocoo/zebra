@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Trophy, Medal, Award, Users } from "lucide-react";
+import { Zap, Trophy, Medal, Award, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTokens } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -148,7 +148,7 @@ export default function LeaderboardPage() {
     teamId: selectedTeam,
   });
 
-  // Fetch user's teams for the filter dropdown
+  // Fetch user's teams for the filter dropdown (only works if logged in)
   const fetchTeams = useCallback(async () => {
     try {
       const res = await fetch("/api/teams");
@@ -157,7 +157,7 @@ export default function LeaderboardPage() {
         setTeams(json.teams ?? []);
       }
     } catch {
-      // Silently fail — teams are optional
+      // Silently fail — teams are optional, viewer may not be logged in
     }
   }, []);
 
@@ -166,92 +166,118 @@ export default function LeaderboardPage() {
   }, [fetchTeams]);
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold font-display">Leaderboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Who&apos;s burning the most tokens?
-        </p>
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Compact top bar — matches profile-view.tsx */}
+      <header className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="mx-auto max-w-5xl flex items-center justify-between px-4 md:px-6 h-14">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-foreground hover:text-primary transition-colors"
+          >
+            <Zap className="h-5 w-5 text-primary" strokeWidth={1.5} />
+            <span className="font-bold tracking-tighter">pew</span>
+          </Link>
+        </div>
+      </header>
 
-      {/* Controls row */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Period tabs */}
-        <div className="flex gap-1 rounded-lg bg-secondary p-1 flex-1">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={cn(
-                "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                period === p.value
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
+      <main className="mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold font-display">Leaderboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Who&apos;s burning the most tokens?
+          </p>
         </div>
 
-        {/* Team filter */}
-        {teams.length > 0 && (
-          <div className="flex gap-1 rounded-lg bg-secondary p-1 shrink-0">
-            <button
-              onClick={() => setSelectedTeam(null)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                !selectedTeam
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Global
-            </button>
-            {teams.map((team) => (
+        {/* Controls row */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Period tabs */}
+          <div className="flex gap-1 rounded-lg bg-secondary p-1 flex-1">
+            {PERIODS.map((p) => (
               <button
-                key={team.id}
-                onClick={() => setSelectedTeam(team.id)}
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  selectedTeam === team.id
+                  "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  period === p.value
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
-                {team.name}
+                {p.label}
               </button>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div className="rounded-[var(--radius-card)] bg-destructive/10 p-4 text-sm text-destructive">
-          Failed to load leaderboard: {error}
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && <LeaderboardSkeleton />}
-
-      {/* Content */}
-      {!loading && data && (
-        <div className="space-y-2">
-          {data.entries.length === 0 ? (
-            <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
-              No usage data for this period yet.
+          {/* Team filter */}
+          {teams.length > 0 && (
+            <div className="flex gap-1 rounded-lg bg-secondary p-1 shrink-0">
+              <button
+                onClick={() => setSelectedTeam(null)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  !selectedTeam
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Global
+              </button>
+              {teams.map((team) => (
+                <button
+                  key={team.id}
+                  onClick={() => setSelectedTeam(team.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    selectedTeam === team.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  {team.name}
+                </button>
+              ))}
             </div>
-          ) : (
-            data.entries.map((entry) => (
-              <LeaderboardRow key={entry.rank} entry={entry} />
-            ))
           )}
         </div>
-      )}
+
+        {/* Error */}
+        {error && (
+          <div className="rounded-[var(--radius-card)] bg-destructive/10 p-4 text-sm text-destructive">
+            Failed to load leaderboard: {error}
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && <LeaderboardSkeleton />}
+
+        {/* Content */}
+        {!loading && data && (
+          <div className="space-y-2">
+            {data.entries.length === 0 ? (
+              <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
+                No usage data for this period yet.
+              </div>
+            ) : (
+              data.entries.map((entry) => (
+                <LeaderboardRow key={entry.rank} entry={entry} />
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="pt-4 pb-8 text-center">
+          <p className="text-xs text-muted-foreground">
+            Powered by{" "}
+            <Link href="/" className="text-primary hover:underline">
+              pew
+            </Link>{" "}
+            — AI token usage tracker
+          </p>
+        </footer>
+      </main>
     </div>
   );
 }
