@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { formatDuration } from "@/lib/date-helpers";
 import {
   useProjects,
   type Project,
@@ -32,10 +33,6 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source;
-}
-
-function truncateRef(ref: string, len = 12): string {
-  return ref.length > len ? ref.slice(0, len) + "…" : ref;
 }
 
 function relativeTime(iso: string | null): string {
@@ -222,13 +219,29 @@ function ProjectCard({
               {project.name}
             </button>
           )}
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
             <span>
               {project.session_count}{" "}
               {project.session_count === 1 ? "session" : "sessions"}
             </span>
+            <span className="hidden sm:inline">·</span>
+            <span className="hidden sm:inline">
+              {project.total_messages.toLocaleString()} msgs
+            </span>
+            <span className="hidden md:inline">·</span>
+            <span className="hidden md:inline">
+              {formatDuration(project.total_duration)}
+            </span>
             <span>·</span>
             <span>{relativeTime(project.last_active)}</span>
+            {project.models.length > 0 && (
+              <>
+                <span className="hidden lg:inline">·</span>
+                <span className="hidden lg:inline truncate max-w-xs">
+                  {project.models.join(", ")}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -273,8 +286,8 @@ function ProjectCard({
               <span className="text-muted-foreground">
                 {sourceLabel(alias.source)}:
               </span>
-              <code className="font-mono text-foreground">
-                {truncateRef(alias.project_ref)}
+              <code className="font-mono text-foreground break-all">
+                {alias.project_ref}
               </code>
               <button
                 onClick={() => onRemoveAlias(alias)}
@@ -294,6 +307,13 @@ function ProjectCard({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Responsive table header/cell class helpers
+// ---------------------------------------------------------------------------
+
+const TH_BASE =
+  "px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70";
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -339,7 +359,7 @@ export default function ProjectsPage() {
     });
     if (!result) {
       setActionError(
-        `Failed to assign ${sourceLabel(ref.source)}:${truncateRef(ref.project_ref)}`,
+        `Failed to assign ${sourceLabel(ref.source)}:${ref.project_ref}`,
       );
     }
   };
@@ -365,7 +385,7 @@ export default function ProjectsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl space-y-8">
+      <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold font-display">Projects</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -389,7 +409,7 @@ export default function ProjectsPage() {
   const hasNoData = projects.length === 0 && unassigned.length === 0;
 
   return (
-    <div className="max-w-5xl space-y-8">
+    <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold font-display">Projects</h1>
@@ -457,7 +477,7 @@ export default function ProjectsPage() {
                     Will assign{" "}
                     <code className="font-mono">
                       {sourceLabel(createForAlias.source)}:
-                      {truncateRef(createForAlias.project_ref)}
+                      {createForAlias.project_ref}
                     </code>{" "}
                     to this project.
                   </p>
@@ -501,23 +521,32 @@ export default function ProjectsPage() {
               </p>
             )}
 
-            <div className="rounded-xl bg-secondary overflow-hidden">
+            <div className="rounded-xl bg-secondary p-1 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50">
-                    <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <th className={cn(TH_BASE, "text-left")}>
                       Source
                     </th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <th className={cn(TH_BASE, "text-left")}>
                       Project Ref
                     </th>
-                    <th className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <th className={cn(TH_BASE, "text-right")}>
                       Sessions
                     </th>
-                    <th className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <th className={cn(TH_BASE, "text-right hidden sm:table-cell")}>
+                      Messages
+                    </th>
+                    <th className={cn(TH_BASE, "text-right hidden md:table-cell")}>
+                      Duration
+                    </th>
+                    <th className={cn(TH_BASE, "text-left hidden lg:table-cell")}>
+                      Models
+                    </th>
+                    <th className={cn(TH_BASE, "text-right")}>
                       Last Active
                     </th>
-                    <th className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <th className={cn(TH_BASE, "text-right")}>
                       Action
                     </th>
                   </tr>
@@ -530,21 +559,34 @@ export default function ProjectsPage() {
                         key={key}
                         className="border-b border-border/30 last:border-0"
                       >
-                        <td className="px-4 py-2.5 text-foreground">
+                        <td className="px-4 py-2.5 text-foreground whitespace-nowrap">
                           {sourceLabel(ref.source)}
                         </td>
                         <td className="px-4 py-2.5">
-                          <code className="font-mono text-xs text-muted-foreground">
-                            {truncateRef(ref.project_ref)}
+                          <code className="font-mono text-xs text-muted-foreground break-all">
+                            {ref.project_ref}
                           </code>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums whitespace-nowrap">
                           {ref.session_count}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">
+                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums whitespace-nowrap hidden sm:table-cell">
+                          {ref.total_messages.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                          {formatDuration(ref.total_duration)}
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground hidden lg:table-cell">
+                          <span className="text-xs truncate block max-w-[200px]">
+                            {ref.models.length > 0
+                              ? ref.models.join(", ")
+                              : "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
                           {relativeTime(ref.last_active)}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">
                           <div className="relative inline-block">
                             <button
                               onClick={() =>
