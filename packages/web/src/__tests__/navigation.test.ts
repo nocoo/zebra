@@ -50,7 +50,7 @@ describe("sidebar navigation", () => {
       expect(allHrefs).toContain("/leaderboard");
       expect(allHrefs).toContain("/details");
       expect(allHrefs).toContain("/sessions");
-      expect(allHrefs).toContain("/apps");
+      expect(allHrefs).toContain("/agents");
       expect(allHrefs).toContain("/models");
       expect(allHrefs).toContain("/teams");
       expect(allHrefs).toContain("/settings");
@@ -112,7 +112,7 @@ describe("route labels", () => {
       settings: "General",
       teams: "Teams",
       details: "Daily Usage",
-      apps: "By App",
+      agents: "By Agent",
       models: "By Model",
       leaderboard: "Leaderboard",
     });

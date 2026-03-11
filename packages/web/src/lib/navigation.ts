@@ -41,7 +41,7 @@ export const BASE_NAV_GROUPS: NavGroupDef[] = [
     items: [
       { href: "/details", label: "Daily Usage", icon: "CalendarDays" },
       { href: "/sessions", label: "Sessions", icon: "MessagesSquare" },
-      { href: "/apps", label: "By App", icon: "AppWindow" },
+      { href: "/agents", label: "By Agent", icon: "AppWindow" },
       { href: "/models", label: "By Model", icon: "Cpu" },
     ],
   },
@@ -77,7 +77,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   settings: "General",
   teams: "Teams",
   details: "Daily Usage",
-  apps: "By App",
+  agents: "By Agent",
   models: "By Model",
   leaderboard: "Leaderboard",
 };

@@ -165,7 +165,7 @@ export default function AppsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display">By App</h1>
+          <h1 className="text-2xl font-bold font-display">By Agent</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Token usage grouped by AI coding tool ({subtitle}).
           </p>

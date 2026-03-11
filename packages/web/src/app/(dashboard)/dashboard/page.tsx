@@ -173,6 +173,9 @@ export default function DashboardPage() {
       {/* Content */}
       {!loading && data && (
         <>
+          {/* Achievements — always visible at top */}
+          <AchievementShelf achievements={achievements} />
+
           {/* Budget progress + alert (above stat grid when budget is active) */}
           {budgetStatus && <BudgetProgress status={budgetStatus} />}
           {budgetStatus && <BudgetAlert status={budgetStatus} />}
@@ -253,9 +256,6 @@ export default function DashboardPage() {
             )}
           </StatGrid>
 
-          {/* Achievements */}
-          <AchievementShelf achievements={achievements} />
-
           {/* Charts — left: trends + cache, right: donut + io ratio */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 md:gap-4">
             {/* Left column */}
@@ -288,16 +288,15 @@ export default function DashboardPage() {
               <CacheRateChart data={dailyCacheRates} />
             </div>
 
-            {/* Right column — Source donut sits at top, IoRatio aligns with CacheRateChart */}
+            {/* Right column — top spacer matches the tab toggle height so charts align */}
             <div className="flex flex-col gap-3 md:gap-4">
+              {/* Invisible spacer matching the tab toggle row height (p-1 + text + mb-3) */}
+              <div className="hidden lg:block h-[28px] shrink-0" />
               <SourceDonutChart data={sources} />
-              {/* Extra top margin on lg to offset the tab toggle height so IoRatio aligns with CacheRateChart */}
-              <div className="lg:mt-[28px]">
-                <IoRatioChart
-                  inputTokens={data.summary.input_tokens}
-                  outputTokens={data.summary.output_tokens}
-                />
-              </div>
+              <IoRatioChart
+                inputTokens={data.summary.input_tokens}
+                outputTokens={data.summary.output_tokens}
+              />
             </div>
           </div>
 

@@ -91,7 +91,7 @@ export function SourceDonutChart({ data, className }: SourceDonutChartProps) {
         className
       )}
     >
-      <p className="mb-3 text-xs md:text-sm text-muted-foreground">By Source</p>
+      <p className="mb-3 text-xs md:text-sm text-muted-foreground">By Agent</p>
 
       <div className="flex flex-col items-center">
         <div className="h-[180px] w-[180px]">
