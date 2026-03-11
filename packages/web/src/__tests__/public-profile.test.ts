@@ -99,6 +99,7 @@ describe("GET /api/users/[slug]", () => {
         name: "Test",
         image: null,
         slug: "test",
+        is_public: 1,
         created_at: "2026-01-01",
       });
       const [req, ctx] = makeRequest("test", { days: "0" });
@@ -115,6 +116,7 @@ describe("GET /api/users/[slug]", () => {
         name: "Test",
         image: null,
         slug: "test",
+        is_public: 1,
         created_at: "2026-01-01",
       });
       const [req, ctx] = makeRequest("test", { days: "500" });
@@ -129,6 +131,7 @@ describe("GET /api/users/[slug]", () => {
         name: "Test",
         image: null,
         slug: "test",
+        is_public: 1,
         created_at: "2026-01-01",
       });
       const [req, ctx] = makeRequest("test", { source: "bad-source" });
@@ -146,6 +149,7 @@ describe("GET /api/users/[slug]", () => {
       name: "Test User",
       image: "https://example.com/avatar.jpg",
       slug: "testuser",
+      is_public: 1,
       created_at: "2026-01-15T10:00:00Z",
     };
 
@@ -224,6 +228,7 @@ describe("GET /api/users/[slug]", () => {
         name: "Test",
         image: null,
         slug: "test",
+        is_public: 1,
         created_at: "2026-01-01",
       });
       mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
