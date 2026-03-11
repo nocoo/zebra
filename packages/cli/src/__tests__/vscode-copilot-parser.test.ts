@@ -6,6 +6,7 @@ import {
   parseVscodeCopilotFile,
   type VscodeCopilotParseOpts,
   type VscodeCopilotFileResult,
+  type SkipInfo,
 } from "../parsers/vscode-copilot.js";
 
 // ---------------------------------------------------------------------------
@@ -579,5 +580,102 @@ describe("parseVscodeCopilotFile", () => {
     expect(result.deltas).toHaveLength(2);
     expect(result.deltas[0].model).toBe("claude-opus-4.6");
     expect(result.deltas[1].model).toBe("claude-opus-4.6-1m");
+  });
+
+  // -----------------------------------------------------------------------
+  // onSkip callback
+  // -----------------------------------------------------------------------
+
+  it("should call onSkip for zero-token results with modelState", async () => {
+    const filePath = join(tempDir, "session.jsonl");
+    const lines = [
+      snapshotLine(),
+      appendRequestLine(makeRequest("copilot/claude-opus-4.6", 1772780000000)),
+      setResultLine(0, resultWithTokens(0, 0, { modelState: 2 })),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const skips: SkipInfo[] = [];
+    await parseVscodeCopilotFile({
+      filePath,
+      startOffset: 0,
+      requestMeta: {},
+      processedRequestIndices: [],
+      onSkip: (info) => skips.push(info),
+    });
+
+    expect(skips).toHaveLength(1);
+    expect(skips[0].index).toBe(0);
+    expect(skips[0].reason).toContain("zero tokens");
+    expect(skips[0].modelState).toBe(2);
+  });
+
+  it("should call onSkip for missing metadata object in result", async () => {
+    const filePath = join(tempDir, "session.jsonl");
+    const lines = [
+      snapshotLine(),
+      appendRequestLine(makeRequest("copilot/claude-opus-4.6", 1772780000000)),
+      setResultLine(0, { timings: { totalElapsed: 100 } }), // no metadata field
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const skips: SkipInfo[] = [];
+    await parseVscodeCopilotFile({
+      filePath,
+      startOffset: 0,
+      requestMeta: {},
+      processedRequestIndices: [],
+      onSkip: (info) => skips.push(info),
+    });
+
+    expect(skips).toHaveLength(1);
+    expect(skips[0].index).toBe(0);
+    expect(skips[0].reason).toContain("missing metadata");
+  });
+
+  it("should call onSkip for deferred result with no metadata", async () => {
+    const filePath = join(tempDir, "session.jsonl");
+    // Result references index 0 but no kind=0/2 ever defined it
+    const lines = [
+      snapshotLine(),
+      setResultLine(0, resultWithTokens(5000, 300)),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const skips: SkipInfo[] = [];
+    await parseVscodeCopilotFile({
+      filePath,
+      startOffset: 0,
+      requestMeta: {},
+      processedRequestIndices: [],
+      onSkip: (info) => skips.push(info),
+    });
+
+    expect(skips).toHaveLength(1);
+    expect(skips[0].index).toBe(0);
+    expect(skips[0].reason).toContain("no request metadata");
+    expect(skips[0].reason).toContain("deferred");
+  });
+
+  it("should not call onSkip for successfully parsed requests", async () => {
+    const filePath = join(tempDir, "session.jsonl");
+    const lines = [
+      snapshotLine(),
+      appendRequestLine(makeRequest("copilot/claude-opus-4.6", 1772780000000)),
+      setResultLine(0, resultWithTokens(10000, 500)),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const skips: SkipInfo[] = [];
+    const result = await parseVscodeCopilotFile({
+      filePath,
+      startOffset: 0,
+      requestMeta: {},
+      processedRequestIndices: [],
+      onSkip: (info) => skips.push(info),
+    });
+
+    expect(result.deltas).toHaveLength(1);
+    expect(skips).toHaveLength(0);
   });
 });

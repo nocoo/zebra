@@ -9,7 +9,7 @@
 
 import type { VscodeCopilotCursor } from "@pew/core";
 import { discoverVscodeCopilotFiles } from "../../discovery/sources.js";
-import { parseVscodeCopilotFile } from "../../parsers/vscode-copilot.js";
+import { parseVscodeCopilotFile, type SkipInfo } from "../../parsers/vscode-copilot.js";
 import { fileUnchanged } from "../../utils/file-changed.js";
 import type {
   FileTokenDriver,
@@ -57,11 +57,16 @@ export const vscodeCopilotTokenDriver: FileTokenDriver<VscodeCopilotCursor> = {
 
   async parse(filePath: string, resume: ResumeState): Promise<VscodeCopilotParseResult> {
     const r = resume as VscodeCopilotResumeState;
+    const onSkip = (info: SkipInfo) => {
+      const ms = info.modelState != null ? ` modelState=${info.modelState}` : "";
+      console.debug(`[vscode-copilot] skip request #${info.index}: ${info.reason}${ms} (${filePath})`);
+    };
     const result = await parseVscodeCopilotFile({
       filePath,
       startOffset: r.startOffset,
       requestMeta: r.requestMeta,
       processedRequestIndices: r.processedRequestIndices,
+      onSkip,
     });
     return {
       deltas: result.deltas,

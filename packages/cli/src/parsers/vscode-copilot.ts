@@ -36,6 +36,13 @@ export interface RequestMeta {
   timestamp: number;
 }
 
+/** Info passed to onSkip callback when a request is skipped */
+export interface SkipInfo {
+  index: number;
+  reason: string;
+  modelState?: number;
+}
+
 /** Options for parsing a VSCode Copilot JSONL file */
 export interface VscodeCopilotParseOpts {
   filePath: string;
@@ -44,6 +51,8 @@ export interface VscodeCopilotParseOpts {
   requestMeta: Record<number, RequestMeta>;
   /** Indices already emitted as records (skip on re-encounter) */
   processedRequestIndices: number[];
+  /** Optional callback invoked for each skipped request (debug auditing) */
+  onSkip?: (info: SkipInfo) => void;
 }
 
 /** Result of parsing a single VSCode Copilot JSONL file */
@@ -102,7 +111,7 @@ function extractRequestMeta(req: Record<string, unknown>): RequestMeta | null {
 export async function parseVscodeCopilotFile(
   opts: VscodeCopilotParseOpts,
 ): Promise<VscodeCopilotFileResult> {
-  const { filePath, startOffset, requestMeta: inputMeta, processedRequestIndices: inputProcessed } = opts;
+  const { filePath, startOffset, requestMeta: inputMeta, processedRequestIndices: inputProcessed, onSkip } = opts;
   const deltas: ParsedDelta[] = [];
 
   // Clone mutable state from inputs
@@ -228,13 +237,20 @@ export async function parseVscodeCopilotFile(
 
         // Extract tokens from result.metadata
         const metadata = v.metadata as Record<string, unknown> | undefined;
-        if (!metadata || typeof metadata !== "object") continue;
+        if (!metadata || typeof metadata !== "object") {
+          onSkip?.({ index, reason: "missing metadata object in result" });
+          continue;
+        }
 
         const promptTokens = toNonNegInt(metadata.promptTokens);
         const outputTokens = toNonNegInt(metadata.outputTokens);
 
         // Skip zero-token results
-        if (promptTokens === 0 && outputTokens === 0) continue;
+        if (promptTokens === 0 && outputTokens === 0) {
+          const modelState = typeof metadata.modelState === "number" ? metadata.modelState : undefined;
+          onSkip?.({ index, reason: "zero tokens (promptTokens=0, outputTokens=0)", modelState });
+          continue;
+        }
 
         deltas.push({
           source: "vscode-copilot" as Source,
@@ -262,18 +278,26 @@ export async function parseVscodeCopilotFile(
     if (!meta) {
       // Still no metadata — skip this result entirely
       processedSet.add(index);
+      onSkip?.({ index, reason: "no request metadata found (deferred)" });
       continue;
     }
 
     processedSet.add(index);
 
     const metadata = v.metadata as Record<string, unknown> | undefined;
-    if (!metadata || typeof metadata !== "object") continue;
+    if (!metadata || typeof metadata !== "object") {
+      onSkip?.({ index, reason: "missing metadata object in result (deferred)" });
+      continue;
+    }
 
     const promptTokens = toNonNegInt(metadata.promptTokens);
     const outputTokens = toNonNegInt(metadata.outputTokens);
 
-    if (promptTokens === 0 && outputTokens === 0) continue;
+    if (promptTokens === 0 && outputTokens === 0) {
+      const modelState = typeof metadata.modelState === "number" ? metadata.modelState : undefined;
+      onSkip?.({ index, reason: "zero tokens (deferred)", modelState });
+      continue;
+    }
 
     deltas.push({
       source: "vscode-copilot" as Source,
