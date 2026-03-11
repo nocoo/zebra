@@ -62,10 +62,20 @@ delivery into two phases to keep each one shippable and testable:
 - Dashboard page to manage projects and assign aliases
 - Label propagation in Sessions page (show project name instead of raw ref)
 
-**Phase 2 — Usage Breakdown Propagation**:
+**Phase 2 — Session-Based Project Stats on Sessions Page**:
 
-- Update usage breakdown to group by project name
-- Aggregate stats across aliased refs in usage charts
+- Project breakdown chart on Sessions page (horizontal bar chart showing
+  session counts per project, with hours and messages in tooltip)
+- Project filter dropdown on Sessions page (filter all charts by project)
+- Helper function `toProjectBreakdown()` to aggregate session data by project
+- `?project=` query parameter on `/api/sessions` for server-side filtering
+
+> **Why session-based?** `usage_records` has no `project_ref` column — its key
+> is `(user_id, source, model, hour_start)`. Token data is pre-aggregated by
+> time/source/model with no project dimension. Per-project token breakdowns
+> would require a schema migration to add `project_ref` to `usage_records`.
+> Session-based stats (session counts, durations, message counts) are available
+> directly from `session_records` which already has `project_ref`.
 
 **Out of scope (future work)**: Color coding, CSV export with project names,
 auto-suggest grouping.
@@ -324,13 +334,79 @@ WHERE sr.user_id = ?
 ORDER BY sr.last_message_at DESC
 ```
 
-### Phase 2: Usage Breakdown
+### Phase 2: Session-Based Project Stats
 
-When showing usage stats grouped by project:
+Since `usage_records` has no `project_ref` column (its key is
+`(user_id, source, model, hour_start)`), per-project token breakdowns are not
+possible with the current schema. Instead, Phase 2 uses **session-based stats**
+from `session_records`, which already carries `project_name` via the LEFT JOIN
+added in Phase 1.
 
-- Sessions with aliased refs → grouped under their project name
-- Sessions with unaliased refs → grouped under truncated `project_ref`
-- Sessions with null refs → grouped under "Unknown Project"
+#### Project Breakdown Chart
+
+A horizontal bar chart (`ProjectBreakdownChart` component) showing session
+activity per project:
+
+- **Primary metric**: Session count (bar length)
+- **Tooltip**: Sessions, hours, and messages for each project
+- Top 10 projects by session count
+- Sessions with no project mapping are grouped as "Unassigned"
+
+Uses `toProjectBreakdown()` helper in `session-helpers.ts` which aggregates
+`SessionRow[]` by `project_name` into `ProjectBreakdownItem[]`:
+
+```typescript
+type ProjectBreakdownItem = {
+  projectName: string;   // project name or "Unassigned"
+  sessions: number;
+  totalHours: number;
+  totalMessages: number;
+};
+```
+
+Sorted by session count descending, then total hours descending.
+
+#### Project Filter
+
+A `<select>` dropdown on the Sessions page that filters all charts by project:
+
+- "All Projects" (default) — shows all sessions
+- Named projects — filters to sessions matching that project
+- "Unassigned" — filters to sessions with no project mapping
+
+The filter works via the `?project=` query parameter on `/api/sessions`:
+- `?project=my-project` — filters by project name
+- `?project=_unassigned` — filters to sessions with `project_name IS NULL`
+
+When a project filter is active, the breakdown chart is hidden (redundant).
+
+#### `useSessionData` Hook Changes
+
+The hook accepts an optional `project` option and returns `projectBreakdown`:
+
+```typescript
+interface UseSessionDataOptions {
+  from?: string;
+  to?: string;
+  source?: string;
+  project?: string;  // NEW — project name or "_unassigned"
+}
+
+interface UseSessionDataResult {
+  records: SessionRow[];
+  overview: SessionOverview;
+  hoursGrid: WorkingHoursDay[];
+  dailyMessages: MessageDailyStat[];
+  projectBreakdown: ProjectBreakdownItem[];  // NEW
+  loading: boolean;
+  error: string | null;
+  refetch: () => void;
+}
+```
+
+The Sessions page uses two hook instances: one unfiltered (for the breakdown
+chart and dropdown options) and one filtered (for the stat cards and charts
+when a project is selected).
 
 ---
 
@@ -411,9 +487,12 @@ A table of `(source, project_ref)` pairs not yet assigned to any project:
 | `packages/web/src/app/api/projects/route.ts` | Create | 1 | GET + POST (collection) |
 | `packages/web/src/app/api/projects/[id]/route.ts` | Create | 1 | PATCH + DELETE (single project) |
 | `packages/web/src/app/(dashboard)/projects/page.tsx` | Create | 1 | Projects management page |
-| `packages/web/src/hooks/use-projects.ts` | Create | 1 | SWR hook for project data |
-| Sessions page (query + UI) | Edit | 1 | JOIN project_aliases for project name display |
-| Usage breakdown (query + UI) | Edit | 2 | Group by project name in usage charts |
+| `packages/web/src/hooks/use-projects.ts` | Create | 1 | Hook for project data with CRUD mutations |
+| `packages/web/src/app/api/sessions/route.ts` | Edit | 1 | JOIN project_aliases for project_name + `?project=` filter |
+| `packages/web/src/lib/session-helpers.ts` | Edit | 2 | Add `toProjectBreakdown()` + `ProjectBreakdownItem` type |
+| `packages/web/src/hooks/use-session-data.ts` | Edit | 2 | Add `project` option + `projectBreakdown` return value |
+| `packages/web/src/components/dashboard/project-breakdown-chart.tsx` | Create | 2 | Horizontal bar chart for project session stats |
+| `packages/web/src/app/(dashboard)/sessions/page.tsx` | Edit | 2 | Add project filter dropdown + ProjectBreakdownChart |
 
 ---
 
@@ -432,7 +511,12 @@ A table of `(source, project_ref)` pairs not yet assigned to any project:
 
 ### Phase 2
 
-9. **Usage breakdown propagation** — Group usage stats by project name
+9. **Session helpers** — Add `toProjectBreakdown()` aggregation function + tests
+10. **Sessions API** — Add `?project=` filter support + tests
+11. **Hook** — Add `project` option + `projectBreakdown` to `useSessionData`
+12. **Chart** — Create `ProjectBreakdownChart` component
+13. **Sessions page** — Add project filter dropdown + breakdown chart
+14. **Spec** — Update this document for Phase 2
 
 ---
 
