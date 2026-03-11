@@ -157,6 +157,8 @@ export interface QueueRecord {
   model: string;
   /** ISO 8601 half-hour boundary (e.g. "2026-03-07T10:30:00.000Z") */
   hour_start: string;
+  /** Stable device identifier (UUID, generated once per CLI install) */
+  device_id: string;
   input_tokens: number;
   cached_input_tokens: number;
   output_tokens: number;
@@ -266,6 +268,8 @@ export interface SessionCursorState {
 export interface PewConfig {
   /** Auth token obtained via `pew login` */
   token?: string;
+  /** Stable device identifier (UUID, generated once per CLI install) */
+  deviceId?: string;
 }
 
 // ---------------------------------------------------------------------------

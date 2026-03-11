@@ -20,6 +20,8 @@ import type { SyncContext, FileFingerprint } from "../drivers/types.js";
 export interface SyncOptions {
   /** Directory for persisting state (cursors, queue) */
   stateDir: string;
+  /** Stable device identifier (from ConfigManager.ensureDeviceId()) */
+  deviceId: string;
   /** Override: Claude data directory (~/.claude) */
   claudeDir?: string;
   /** Override: Codex CLI sessions directory (~/.codex/sessions) */
@@ -319,6 +321,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       source: bucket.source,
       model: bucket.model,
       hour_start: bucket.hourStart,
+      device_id: opts.deviceId,
       input_tokens: bucket.tokens.inputTokens,
       cached_input_tokens: bucket.tokens.cachedInputTokens,
       output_tokens: bucket.tokens.outputTokens,

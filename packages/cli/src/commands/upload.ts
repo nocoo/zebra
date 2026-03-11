@@ -56,7 +56,7 @@ export function aggregateRecords(records: QueueRecord[]): QueueRecord[] {
   const map = new Map<string, QueueRecord>();
 
   for (const r of records) {
-    const key = `${r.source}|${r.model}|${r.hour_start}`;
+    const key = `${r.source}|${r.model}|${r.hour_start}|${r.device_id}`;
     const existing = map.get(key);
     if (existing) {
       existing.input_tokens += r.input_tokens;

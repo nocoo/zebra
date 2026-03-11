@@ -15,6 +15,7 @@ import { executeInit } from "./commands/init.js";
 import { executeUninstall } from "./commands/uninstall.js";
 import { resolveNotifierPaths } from "./notifier/paths.js";
 import { statusAll } from "./notifier/registry.js";
+import { ConfigManager } from "./config/manager.js";
 
 // ---------------------------------------------------------------------------
 // Dev mode detection (otter pattern)
@@ -72,8 +73,13 @@ const syncCommand = defineCommand({
       // bun:sqlite not available — SQLite sync will be skipped
     }
 
+    // Ensure a stable device ID exists for multi-device dedup
+    const configManager = new ConfigManager(paths.stateDir, args.dev);
+    const deviceId = await configManager.ensureDeviceId();
+
     const result = await executeSync({
       stateDir: paths.stateDir,
+      deviceId,
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
@@ -353,10 +359,15 @@ const notifyCommand = defineCommand({
       // bun:sqlite not available — SQLite sync will be skipped
     }
 
+    // Ensure a stable device ID exists for multi-device dedup
+    const notifyConfigManager = new ConfigManager(paths.stateDir);
+    const notifyDeviceId = await notifyConfigManager.ensureDeviceId();
+
     const result = await executeNotify({
       source: args.source,
       fileHint: args.file ?? null,
       stateDir: paths.stateDir,
+      deviceId: notifyDeviceId,
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,

@@ -98,6 +98,8 @@ export interface IngestRecord {
   source: string;
   model: string;
   hour_start: string;
+  /** Stable device identifier (optional for backward compat — old CLIs omit it) */
+  device_id?: string;
   input_tokens: number;
   cached_input_tokens: number;
   output_tokens: number;
@@ -170,6 +172,11 @@ export function validateIngestRecord(
   }
   if (!isValidISODate(rec.hour_start)) {
     return { valid: false, error: `record[${index}]: invalid hour_start format (ISO 8601 required)` };
+  }
+
+  // Optional device_id (backward compat: old CLIs don't send it)
+  if (rec.device_id !== undefined && !isNonEmptyString(rec.device_id)) {
+    return { valid: false, error: `record[${index}]: device_id must be a non-empty string if provided` };
   }
 
   const tokenFields = [

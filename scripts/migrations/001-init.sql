@@ -59,13 +59,14 @@ CREATE TABLE IF NOT EXISTS usage_records (
   source                  TEXT    NOT NULL,
   model                   TEXT    NOT NULL,
   hour_start              TEXT    NOT NULL,
+  device_id               TEXT    NOT NULL DEFAULT 'default',
   input_tokens            INTEGER NOT NULL DEFAULT 0,
   cached_input_tokens     INTEGER NOT NULL DEFAULT 0,
   output_tokens           INTEGER NOT NULL DEFAULT 0,
   reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens            INTEGER NOT NULL DEFAULT 0,
   created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(user_id, source, model, hour_start)
+  UNIQUE(user_id, device_id, source, model, hour_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_user_time ON usage_records(user_id, hour_start);

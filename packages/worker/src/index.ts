@@ -46,11 +46,11 @@ export interface Env {
 // ---------------------------------------------------------------------------
 
 const TOKEN_UPSERT_SQL = `INSERT INTO usage_records
-  (user_id, source, model, hour_start,
+  (user_id, device_id, source, model, hour_start,
    input_tokens, cached_input_tokens, output_tokens,
    reasoning_output_tokens, total_tokens)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (user_id, source, model, hour_start) DO UPDATE SET
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (user_id, device_id, source, model, hour_start) DO UPDATE SET
    input_tokens = excluded.input_tokens,
    cached_input_tokens = excluded.cached_input_tokens,
    output_tokens = excluded.output_tokens,
@@ -139,6 +139,7 @@ async function handleTokenIngest(body: unknown, env: Env): Promise<Response> {
     const stmts = records.map((r) =>
       env.DB.prepare(TOKEN_UPSERT_SQL).bind(
         userId,
+        r.device_id ?? "default",
         r.source,
         r.model,
         r.hour_start,
