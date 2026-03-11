@@ -70,13 +70,14 @@ describe("GET /api/settings", () => {
     mockClient.firstOrNull.mockResolvedValueOnce({
       nickname: "Alice",
       slug: "alice",
+      is_public: 0,
     });
 
     const res = await GET(makeRequest("GET"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body).toEqual({ nickname: "Alice", slug: "alice" });
+    expect(body).toEqual({ nickname: "Alice", slug: "alice", is_public: false });
   });
 
   it("should return 404 when user not found", async () => {
@@ -98,7 +99,7 @@ describe("GET /api/settings", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body).toEqual({ nickname: null, slug: "alice" });
+    expect(body).toEqual({ nickname: null, slug: "alice", is_public: false });
   });
 
   it("should return 404 in fallback when user not found", async () => {
@@ -192,7 +193,7 @@ describe("PATCH /api/settings", () => {
   it("should allow null nickname (clear)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockClient.execute.mockResolvedValueOnce({ changes: 1 });
-    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: "alice" });
+    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: "alice", is_public: 0 });
 
     const res = await PATCH(makeRequest("PATCH", { nickname: null }));
 
@@ -263,7 +264,7 @@ describe("PATCH /api/settings", () => {
   it("should allow null slug (clear)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockClient.execute.mockResolvedValueOnce({ changes: 1 });
-    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: "Alice", slug: null });
+    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: "Alice", slug: null, is_public: 0 });
 
     const res = await PATCH(makeRequest("PATCH", { slug: null }));
 
@@ -284,14 +285,14 @@ describe("PATCH /api/settings", () => {
     // slug uniqueness check
     mockClient.firstOrNull
       .mockResolvedValueOnce(null) // slug not taken
-      .mockResolvedValueOnce({ nickname: "Bob", slug: "bob" }); // read-back
+      .mockResolvedValueOnce({ nickname: "Bob", slug: "bob", is_public: 0 }); // read-back
     mockClient.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PATCH(makeRequest("PATCH", { nickname: "Bob", slug: "bob" }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body).toEqual({ nickname: "Bob", slug: "bob" });
+    expect(body).toEqual({ nickname: "Bob", slug: "bob", is_public: false });
     // SQL should have both sets
     const [sql] = mockClient.execute.mock.calls[0]!;
     expect(sql).toContain("nickname = ?");
