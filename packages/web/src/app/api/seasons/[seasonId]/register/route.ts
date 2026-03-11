@@ -118,35 +118,43 @@ export async function POST(
     }
 
     // Write registration + frozen roster in a single batch.
-    // D1 REST API executes these sequentially but we batch them so
-    // a failure is detected immediately. If the batch partially fails,
-    // we compensate by cleaning up.
+    // D1 REST API batch() is NOT transactional — it executes statements
+    // sequentially. If one fails, earlier ones are already committed.
+    // On partial failure we compensate by deleting only the rows WE created
+    // (identified by their UUIDs), never by (season_id, team_id) which
+    // would also wipe data from a concurrent successful request.
     const id = crypto.randomUUID();
+    const memberIds = members.results.map(() => crypto.randomUUID());
     const statements: Array<{ sql: string; params: unknown[] }> = [
       {
         sql: `INSERT INTO season_teams (id, season_id, team_id, registered_by)
               VALUES (?, ?, ?, ?)`,
         params: [id, seasonId, team_id, user.userId],
       },
-      ...members.results.map((m) => ({
+      ...members.results.map((m, i) => ({
         sql: `INSERT INTO season_team_members (id, season_id, team_id, user_id)
               VALUES (?, ?, ?, ?)`,
-        params: [crypto.randomUUID(), seasonId, team_id, m.user_id],
+        params: [memberIds[i]!, seasonId, team_id, m.user_id],
       })),
     ];
 
     try {
       await client.batch(statements);
     } catch (batchErr) {
-      // Compensate: clean up any partial writes
+      // Compensate: delete only rows created by THIS request (by UUID).
+      // This is safe even under concurrent registrations because we never
+      // touch rows written by other requests.
       try {
+        if (memberIds.length > 0) {
+          const ph = memberIds.map(() => "?").join(",");
+          await client.execute(
+            `DELETE FROM season_team_members WHERE id IN (${ph})`,
+            memberIds
+          );
+        }
         await client.execute(
-          "DELETE FROM season_team_members WHERE season_id = ? AND team_id = ?",
-          [seasonId, team_id]
-        );
-        await client.execute(
-          "DELETE FROM season_teams WHERE season_id = ? AND team_id = ?",
-          [seasonId, team_id]
+          "DELETE FROM season_teams WHERE id = ?",
+          [id]
         );
       } catch {
         // Swallow cleanup errors — the original error is more important

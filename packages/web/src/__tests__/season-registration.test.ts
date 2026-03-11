@@ -208,6 +208,44 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  it("should compensate by UUID on batch failure, not by (season_id, team_id)", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01", end_date: "2099-12-31" })
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockClient.query.mockResolvedValueOnce({
+      results: [{ user_id: "user-1" }, { user_id: "user-2" }],
+    });
+    // Batch fails (e.g. UNIQUE constraint from concurrent request)
+    mockClient.batch.mockRejectedValueOnce(new Error("UNIQUE constraint failed"));
+    // Cleanup calls succeed
+    mockClient.execute.mockResolvedValue({ changes: 0, duration: 0.01 });
+
+    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+      params: regParams,
+    });
+    expect(res.status).toBe(500);
+
+    // Compensation should use UUID-based deletes, not (season_id, team_id)
+    expect(mockClient.execute).toHaveBeenCalledTimes(2);
+
+    // First call: DELETE season_team_members WHERE id IN (?, ?)
+    const memberDeleteCall = mockClient.execute.mock.calls[0]!;
+    expect(memberDeleteCall[0]).toContain("DELETE FROM season_team_members WHERE id IN");
+    expect(memberDeleteCall[0]).not.toContain("season_id");
+    // Should pass 2 UUIDs (one per member)
+    expect(memberDeleteCall[1]).toHaveLength(2);
+
+    // Second call: DELETE season_teams WHERE id = ?
+    const teamDeleteCall = mockClient.execute.mock.calls[1]!;
+    expect(teamDeleteCall[0]).toContain("DELETE FROM season_teams WHERE id = ?");
+    expect(teamDeleteCall[0]).not.toContain("season_id");
+    // Should pass 1 UUID
+    expect(teamDeleteCall[1]).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
