@@ -65,6 +65,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const sourceFilter = url.searchParams.get("source");
   const kindFilter = url.searchParams.get("kind");
+  const projectFilter = url.searchParams.get("project");
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
 
@@ -126,6 +127,16 @@ export async function GET(request: Request) {
   if (kindFilter) {
     conditions.push("sr.kind = ?");
     params.push(kindFilter);
+  }
+
+  // Project filter: name match or "_unassigned" for null project
+  if (projectFilter) {
+    if (projectFilter === "_unassigned") {
+      conditions.push("p.name IS NULL");
+    } else {
+      conditions.push("p.name = ?");
+      params.push(projectFilter);
+    }
   }
 
   const sql = `
