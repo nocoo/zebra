@@ -50,15 +50,25 @@ This design enables:
 - **Label propagation**: Once a ref is aliased to a project, the project name
   appears everywhere — Sessions page, usage breakdowns, etc.
 
-### Scope
+### Scope & Phased Delivery
 
-- **In scope**:
-  - Database schema (projects + aliases)
-  - API endpoints for CRUD
-  - Dashboard page to manage projects and assign aliases
-  - **Label propagation**: Show project names in Sessions page, usage breakdown,
-    and anywhere `project_ref` currently appears
-- **Out of scope**: Color coding, CSV export with project names (future work)
+The two-layer model is correct but the full feature is not small. We split
+delivery into two phases to keep each one shippable and testable:
+
+**Phase 1 — Schema + Projects Page + Sessions Propagation**:
+
+- Database schema (projects + aliases)
+- API endpoints for CRUD
+- Dashboard page to manage projects and assign aliases
+- Label propagation in Sessions page (show project name instead of raw ref)
+
+**Phase 2 — Usage Breakdown Propagation**:
+
+- Update usage breakdown to group by project name
+- Aggregate stats across aliased refs in usage charts
+
+**Out of scope (future work)**: Color coding, CSV export with project names,
+auto-suggest grouping.
 
 ---
 
@@ -73,7 +83,8 @@ CREATE TABLE IF NOT EXISTS projects (
   user_id    TEXT NOT NULL REFERENCES users(id),
   name       TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_user
@@ -100,9 +111,19 @@ CREATE INDEX IF NOT EXISTS idx_project_aliases_lookup
 ### Constraints
 
 - Each `(user_id, source, project_ref)` can belong to at most one project
-- `projects.name` must be non-empty (validated at API layer)
+- `projects.name` must be non-empty, max 100 chars (validated at API layer)
+- **Project names are unique per user** (`UNIQUE(user_id, name)`). This
+  prevents confusion in the "Assign to existing project" dropdown and keeps
+  the mental model clean. Rename to resolve conflicts.
+- **Aliases must reference real data**: When adding an alias, the API must
+  verify that `(user_id, source, project_ref)` exists in `session_records`.
+  This prevents orphan aliases that would pollute stats and the unassigned list.
 - `source` must match a known AI tool source value
 - Deleting a project cascades to delete its aliases
+- **Empty projects are allowed**: A project with zero aliases is valid (e.g.,
+  user creates a project first, assigns aliases later). However, if the last
+  alias is removed, the project persists — users must explicitly delete it.
+  The UI should show "(no aliases)" with a visual hint to assign refs.
 
 ---
 
@@ -147,29 +168,43 @@ The response has two sections:
 - `unassigned`: All `(source, project_ref)` pairs that haven't been assigned to
   any project yet — these are the refs the user needs to organize
 
-**SQL for projects**:
+**Implementation strategy**: The response shape requires aliases as a nested
+array per project, which can't be produced by a single SQL GROUP BY. Use three
+queries, assembled in application code:
+
+**Query 1 — Project metadata**:
+
+```sql
+SELECT id, name, created_at
+FROM projects
+WHERE user_id = ?
+ORDER BY created_at DESC
+```
+
+**Query 2 — All aliases with per-alias session stats**:
 
 ```sql
 SELECT
-  p.id,
-  p.name,
-  p.created_at,
+  pa.project_id,
   pa.source,
   pa.project_ref,
   COUNT(sr.id) AS session_count,
   MAX(sr.last_message_at) AS last_active
-FROM projects p
-LEFT JOIN project_aliases pa ON pa.project_id = p.id
+FROM project_aliases pa
 LEFT JOIN session_records sr
-  ON sr.user_id = p.user_id
+  ON sr.user_id = pa.user_id
   AND sr.source = pa.source
   AND sr.project_ref = pa.project_ref
-WHERE p.user_id = ?
-GROUP BY p.id, pa.source, pa.project_ref
-ORDER BY last_active DESC
+WHERE pa.user_id = ?
+GROUP BY pa.project_id, pa.source, pa.project_ref
 ```
 
-**SQL for unassigned**:
+**Assembly in app code**: Group Query 2 rows by `project_id`, merge into
+Query 1 results. For each project, `session_count` = sum of alias counts,
+`last_active` = max of alias last_active, `aliases` = array of
+`{ source, project_ref }`.
+
+**Query 3 — Unassigned refs**:
 
 ```sql
 SELECT
@@ -206,8 +241,20 @@ Create a new project, optionally with initial aliases.
 }
 ```
 
-- `name`: required, non-empty, max 100 chars
+- `name`: required, non-empty, max 100 chars, must be unique for this user
 - `aliases`: optional array. Each entry must have `source` and `project_ref`.
+
+**Alias validation**: Each alias in the request must exist in the user's
+`session_records`. The API verifies this before inserting:
+
+```sql
+SELECT 1 FROM session_records
+WHERE user_id = ? AND source = ? AND project_ref = ?
+LIMIT 1
+```
+
+If any alias fails validation, return `400` with the invalid entries listed.
+This prevents orphan aliases that would corrupt stats.
 
 **Response**: The created project (same shape as items in GET response).
 
@@ -231,6 +278,10 @@ Update a project's name or modify its aliases.
 
 All fields are optional. Only provided fields are updated.
 
+- `name`: if provided, must be non-empty, max 100 chars, unique for this user
+- `add_aliases`: same validation as POST — each must exist in `session_records`
+- `remove_aliases`: silently ignored if the alias doesn't exist on this project
+
 **Response**: The updated project.
 
 ### `DELETE /api/projects/:id`
@@ -243,8 +294,11 @@ Delete a project and all its aliases (CASCADE).
 
 ## Label Propagation
 
+### Phase 1: Sessions Page
+
 This is a core part of the design, not a future consideration. Once a
-`project_ref` is aliased to a project, the project name should appear:
+`project_ref` is aliased to a project, the project name should appear in the
+Sessions page:
 
 ### Sessions Page
 
@@ -270,7 +324,7 @@ WHERE sr.user_id = ?
 ORDER BY sr.last_message_at DESC
 ```
 
-### Usage Breakdown
+### Phase 2: Usage Breakdown
 
 When showing usage stats grouped by project:
 
@@ -349,20 +403,23 @@ A table of `(source, project_ref)` pairs not yet assigned to any project:
 
 ## File Changes Checklist
 
-| File | Action | Description |
-|------|--------|-------------|
-| `scripts/migrations/005-projects.sql` | Create | D1 migration (projects + project_aliases) |
-| `packages/web/src/lib/navigation.ts` | Edit | Add Projects nav item |
-| `packages/web/src/components/layout/sidebar.tsx` | Edit | Add FolderKanban icon |
-| `packages/web/src/app/api/projects/route.ts` | Create | GET + POST (collection) |
-| `packages/web/src/app/api/projects/[id]/route.ts` | Create | PATCH + DELETE (single project) |
-| `packages/web/src/app/(dashboard)/projects/page.tsx` | Create | Projects management page |
-| `packages/web/src/hooks/use-projects.ts` | Create | SWR hook for project data |
-| Sessions page + usage breakdown | Edit | Join with project_aliases for label propagation |
+| File | Action | Phase | Description |
+|------|--------|-------|-------------|
+| `scripts/migrations/005-projects.sql` | Create | 1 | D1 migration (projects + project_aliases) |
+| `packages/web/src/lib/navigation.ts` | Edit | 1 | Add Projects nav item |
+| `packages/web/src/components/layout/sidebar.tsx` | Edit | 1 | Add FolderKanban icon |
+| `packages/web/src/app/api/projects/route.ts` | Create | 1 | GET + POST (collection) |
+| `packages/web/src/app/api/projects/[id]/route.ts` | Create | 1 | PATCH + DELETE (single project) |
+| `packages/web/src/app/(dashboard)/projects/page.tsx` | Create | 1 | Projects management page |
+| `packages/web/src/hooks/use-projects.ts` | Create | 1 | SWR hook for project data |
+| Sessions page (query + UI) | Edit | 1 | JOIN project_aliases for project name display |
+| Usage breakdown (query + UI) | Edit | 2 | Group by project name in usage charts |
 
 ---
 
 ## Implementation Order
+
+### Phase 1
 
 1. **Migration** — Create and apply `005-projects.sql`
 2. **API (collection)** — `GET /api/projects` + `POST /api/projects`
@@ -370,8 +427,12 @@ A table of `(source, project_ref)` pairs not yet assigned to any project:
 4. **Navigation** — Add sidebar entry
 5. **Page** — Build projects page with two sections
 6. **Assign flow** — Dropdown to assign unassigned refs to projects
-7. **Label propagation** — Update Sessions page + usage breakdown to show project names
+7. **Sessions propagation** — Update Sessions page to show project names
 8. **Polish** — Empty states, loading states, error handling
+
+### Phase 2
+
+9. **Usage breakdown propagation** — Group usage stats by project name
 
 ---
 
