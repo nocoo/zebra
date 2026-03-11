@@ -101,7 +101,7 @@ function ScopeDropdown({
   if (teams.length === 0 && !isAdmin) return null;
 
   return (
-    <div ref={ref} className="relative z-20 shrink-0">
+    <div ref={ref} className="relative shrink-0">
       <button
         onClick={() => setOpen(!open)}
         className={cn(
@@ -439,7 +439,7 @@ export default function LeaderboardPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-4 space-y-4">
         {/* Controls row */}
         <div
-          className="flex items-center gap-3 animate-fade-up"
+          className="relative z-20 flex items-center gap-3 animate-fade-up"
           style={{ animationDelay: "180ms" }}
         >
           {/* Period tabs */}
