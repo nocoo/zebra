@@ -358,10 +358,21 @@ correlation across incremental reads.
 4. **File rotation**: Does VSCode ever truncate/rotate JSONL files?
 5. **cachedInputTokens**: Any way to infer cache usage from other fields?
 6. **reasoningOutputTokens**: Should we estimate from `thinking` response text?
-7. **Multi-turn token accounting**: `promptTokens` includes conversation history,
-   so summing across turns in a session would double-count. Need to decide:
-   - Sum as-is (measures total API consumption, matches billing) ✅
-   - Diff against previous turn (measures incremental, avoids double-count)
+
+### Resolved: Multi-Turn Token Accounting
+
+**`promptTokens` is a per-turn independent value (billing semantics), not
+cumulative.** Each turn reports the total input tokens sent to the model for
+that API call, including the full conversation history up to that point.
+
+Verified across 2 multi-turn sessions (13 + 8 turns with exact tokens):
+- Values generally increase as conversation history grows
+- But non-monotonic drops occur (e.g. −48,096 tokens between turns) when
+  context is trimmed or a new context window is started
+- `outputTokens` are always independent small values (tens to thousands)
+
+**Decision**: sum `promptTokens` directly across turns. This measures total
+API consumption and matches billing. No incremental diffing needed.
 
 ---
 
