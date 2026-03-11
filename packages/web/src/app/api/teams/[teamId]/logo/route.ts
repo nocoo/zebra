@@ -213,26 +213,36 @@ export async function DELETE(
     );
   }
 
-  // Read current logo URL
+  // Read current logo URL before clearing
   const team = await client.firstOrNull<{ logo_url: string | null }>(
     "SELECT logo_url FROM teams WHERE id = ?",
     [teamId],
   );
 
-  // Best-effort delete from R2 first (storage leak is tolerable, data inconsistency is not)
+  // Clear logo_url in DB first — DB is the authoritative state.
+  // If this fails, return 500 and leave R2 untouched (no dangling reference).
+  // If R2 delete later fails, accept storage leak (user state is already correct).
+  try {
+    await client.execute("UPDATE teams SET logo_url = NULL WHERE id = ?", [
+      teamId,
+    ]);
+  } catch (err) {
+    console.error("Failed to clear logo_url in DB:", err);
+    return NextResponse.json(
+      { error: "Failed to remove logo" },
+      { status: 500 },
+    );
+  }
+
+  // Best-effort delete from R2
   if (team?.logo_url) {
     try {
       await deleteTeamLogoByUrl(team.logo_url);
     } catch (err) {
-      // Log but continue — clearing the DB reference is more important than R2 cleanup
-      console.error("Failed to delete team logo from R2 (will clear DB anyway):", err);
+      // Storage leak is tolerable; dangling reference is not
+      console.error("Failed to delete team logo from R2 (DB already cleared):", err);
     }
   }
-
-  // Clear logo_url in DB — this is the authoritative state
-  await client.execute("UPDATE teams SET logo_url = NULL WHERE id = ?", [
-    teamId,
-  ]);
 
   return NextResponse.json({ ok: true });
 }

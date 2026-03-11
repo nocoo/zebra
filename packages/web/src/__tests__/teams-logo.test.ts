@@ -417,10 +417,25 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
     expect((await res.json()).ok).toBe(true);
     // Should have attempted R2 delete
     expect(deleteTeamLogoByUrl).toHaveBeenCalledWith(logoUrl);
-    // Should have cleared DB
+    // Should have cleared DB before attempting R2 delete
     expect(mockClient.execute).toHaveBeenCalledWith(
       "UPDATE teams SET logo_url = NULL WHERE id = ?",
       ["t1"],
     );
+  });
+
+  it("should return 500 when DB UPDATE fails, leaving R2 object untouched", async () => {
+    const logoUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg";
+    resolveUser.mockResolvedValueOnce({ userId: "u1" });
+    mockClient.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockClient.firstOrNull.mockResolvedValueOnce({ logo_url: logoUrl });
+    mockClient.execute.mockRejectedValueOnce(new Error("D1 write failed"));
+
+    const res = await DELETE(makeDeleteRequest("t1"), makeParams());
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("Failed to remove");
+    // R2 object should NOT have been deleted (DB still references it)
+    expect(deleteTeamLogoByUrl).not.toHaveBeenCalled();
   });
 });
