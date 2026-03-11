@@ -256,52 +256,53 @@ export default function DashboardPage() {
           {/* Achievements */}
           <AchievementShelf achievements={achievements} />
 
-          {/* Charts row */}
+          {/* Charts — left: trends + cache, right: donut + io ratio */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 md:gap-4">
-            <div>
-              {/* Tab toggle: Tokens | Cost */}
-              <div className="mb-3 flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
-                {(["tokens", "cost"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setChartTab(tab)}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      chartTab === tab
-                        ? "bg-secondary text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {tab === "tokens" ? "Tokens" : "Cost"}
-                  </button>
-                ))}
+            {/* Left column */}
+            <div className="flex flex-col gap-3 md:gap-4">
+              <div>
+                {/* Tab toggle: Tokens | Cost */}
+                <div className="mb-3 flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+                  {(["tokens", "cost"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setChartTab(tab)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        chartTab === tab
+                          ? "bg-secondary text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {tab === "tokens" ? "Tokens" : "Cost"}
+                    </button>
+                  ))}
+                </div>
+                {chartTab === "tokens" ? (
+                  <UsageTrendChart data={daily} />
+                ) : (
+                  <CostTrendChart data={dailyCostPoints} />
+                )}
               </div>
-              {chartTab === "tokens" ? (
-                <UsageTrendChart data={daily} />
-              ) : (
-                <CostTrendChart data={dailyCostPoints} />
-              )}
+              <CacheRateChart data={dailyCacheRates} />
             </div>
+
+            {/* Right column — Source donut sits at top, IoRatio aligns with CacheRateChart */}
             <div className="flex flex-col gap-3 md:gap-4">
               <SourceDonutChart data={sources} />
-              <IoRatioChart
-                inputTokens={data.summary.input_tokens}
-                outputTokens={data.summary.output_tokens}
-              />
+              {/* Extra top margin on lg to offset the tab toggle height so IoRatio aligns with CacheRateChart */}
+              <div className="lg:mt-[28px]">
+                <IoRatioChart
+                  inputTokens={data.summary.input_tokens}
+                  outputTokens={data.summary.output_tokens}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Efficiency row: cache rate trend */}
-          <CacheRateChart data={dailyCacheRates} />
-
-          {/* Insights row: weekday vs weekend */}
-          {weekdayWeekend && (
-            <WeekdayWeekendChart stats={weekdayWeekend} />
-          )}
-
-          {/* Activity heatmap */}
-          <div className="space-y-3">
+          {/* Activity heatmap + Weekday vs Weekend — side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
             <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
               <p className="mb-3 text-xs md:text-sm text-muted-foreground">
                 {currentYear} Activity
@@ -316,6 +317,9 @@ export default function DashboardPage() {
                 />
               )}
             </div>
+            {weekdayWeekend && (
+              <WeekdayWeekendChart stats={weekdayWeekend} />
+            )}
           </div>
         </>
       )}
