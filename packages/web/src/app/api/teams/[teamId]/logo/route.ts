@@ -140,24 +140,40 @@ export async function POST(
     );
   }
 
-  // Read old logo URL before updating
-  const oldTeam = await client.firstOrNull<{ logo_url: string | null }>(
-    "SELECT logo_url FROM teams WHERE id = ?",
-    [teamId],
-  );
+  // Persist new URL to DB — compensate by deleting the new R2 object on failure
+  let oldLogoUrl: string | null = null;
+  try {
+    const oldTeam = await client.firstOrNull<{ logo_url: string | null }>(
+      "SELECT logo_url FROM teams WHERE id = ?",
+      [teamId],
+    );
+    oldLogoUrl = oldTeam?.logo_url ?? null;
 
-  // Persist new URL to DB
-  await client.execute("UPDATE teams SET logo_url = ? WHERE id = ?", [
-    newLogoUrl,
-    teamId,
-  ]);
+    await client.execute("UPDATE teams SET logo_url = ? WHERE id = ?", [
+      newLogoUrl,
+      teamId,
+    ]);
+  } catch (err) {
+    console.error("Failed to persist logo URL to DB:", err);
+    // Compensate: delete the just-uploaded R2 object to avoid orphan
+    try {
+      await deleteTeamLogoByUrl(newLogoUrl);
+    } catch {
+      // Double-fault: log but accept potential orphan
+      console.error("Compensating R2 delete also failed for:", newLogoUrl);
+    }
+    return NextResponse.json(
+      { error: "Failed to save logo" },
+      { status: 500 },
+    );
+  }
 
   // Best-effort delete old R2 object
-  if (oldTeam?.logo_url) {
+  if (oldLogoUrl) {
     try {
-      await deleteTeamLogoByUrl(oldTeam.logo_url);
+      await deleteTeamLogoByUrl(oldLogoUrl);
     } catch {
-      // Orphaned R2 object is harmless
+      // Orphaned old R2 object is harmless
     }
   }
 
@@ -203,23 +219,20 @@ export async function DELETE(
     [teamId],
   );
 
-  // Clear logo_url in DB
-  await client.execute("UPDATE teams SET logo_url = NULL WHERE id = ?", [
-    teamId,
-  ]);
-
-  // Best-effort delete from R2
+  // Best-effort delete from R2 first (storage leak is tolerable, data inconsistency is not)
   if (team?.logo_url) {
     try {
       await deleteTeamLogoByUrl(team.logo_url);
     } catch (err) {
-      console.error("Failed to delete team logo from R2:", err);
-      return NextResponse.json(
-        { error: "Failed to remove logo" },
-        { status: 500 },
-      );
+      // Log but continue — clearing the DB reference is more important than R2 cleanup
+      console.error("Failed to delete team logo from R2 (will clear DB anyway):", err);
     }
   }
+
+  // Clear logo_url in DB — this is the authoritative state
+  await client.execute("UPDATE teams SET logo_url = NULL WHERE id = ?", [
+    teamId,
+  ]);
 
   return NextResponse.json({ ok: true });
 }

@@ -263,6 +263,42 @@ describe("POST /api/teams/[teamId]/logo", () => {
     expect(deleteTeamLogoByUrl).not.toHaveBeenCalled();
   });
 
+  it("should return 500 and compensate-delete R2 object when DB SELECT fails after upload", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1" });
+    const newUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg";
+    putTeamLogo.mockResolvedValueOnce(newUrl);
+    // firstOrNull call 1: role check → owner
+    mockClient.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    // firstOrNull call 2: SELECT logo_url → D1 fails
+    mockClient.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+
+    const res = await POST(makeUploadRequest("t1"), makeParams());
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("Failed to save");
+    // Should compensate by deleting the just-uploaded R2 object
+    expect(deleteTeamLogoByUrl).toHaveBeenCalledWith(newUrl);
+  });
+
+  it("should return 500 and compensate-delete R2 object when DB UPDATE fails after upload", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1" });
+    const newUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg";
+    putTeamLogo.mockResolvedValueOnce(newUrl);
+    // firstOrNull call 1: role check → owner
+    mockClient.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    // firstOrNull call 2: SELECT logo_url → succeeds
+    mockClient.firstOrNull.mockResolvedValueOnce({ logo_url: null });
+    // execute: UPDATE fails
+    mockClient.execute.mockRejectedValueOnce(new Error("D1 write failed"));
+
+    const res = await POST(makeUploadRequest("t1"), makeParams());
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("Failed to save");
+    // Should compensate by deleting the just-uploaded R2 object
+    expect(deleteTeamLogoByUrl).toHaveBeenCalledWith(newUrl);
+  });
+
   it("should return 500 when R2 upload fails", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
     mockClient.firstOrNull.mockResolvedValueOnce({ role: "owner" });
@@ -367,15 +403,24 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
     expect(deleteTeamLogoByUrl).not.toHaveBeenCalled();
   });
 
-  it("should return 500 when R2 delete fails", async () => {
+  it("should return 200 when R2 delete fails (DB still cleared, storage leak tolerable)", async () => {
+    const logoUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg";
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
     mockClient.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockClient.firstOrNull.mockResolvedValueOnce({ logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg" });
+    mockClient.firstOrNull.mockResolvedValueOnce({ logo_url: logoUrl });
     deleteTeamLogoByUrl.mockRejectedValueOnce(new Error("R2 unavailable"));
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
 
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toContain("Failed to remove");
+    // Should still succeed — DB is the authoritative state
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    // Should have attempted R2 delete
+    expect(deleteTeamLogoByUrl).toHaveBeenCalledWith(logoUrl);
+    // Should have cleared DB
+    expect(mockClient.execute).toHaveBeenCalledWith(
+      "UPDATE teams SET logo_url = NULL WHERE id = ?",
+      ["t1"],
+    );
   });
 });
