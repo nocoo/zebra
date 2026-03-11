@@ -51,9 +51,7 @@ export async function GET(request: Request) {
       `SELECT
          s.id, s.name, s.slug, s.start_date, s.end_date, s.created_at,
          COUNT(st.id) AS team_count,
-         CASE WHEN EXISTS (
-           SELECT 1 FROM season_snapshots ss WHERE ss.season_id = s.id
-         ) THEN 1 ELSE 0 END AS has_snapshot
+         s.snapshot_ready AS has_snapshot
        FROM seasons s
        LEFT JOIN season_teams st ON st.season_id = s.id
        GROUP BY s.id
