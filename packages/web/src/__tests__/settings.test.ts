@@ -113,6 +113,34 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(404);
   });
 
+  it("should return is_public: true when DB value is 1", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockClient.firstOrNull.mockResolvedValueOnce({
+      nickname: "Alice",
+      slug: "alice",
+      is_public: 1,
+    });
+
+    const res = await GET(makeRequest("GET"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.is_public).toBe(true);
+  });
+
+  it("should return is_public: false in fallback when column missing", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockClient.firstOrNull
+      .mockRejectedValueOnce(new Error("no such column: is_public"))
+      .mockResolvedValueOnce({ slug: "alice" });
+
+    const res = await GET(makeRequest("GET"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.is_public).toBe(false);
+  });
+
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockClient.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
@@ -298,6 +326,75 @@ describe("PATCH /api/settings", () => {
     expect(sql).toContain("nickname = ?");
     expect(sql).toContain("slug = ?");
     expect(sql).toContain("updated_at = datetime('now')");
+  });
+
+  // -- is_public validation --
+
+  it("should accept is_public: true", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: null, is_public: 1 });
+
+    const res = await PATCH(makeRequest("PATCH", { is_public: true }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.is_public).toBe(true);
+    const [sql, params] = mockClient.execute.mock.calls[0]!;
+    expect(sql).toContain("is_public = ?");
+    expect(params).toContain(1);
+  });
+
+  it("should accept is_public: false", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockClient.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: null, is_public: 0 });
+
+    const res = await PATCH(makeRequest("PATCH", { is_public: false }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.is_public).toBe(false);
+    const [, params] = mockClient.execute.mock.calls[0]!;
+    expect(params).toContain(0);
+  });
+
+  it("should reject non-boolean is_public (string)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+
+    const res = await PATCH(makeRequest("PATCH", { is_public: "true" }));
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("is_public must be a boolean");
+  });
+
+  it("should reject non-boolean is_public (number)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+
+    const res = await PATCH(makeRequest("PATCH", { is_public: 1 }));
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("is_public must be a boolean");
+  });
+
+  it("should allow updating is_public together with slug and nickname", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockClient.firstOrNull
+      .mockResolvedValueOnce(null) // slug not taken
+      .mockResolvedValueOnce({ nickname: "Bob", slug: "bob", is_public: 1 }); // read-back
+    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { nickname: "Bob", slug: "bob", is_public: true }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ nickname: "Bob", slug: "bob", is_public: true });
+    const [sql] = mockClient.execute.mock.calls[0]!;
+    expect(sql).toContain("nickname = ?");
+    expect(sql).toContain("slug = ?");
+    expect(sql).toContain("is_public = ?");
   });
 
   it("should return 503 when nickname column does not exist", async () => {
