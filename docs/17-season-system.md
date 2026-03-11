@@ -90,23 +90,6 @@ CREATE INDEX IF NOT EXISTS idx_season_teams_season ON season_teams(season_id);
 CREATE INDEX IF NOT EXISTS idx_season_teams_team   ON season_teams(team_id);
 
 -- ============================================================
--- Frozen roster: members locked at registration time
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS season_team_members (
-  id          TEXT PRIMARY KEY,           -- UUID
-  season_id   TEXT NOT NULL REFERENCES seasons(id),
-  team_id     TEXT NOT NULL REFERENCES teams(id),
-  user_id     TEXT NOT NULL REFERENCES users(id),
-  joined_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(season_id, team_id, user_id),
-  UNIQUE(season_id, user_id)             -- one team per user per season
-);
-
-CREATE INDEX IF NOT EXISTS idx_stm_season      ON season_team_members(season_id);
-CREATE INDEX IF NOT EXISTS idx_stm_season_team ON season_team_members(season_id, team_id);
-
--- ============================================================
 -- Season snapshots (frozen results after season ends)
 -- ============================================================
 
@@ -144,6 +127,27 @@ CREATE TABLE IF NOT EXISTS season_member_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_member_snapshot_season ON season_member_snapshots(season_id);
 CREATE INDEX IF NOT EXISTS idx_member_snapshot_team   ON season_member_snapshots(season_id, team_id);
+```
+
+### Migration: `007-season-team-members.sql`
+
+```sql
+-- ============================================================
+-- Frozen roster: members locked at registration time
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS season_team_members (
+  id          TEXT PRIMARY KEY,           -- UUID
+  season_id   TEXT NOT NULL REFERENCES seasons(id),
+  team_id     TEXT NOT NULL REFERENCES teams(id),
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  joined_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(season_id, team_id, user_id),
+  UNIQUE(season_id, user_id)             -- one team per user per season
+);
+
+CREATE INDEX IF NOT EXISTS idx_stm_season      ON season_team_members(season_id);
+CREATE INDEX IF NOT EXISTS idx_stm_season_team ON season_team_members(season_id, team_id);
 ```
 
 ### 赛季状态推导 (无需 status 列)
@@ -526,16 +530,18 @@ This document.
 
 ### Commit 2: `feat: add seasons and season_teams migration`
 
-Create migration script with all four season-related tables.
+Create migration scripts for season-related tables.
 
 **Files changed:**
 - `scripts/migrations/006-seasons.sql` (new)
+- `scripts/migrations/007-season-team-members.sql` (new)
 
 **Tables created:**
-- `seasons` — season definitions
-- `season_teams` — team registrations per season
-- `season_snapshots` — frozen team-level results
-- `season_member_snapshots` — frozen member-level contributions
+- `seasons` — season definitions (006)
+- `season_teams` — team registrations per season (006)
+- `season_snapshots` — frozen team-level results (006)
+- `season_member_snapshots` — frozen member-level contributions (006)
+- `season_team_members` — frozen roster at registration time (007)
 
 ---
 
@@ -912,9 +918,10 @@ After deployment:
 ### Deploy Order
 
 1. Deploy code (commits 2-17) — all `no such table` fallbacks ensure the app works before migration
-2. Run migration:
+2. Run migrations (both required):
    ```bash
    wrangler d1 execute pew-prod --file scripts/migrations/006-seasons.sql
+   wrangler d1 execute pew-prod --file scripts/migrations/007-season-team-members.sql
    ```
 3. Verify via admin page: create first season
 
@@ -924,6 +931,7 @@ After deployment:
 -- Safe to drop all season tables (no existing data depends on them)
 DROP TABLE IF EXISTS season_member_snapshots;
 DROP TABLE IF EXISTS season_snapshots;
+DROP TABLE IF EXISTS season_team_members;
 DROP TABLE IF EXISTS season_teams;
 DROP TABLE IF EXISTS seasons;
 ```
