@@ -12,6 +12,7 @@ import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/
 import type { PricingMap } from "@/hooks/use-pricing";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FilterDropdown } from "@/components/dashboard/filter-dropdown";
 import {
   groupByDate,
   extractSources,
@@ -209,43 +210,6 @@ function DetailsSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
-// Filter select
-// ---------------------------------------------------------------------------
-
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{label}:</span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="appearance-none rounded-md border border-border bg-secondary pl-2 pr-7 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="">All</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" strokeWidth={2} />
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -373,8 +337,8 @@ export default function DetailsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <FilterSelect
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterDropdown
           label="Source"
           value={sourceFilter}
           onChange={setSourceFilter}
@@ -383,7 +347,7 @@ export default function DetailsPage() {
             label: sourceLabel(s),
           }))}
         />
-        <FilterSelect
+        <FilterDropdown
           label="Model"
           value={modelFilter}
           onChange={setModelFilter}
