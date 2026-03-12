@@ -41,6 +41,9 @@ interface AliasStatsRow {
   project_ref: string;
   session_count: number;
   last_active: string | null;
+  total_messages: number;
+  total_duration: number;
+  models: string | null;
 }
 
 interface UnassignedRow {
@@ -48,6 +51,9 @@ interface UnassignedRow {
   project_ref: string;
   session_count: number;
   last_active: string | null;
+  total_messages: number;
+  total_duration: number;
+  models: string | null;
 }
 
 interface AliasInput {
@@ -84,7 +90,10 @@ export async function GET(request: Request) {
          pa.source,
          pa.project_ref,
          COUNT(sr.id) AS session_count,
-         MAX(sr.last_message_at) AS last_active
+         MAX(sr.last_message_at) AS last_active,
+         COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+         COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+         GROUP_CONCAT(DISTINCT sr.model) AS models
        FROM project_aliases pa
        LEFT JOIN session_records sr
          ON sr.user_id = pa.user_id
@@ -101,7 +110,10 @@ export async function GET(request: Request) {
          sr.source,
          sr.project_ref,
          COUNT(*) AS session_count,
-         MAX(sr.last_message_at) AS last_active
+         MAX(sr.last_message_at) AS last_active,
+         COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+         COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+         GROUP_CONCAT(DISTINCT sr.model) AS models
        FROM session_records sr
        WHERE sr.user_id = ?
          AND sr.project_ref IS NOT NULL
@@ -131,8 +143,18 @@ export async function GET(request: Request) {
       const aliases = aliasesByProject.get(p.id) ?? [];
       let sessionCount = 0;
       let lastActive: string | null = null;
+      let totalMessages = 0;
+      let totalDuration = 0;
+      const modelSet = new Set<string>();
       for (const a of aliases) {
         sessionCount += a.session_count;
+        totalMessages += a.total_messages;
+        totalDuration += a.total_duration;
+        if (a.models) {
+          for (const m of a.models.split(",")) {
+            if (m) modelSet.add(m);
+          }
+        }
         if (a.last_active && (!lastActive || a.last_active > lastActive)) {
           lastActive = a.last_active;
         }
@@ -146,13 +168,24 @@ export async function GET(request: Request) {
         })),
         session_count: sessionCount,
         last_active: lastActive,
+        total_messages: totalMessages,
+        total_duration: totalDuration,
+        models: [...modelSet],
         created_at: p.created_at,
       };
     });
 
     return NextResponse.json({
       projects,
-      unassigned: unassignedResult.results,
+      unassigned: unassignedResult.results.map((r) => ({
+        source: r.source,
+        project_ref: r.project_ref,
+        session_count: r.session_count,
+        last_active: r.last_active,
+        total_messages: r.total_messages,
+        total_duration: r.total_duration,
+        models: r.models ? r.models.split(",").filter(Boolean) : [],
+      })),
     });
   } catch (err) {
     console.error("Failed to query projects:", err);
@@ -342,14 +375,23 @@ export async function POST(request: Request) {
     // Query real session stats for the newly-assigned aliases
     let sessionCount = 0;
     let lastActive: string | null = null;
+    let totalMessages = 0;
+    let totalDuration = 0;
+    const modelSet = new Set<string>();
     if (deduped.length > 0) {
       const statsResult = await client.query<{
         session_count: number;
         last_active: string | null;
+        total_messages: number;
+        total_duration: number;
+        models: string | null;
       }>(
         `SELECT
            COUNT(sr.id) AS session_count,
-           MAX(sr.last_message_at) AS last_active
+           MAX(sr.last_message_at) AS last_active,
+           COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+           COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+           GROUP_CONCAT(DISTINCT sr.model) AS models
          FROM project_aliases pa
          LEFT JOIN session_records sr
            ON sr.user_id = pa.user_id
@@ -362,6 +404,13 @@ export async function POST(request: Request) {
       if (firstRow) {
         sessionCount = firstRow.session_count;
         lastActive = firstRow.last_active;
+        totalMessages = firstRow.total_messages;
+        totalDuration = firstRow.total_duration;
+        if (firstRow.models) {
+          for (const m of firstRow.models.split(",")) {
+            if (m) modelSet.add(m);
+          }
+        }
       }
     }
 
@@ -381,6 +430,9 @@ export async function POST(request: Request) {
         })),
         session_count: sessionCount,
         last_active: lastActive,
+        total_messages: totalMessages,
+        total_duration: totalDuration,
+        models: [...modelSet],
         created_at: created!.created_at,
       },
       { status: 201 },

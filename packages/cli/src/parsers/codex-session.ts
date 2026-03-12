@@ -20,6 +20,7 @@ import { createInterface } from "node:readline";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type { SessionSnapshot, Source } from "@pew/core";
+import { hashProjectRef } from "../utils/hash-project-ref.js";
 
 /**
  * Collect session snapshots from a Codex CLI JSONL rollout file.
@@ -80,10 +81,7 @@ export async function collectCodexSessions(
           sessionId = payload.id;
         }
         if (typeof payload.cwd === "string" && payload.cwd) {
-          projectRef = createHash("sha256")
-            .update(payload.cwd)
-            .digest("hex")
-            .slice(0, 12);
+          projectRef = hashProjectRef(payload.cwd);
         }
         // Fallback model from session_meta
         if (typeof payload.model === "string" && payload.model.trim()) {

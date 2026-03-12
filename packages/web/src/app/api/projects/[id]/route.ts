@@ -39,6 +39,9 @@ interface AliasStatsRow {
   project_ref: string;
   session_count: number;
   last_active: string | null;
+  total_messages: number;
+  total_duration: number;
+  models: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +312,10 @@ export async function PATCH(
          pa.source,
          pa.project_ref,
          COUNT(sr.id) AS session_count,
-         MAX(sr.last_message_at) AS last_active
+         MAX(sr.last_message_at) AS last_active,
+         COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+         COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+         GROUP_CONCAT(DISTINCT sr.model) AS models
        FROM project_aliases pa
        LEFT JOIN session_records sr
          ON sr.user_id = pa.user_id
@@ -322,8 +328,18 @@ export async function PATCH(
 
     let sessionCount = 0;
     let lastActive: string | null = null;
+    let totalMessages = 0;
+    let totalDuration = 0;
+    const modelSet = new Set<string>();
     for (const a of aliasRows.results) {
       sessionCount += a.session_count;
+      totalMessages += a.total_messages;
+      totalDuration += a.total_duration;
+      if (a.models) {
+        for (const m of a.models.split(",")) {
+          if (m) modelSet.add(m);
+        }
+      }
       if (a.last_active && (!lastActive || a.last_active > lastActive)) {
         lastActive = a.last_active;
       }
@@ -338,6 +354,9 @@ export async function PATCH(
       })),
       session_count: sessionCount,
       last_active: lastActive,
+      total_messages: totalMessages,
+      total_duration: totalDuration,
+      models: [...modelSet],
       created_at: updated!.created_at,
     });
   } catch (err) {

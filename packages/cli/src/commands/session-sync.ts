@@ -25,6 +25,7 @@ import { SessionCursorStore } from "../storage/session-cursor-store.js";
 import { SessionQueue } from "../storage/session-queue.js";
 import { deduplicateSessionRecords } from "./session-upload.js";
 import { createSessionDrivers } from "../drivers/registry.js";
+import { hashProjectRef } from "../utils/hash-project-ref.js";
 import type { FileFingerprint } from "../drivers/types.js";
 import type { SessionRow, SessionMessageRow } from "../parsers/opencode-sqlite-session.js";
 
@@ -94,8 +95,20 @@ export interface SessionSyncResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert camelCase SessionSnapshot to snake_case SessionQueueRecord */
+/** Convert camelCase SessionSnapshot to snake_case SessionQueueRecord.
+ *
+ * Defense-in-depth: validates that project_ref is either null or a
+ * hex hash string. If a parser accidentally passes a non-hash value,
+ * it gets hashed here as a safety net before any data leaves the device.
+ */
 function toQueueRecord(snap: SessionSnapshot): SessionQueueRecord {
+  // Validate project_ref: must be null or a 16-char hex string (from hashProjectRef).
+  // If it's something else, a parser forgot to hash — apply hashProjectRef as safety net.
+  let projectRef = snap.projectRef;
+  if (projectRef !== null && !/^[a-f0-9]{16}$/.test(projectRef)) {
+    projectRef = hashProjectRef(projectRef);
+  }
+
   return {
     session_key: snap.sessionKey,
     source: snap.source,
@@ -106,7 +119,7 @@ function toQueueRecord(snap: SessionSnapshot): SessionQueueRecord {
     user_messages: snap.userMessages,
     assistant_messages: snap.assistantMessages,
     total_messages: snap.totalMessages,
-    project_ref: snap.projectRef,
+    project_ref: projectRef,
     model: snap.model,
     snapshot_at: snap.snapshotAt,
   };

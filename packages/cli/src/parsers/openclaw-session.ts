@@ -12,6 +12,7 @@ import { createInterface } from "node:readline";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type { SessionSnapshot, Source } from "@pew/core";
+import { hashProjectRef } from "../utils/hash-project-ref.js";
 
 /**
  * Extract agent name from an OpenClaw file path.
@@ -114,8 +115,8 @@ export async function collectOpenClawSessions(
     .slice(0, 16);
   const sessionKey = `openclaw:${hash}`;
 
-  // Project ref: agent name from path
-  const projectRef = extractAgentName(filePath);
+  // Project ref: hash of agent name from path (privacy-safe)
+  const projectRef = hashProjectRef(extractAgentName(filePath));
 
   return [
     {

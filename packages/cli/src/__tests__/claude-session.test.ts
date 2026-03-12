@@ -157,7 +157,7 @@ describe("collectClaudeSessions", () => {
 
     const result = await collectClaudeSessions(f);
     expect(result).toHaveLength(1);
-    expect(result[0].projectRef).toBe("d24f65a6f145"); // SHA-256("abc123hash")[0:12]
+    expect(result[0].projectRef).toBe("d24f65a6f145d04d"); // SHA-256("abc123hash")[0:16]
   });
 
   it("should set projectRef to null when no projects/ in path", async () => {

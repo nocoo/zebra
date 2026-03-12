@@ -7,6 +7,7 @@
  */
 
 import type { SessionSnapshot, Source } from "@pew/core";
+import { hashProjectRef } from "../utils/hash-project-ref.js";
 
 /** Row shape from the session table */
 export interface SessionRow {
@@ -142,7 +143,7 @@ export function collectOpenCodeSqliteSessions(
       userMessages,
       assistantMessages,
       totalMessages,
-      projectRef: session.project_id ?? null,
+      projectRef: hashProjectRef(session.project_id ?? null),
       model: lastModel,
       snapshotAt: new Date().toISOString(),
     });

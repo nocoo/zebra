@@ -162,7 +162,7 @@ describe("collectCodexSessions", () => {
     expect(s.lastMessageAt).toBe("2026-03-07T10:03:30.000Z");
     expect(s.durationSeconds).toBe(210); // 3.5 min
     expect(s.model).toBe("gpt-5.4");
-    expect(s.projectRef).toBe("9f5e23b26651");
+    expect(s.projectRef).toBe("9f5e23b26651a98d");
     expect(s.snapshotAt).toBeDefined();
   });
 
@@ -199,7 +199,7 @@ describe("collectCodexSessions", () => {
 
     const result = await collectCodexSessions(f);
     expect(result).toHaveLength(1);
-    expect(result[0].projectRef).toBe("c7e2f75b53b9");
+    expect(result[0].projectRef).toBe("c7e2f75b53b97886");
   });
 
   it("should set projectRef to null when no session_meta cwd", async () => {

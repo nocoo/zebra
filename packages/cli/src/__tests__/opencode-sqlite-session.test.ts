@@ -190,7 +190,7 @@ describe("collectOpenCodeSqliteSessions", () => {
     const result = collectOpenCodeSqliteSessions(sessions, messages);
 
     expect(result).toHaveLength(1);
-    expect(result[0].projectRef).toBe("proj_hash_123");
+    expect(result[0].projectRef).toBe("c1d68243f4a93662"); // sha256("proj_hash_123")[0:16]
   });
 
   it("should handle corrupted message data JSON", () => {
