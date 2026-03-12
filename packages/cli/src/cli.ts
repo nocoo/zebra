@@ -231,7 +231,7 @@ const statusCommand = defineCommand({
     });
 
     consola.log("");
-    consola.log(pc.bold("Pew Status"));
+    consola.log(pc.bold("pew status"));
     consola.log(pc.dim("─".repeat(40)));
     consola.log(`  Tracked files:   ${pc.cyan(String(result.trackedFiles))}`);
     consola.log(
@@ -271,7 +271,7 @@ const statusCommand = defineCommand({
 const loginCommand = defineCommand({
   meta: {
     name: "login",
-    description: "Connect your CLI to the Pew dashboard via browser OAuth",
+    description: "Connect your CLI to the pew dashboard via browser OAuth",
   },
   args: {
     force: {
@@ -438,7 +438,7 @@ const initCommand = defineCommand({
     });
 
     consola.log("");
-    consola.log(pc.bold(args.dryRun ? "Pew Init (Dry Run)" : "Pew Init"));
+    consola.log(pc.bold(args.dryRun ? "pew init (dry run)" : "pew init"));
     consola.log(`  pew binary: ${pc.cyan(result.pewBin)}`);
     consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}`);
     for (const hook of result.hooks) {
@@ -489,7 +489,7 @@ const uninstallCommand = defineCommand({
     });
 
     consola.log("");
-    consola.log(pc.bold(args.dryRun ? "Pew Uninstall (Dry Run)" : "Pew Uninstall"));
+    consola.log(pc.bold(args.dryRun ? "pew uninstall (dry run)" : "pew uninstall"));
     consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}  ${result.notifyHandler.detail}`);
     consola.log(`  codex backup: ${pc.dim(result.codexBackup.path)}  ${result.codexBackup.detail}`);
     for (const hook of result.hooks) {
