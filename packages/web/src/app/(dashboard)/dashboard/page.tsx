@@ -151,7 +151,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <div>
-            <h1 className="text-2xl font-bold font-display">Dashboard</h1>
+            <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Dashboard</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Token usage overview for your AI coding tools.
             </p>

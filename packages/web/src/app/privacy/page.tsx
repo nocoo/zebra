@@ -22,7 +22,7 @@ export default function PrivacyPage() {
               >
                 <ArrowLeft className="h-5 w-5" strokeWidth={1.5} />
               </Link>
-              <h1 className="text-2xl font-semibold text-foreground">
+              <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight text-foreground">
                 Privacy Policy
               </h1>
             </div>

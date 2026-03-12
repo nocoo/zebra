@@ -142,7 +142,7 @@ export function WeekdayWeekendChart({
             />
             <XAxis
               dataKey="name"
-              tick={{ fontSize: 12, fill: chartAxis }}
+              tick={{ fontSize: 11, fill: chartAxis }}
               tickLine={false}
               axisLine={false}
             />

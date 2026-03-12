@@ -121,7 +121,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold font-display">General</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">General</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Account settings and public profile.
         </p>

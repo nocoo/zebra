@@ -69,7 +69,7 @@ function AppCard({ group, color }: { group: AppGroup; color: string }) {
             title={`Cached: ${formatTokens(group.cachedTokens)}`}
           />
         </div>
-        <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
+        <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
           <span>Input {formatTokens(group.inputTokens)}</span>
           <span>Output {formatTokens(group.outputTokens)}</span>
           <span>Cached {formatTokens(group.cachedTokens)}</span>
@@ -83,12 +83,12 @@ function AppCard({ group, color }: { group: AppGroup; color: string }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Model</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Input</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Output</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Cached</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Total</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Cost</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Model</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Input</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Output</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Cached</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Cost</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,7 +165,7 @@ export default function AppsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display">By Agent</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">By Agent</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Token usage grouped by AI coding tool ({subtitle}).
           </p>

@@ -638,7 +638,7 @@ export default function TeamsPage() {
     <div className="max-w-3xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold font-display">Teams</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Teams</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Create or join teams to share usage data with your group.
         </p>

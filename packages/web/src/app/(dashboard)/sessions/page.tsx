@@ -126,7 +126,7 @@ export default function SessionsPage() {
       {/* Header + period selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display">Sessions</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Sessions</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Session activity across your AI coding tools.
           </p>

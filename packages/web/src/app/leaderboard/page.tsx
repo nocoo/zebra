@@ -342,7 +342,7 @@ function LeaderboardRow({
               {displayName}
             </span>
             {showHiddenBadge && user.is_public === false && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 <EyeOff className="h-3 w-3" strokeWidth={1.5} />
                 hidden
               </span>
@@ -353,7 +353,7 @@ function LeaderboardRow({
               {teams.map((team) => (
                 <span
                   key={team.id}
-                  className="inline-flex items-center gap-1 text-[10px] leading-tight text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                  className="inline-flex items-center gap-1 text-xs leading-tight text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
                 >
                   <TeamLogoBadge logoUrl={team.logo_url} name={team.name} />
                   {team.name}

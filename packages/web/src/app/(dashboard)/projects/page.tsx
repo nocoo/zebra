@@ -314,7 +314,7 @@ function ProjectCard({
 // ---------------------------------------------------------------------------
 
 const TH_BASE =
-  "px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70";
+  "px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/70";
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -388,7 +388,7 @@ export default function ProjectsPage() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold font-display">Projects</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Projects</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Loading project data…
           </p>
@@ -413,7 +413,7 @@ export default function ProjectsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold font-display">Projects</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Projects</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Group anonymous project references from different AI tools into
           named projects.
@@ -509,7 +509,7 @@ export default function ProjectsPage() {
             <h2 className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
               <LinkIcon className="h-4 w-4" strokeWidth={1.5} />
               Unassigned References
-              <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 {unassigned.length}
               </span>
             </h2>

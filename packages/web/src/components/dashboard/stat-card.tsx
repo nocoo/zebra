@@ -36,7 +36,7 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs md:text-sm text-muted-foreground">{title}</p>
-          <p className="text-xl md:text-2xl font-semibold text-foreground font-display tracking-tight">
+          <p className="text-2xl md:text-3xl font-semibold text-foreground font-display tracking-tight">
             {typeof value === "number" ? value.toLocaleString() : value}
           </p>
           {subtitle && (

@@ -304,7 +304,7 @@ export default function SeasonLeaderboardPage() {
         {data ? (
           <div className="mb-8 animate-fade-up">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl font-bold tracking-tight">
+              <h1 className="text-3xl font-bold font-display tracking-tight">
                 {data.season.name}
               </h1>
               <StatusBadge status={data.season.status} />

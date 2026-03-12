@@ -338,7 +338,7 @@ export default function DetailsPage() {
       {/* Header + month nav */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display">Daily Usage</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">Daily Usage</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Token usage broken down by day. Click a row to see per-model
             details.

@@ -153,7 +153,7 @@ export default function SeasonsPage() {
 
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+          <h1 className="text-3xl font-bold font-display tracking-tight flex items-center gap-3">
             <Trophy className="h-8 w-8 text-primary" />
             Seasons
           </h1>
