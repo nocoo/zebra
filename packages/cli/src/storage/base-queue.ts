@@ -1,5 +1,6 @@
-import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, appendFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 
 /**
  * Generic append-only JSONL queue with byte-offset tracking.
@@ -77,6 +78,24 @@ export class BaseQueue<T> {
 
     const newOffset = buf.byteLength;
     return { records, newOffset };
+  }
+
+  /**
+   * Atomically overwrite the entire queue with new records.
+   *
+   * Writes to a temporary file first, then renames over the queue file.
+   * This is crash-safe: either the old or the new file is present, never
+   * a partial write.
+   */
+  async overwrite(records: T[]): Promise<void> {
+    await this.ensureDir();
+    const data = records.length > 0
+      ? records.map((r) => JSON.stringify(r)).join("\n") + "\n"
+      : "";
+    const suffix = randomBytes(4).toString("hex");
+    const tmpPath = `${this.queuePath}.tmp.${suffix}`;
+    await writeFile(tmpPath, data);
+    await rename(tmpPath, this.queuePath);
   }
 
   /** Save the upload byte offset to the state file */

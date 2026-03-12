@@ -235,4 +235,59 @@ describe("BaseQueue", () => {
     const queue = createQueue(tempDir);
     expect(queue.queuePath).toBe(join(tempDir, "test.jsonl"));
   });
+
+  // ---- overwrite ----
+
+  it("should overwrite queue with new records", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1), makeRecord(2), makeRecord(3)]);
+
+    // Overwrite with a different set
+    await queue.overwrite([makeRecord(10), makeRecord(20)]);
+
+    const { records } = await queue.readFromOffset(0);
+    expect(records).toHaveLength(2);
+    expect(records[0].id).toBe(10);
+    expect(records[1].id).toBe(20);
+  });
+
+  it("should overwrite with empty array (clears queue)", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+
+    await queue.overwrite([]);
+
+    const { records, newOffset } = await queue.readFromOffset(0);
+    expect(records).toEqual([]);
+    expect(newOffset).toBe(0);
+  });
+
+  it("should be atomic (tmp file renamed, no partial writes)", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1)]);
+
+    // Overwrite and verify the result is consistent
+    const newRecords = Array.from({ length: 100 }, (_, i) => makeRecord(i + 100));
+    await queue.overwrite(newRecords);
+
+    const raw = await readFile(join(tempDir, "test.jsonl"), "utf-8");
+    const lines = raw.trim().split("\n");
+    expect(lines).toHaveLength(100);
+    expect(JSON.parse(lines[0]).id).toBe(100);
+    expect(JSON.parse(lines[99]).id).toBe(199);
+  });
+
+  it("should create directory if needed during overwrite", async () => {
+    const nestedDir = join(tempDir, "deep", "overwrite");
+    const queue = new BaseQueue<TestRecord>(
+      nestedDir,
+      "test.jsonl",
+      "test.state.json",
+    );
+    await queue.overwrite([makeRecord(42)]);
+
+    const { records } = await queue.readFromOffset(0);
+    expect(records).toHaveLength(1);
+    expect(records[0].id).toBe(42);
+  });
 });

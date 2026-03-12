@@ -111,176 +111,187 @@ opencode 为 2.36x 因为 opencode 数据随时间变化（新增 session 改变
 
 ## Fix Plan
 
-### Step 1: Fix Queue Accumulation Bug
+**对外一句话**："升级新版 CLI 后，执行一次 `pew reset`，再同步一次，状态就恢复正常。"
 
-**目标**：无论 cursor 状态如何，queue + upload 管线永远产出正确值，不累积重复。
+核心保证：
+1. `pew reset` 能彻底清掉会导致 token inflation 的本地坏状态
+2. reset 后第一次 sync 产出正确的 queue 和正确的上传值
+3. 之后的 sync 永远安全，不因 cursor reset、upload 失败、重复扫描而膨胀
 
-#### 方案 A：Fresh Parse Detection（推荐）
+### Step 1: Fix Token Queue Semantics (CLI)
 
-**核心思路**：sync 入口检测到 cursors 为空（fresh parse）时，先清空 queue + queue.state，再执行全量扫描。
+**目标**：从根本上消除 queue 累积问题。Queue 不再是 "append-only + upload 时 SUM"，而是 "每次 sync 结束后 queue 始终是当前未上传的正确聚合快照"。
 
-**逻辑**：cursor 没了 → 即将全量重扫 → 旧 queue 数据全部作废 → 清掉。新 queue 内容是完整的全量快照，upload 后的 SUM = 正确值。
-
-**实现**：
-
-```
-executeSync() 入口:
-  1. cursorStore.load() → cursors
-  2. if cursors.files 为空 AND cursors.updatedAt 不为 null:
-       // 曾经有 cursor 但现在没有了 = cursor reset
-       queue.clear()          // 删除 queue.jsonl
-       queue.clearState()     // 删除 queue.state.json (offset 归零)
-  3. ... 正常 sync 流程 (append to queue)
-```
-
-`cursors.updatedAt !== null` 这个检查区分了 "首次安装（从未 sync 过）" 和 "cursor reset"。首次安装时 queue 也为空，无需清理。但实际上首次安装清理空 queue 也无副作用，所以可以简化为：
+**当前模型（有 bug）**：
 
 ```
-if Object.keys(cursors.files).length === 0:
-    queue.clear()
-    queue.clearState()
+sync:     parse deltas → aggregate into buckets → appendBatch(newRecords)
+upload:   readFromOffset(savedOffset) → aggregateRecords(SUM) → POST → saveOffset
 ```
+
+append 意味着同一个 key 可以在 queue 中出现多次（cursor reset 后更是 N 倍），aggregateRecords 做 SUM 把重复项累加 → 膨胀。
+
+**新模型**：
+
+```
+sync:     parse deltas → aggregate into buckets → read old unread records
+          → merge old + new by key (take MAX per field, not SUM) → overwrite queue → offset = 0
+upload:   readFromOffset(0) → POST (records already aggregated, no SUM needed) → saveOffset
+```
+
+**详细实现**：
+
+`sync.ts` 尾部（替换 `packages/cli/src/commands/sync.ts:339-350`）：
+
+```
+1. oldOffset = queue.loadOffset()
+2. { records: oldRecords } = queue.readFromOffset(oldOffset)
+3. merged = mergeRecords([...oldRecords, ...newRecords])
+   // mergeRecords: 按 (source, model, hour_start, device_id) 分组
+   // 同 key 的多条 record 取每个 token field 的 MAX（不是 SUM）
+   // MAX 语义：增量 sync 的 newRecords 值 >= oldRecords 值（因为 token 只增不减）
+   //           cursor reset 后 newRecords 是全量重扫的正确值，也 >= 旧值
+   //           所以 MAX 在所有场景下都产出正确结果
+4. queue.overwrite(merged)   // 原子写入：write to tmp → rename
+5. queue.saveOffset(0)       // offset 归零（文件被重写了，所有内容都是未上传的）
+6. cursorStore.save(cursors)
+```
+
+注意 cursor 保存移到 queue overwrite **之后**。旧代码先保存 cursor 再 append queue，是为了防止 crash 导致重复（cursor saved + queue not written = 数据丢失但不重复）。新模型下 queue 是 overwrite + MAX 语义，即使 crash 导致 cursor saved 但 queue 未写入，下次 sync 会重新解析并 overwrite → 值仍然正确。
+
+`base-queue.ts` 新增方法：
+
+```typescript
+/** Atomically overwrite the queue with new records (write tmp → rename) */
+async overwrite(records: T[]): Promise<void>
+```
+
+`upload.ts` 的 `aggregateRecords()` 变为 **defense-in-depth**：保留函数但语义从 SUM 改为 **pass-through**（或保留 SUM 但不会影响结果，因为 queue 中每个 key 此时只有一条 record）。
+
+`upload-engine.ts:111-114` 的 offset 逻辑不变：upload 仍然从 offset 0 读取全部未上传 records，上传成功后 saveOffset。
+
+**关键不变量**：
+> 在 sync 完成后的任意时刻，queue 中每个 key `(source, model, hour_start, device_id)` 只有一条 record，其值等于原始日志中该 key 的真实 token 总量。
+
+**为什么用 MAX 而不是 SUM**：
+
+| 场景 | SUM | MAX |
+|------|-----|-----|
+| 正常增量 sync（new key，old 中没有） | 正确 | 正确 |
+| 正常增量 sync（existing key，new > old） | 错误（old + new = 2x） | **正确**（取 new） |
+| Cursor reset 后全量重扫 | 错误（old + new = 2x） | **正确**（取 new = 全量值） |
+| Upload 失败后重复 sync | 错误（累积） | **正确**（幂等） |
+
+SUM 只在 "old 和 new 永远不重叠" 的假设下正确。MAX 在所有场景下都正确，因为 token 是单调递增的累积量。
 
 **修改文件**：
-- `packages/cli/src/commands/sync.ts` — `executeSync()` 入口添加检测逻辑
-- `packages/cli/src/storage/base-queue.ts` — 添加 `clear()` 和 `clearState()` 方法
+- `packages/cli/src/commands/sync.ts` — 尾部 queue 写入逻辑改为 read-merge(MAX)-overwrite
+- `packages/cli/src/storage/base-queue.ts` — 新增 `overwrite()` 方法
+- `packages/cli/src/commands/upload.ts` — `aggregateRecords()` 保留作为 defense-in-depth
 
-**优点**：改动最小，不影响正常增量 sync 路径。
-**缺点**：仅处理 cursor reset 场景。如果 queue 通过其他途径被污染（如手动编辑），无法检测。
+**验证**：
+- L1 单元测试：cursor reset + 二次 sync → queue 中每个 key 只有一条 record，值不膨胀
+- L1 单元测试：sync 后 upload 失败 → 再次 sync → queue 值仍然正确
+- L1 单元测试：增量 sync（cursor 存在）→ 旧 unread records 与新 records 正确合并
 
-#### 方案 B：Queue Overwrite 模式
+### Step 2: `pew reset` CLI Command
 
-**核心思路**：彻底改变 queue 写入语义——sync 不再 append，而是 **overwrite** 整个 queue 文件。每次 sync 输出的就是当前时刻的完整快照。
-
-**关键难点**：增量 sync 只解析新增部分，不会重新产生旧 records。如果 sync 跑了但 upload 没跑，下次 sync 的 overwrite 会丢失上次未上传的 records。
-
-**解决**：sync 时先读取 queue 中未上传的旧 records，与本次新 records 合并聚合后，overwrite 整个 queue。
-
-```
-executeSync() 尾部:
-  1. oldOffset = queue.loadOffset()
-  2. { records: oldRecords } = queue.readFromOffset(oldOffset)
-  3. allRecords = [...oldRecords, ...newRecords]
-  4. aggregated = aggregateByKey(allRecords)  // 按 (source, model, hour_start, device_id) 合并
-  5. queue.overwrite(aggregated)              // 清空并重写整个文件
-  6. queue.saveOffset(0)                      // offset 归零（因为文件被重写了）
-```
-
-**修改文件**：
-- `packages/cli/src/commands/sync.ts` — 尾部写入逻辑改为 read-merge-overwrite
-- `packages/cli/src/storage/base-queue.ts` — 添加 `overwrite()` 方法
-- `packages/cli/src/commands/upload.ts` — `aggregateRecords()` 仍然需要保留（defense-in-depth）
-
-**优点**：从根本上消除 queue 累积问题，无论 cursor 状态如何，queue 内容始终是正确的聚合快照。
-**缺点**：改动较大，sync 需要读取 queue（之前只写不读），引入 read-merge-overwrite 的原子性问题（crash-safety 需要 rename 模式）。
-
-#### 决策
-
-两个方案都能解决问题。方案 A 适合快速修复，方案 B 适合长期架构演进。可先实施方案 A，后续视需要升级到方案 B。
-
-**关键不变量**（两个方案都必须满足）：
-> 对于任意 key `(source, model, hour_start, device_id)`，queue 中该 key 的所有 records 经过 `aggregateRecords()` SUM 后的值，必须等于原始日志文件中该 key 的真实 token 总量。
-
-**验证**：L1 单元测试模拟 cursor reset + 二次 sync，确认 queue 不累积。
-
-### Step 2: Worker Version Gate (Server-Side Defense)
-
-**目标**：拒绝未修复 bug 的老版本客户端上传数据，防止膨胀值覆盖已修复的正确值。
-
-**为什么需要**：客户端 bug 修复后，老版本 CLI 仍可能运行。Worker 无法区分"正确的 1000 tokens"和"4 次 cursor reset SUM 出来的 4000 tokens"——请求格式完全一样。唯一可靠的防御是版本门禁。
-
-**实现**：
-
-1. **CLI 端**：在 upload 请求中注入客户端版本号。
-
-   `upload-engine.ts` `sendBatchWithRetry` 目前发送的 body 是 `JSON.stringify(batch)`（一个 `T[]` 数组）。无需改变 body 格式，通过 HTTP header 传递版本：
-
-   ```
-   headers: {
-     "Content-Type": "application/json",
-     "Authorization": `Bearer ${token}`,
-     "X-Pew-Client-Version": "1.6.0"     // ← 新增
-   }
-   ```
-
-   版本号从 `cli.ts` 的 `meta.version` 传入。
-
-2. **Next.js 端**：`ingest-handler.ts` 读取 `X-Pew-Client-Version` header，低于最低版本（如 `1.6.0`）或缺失时返回 `400`:
-
-   ```json
-   { "error": "Client version too old. Please upgrade: npx @nocoo/pew@latest" }
-   ```
-
-   不带版本号的请求 = 老版本 = 一律拒绝。
-
-3. **Worker 端**：无需修改。Worker 只接受来自 Next.js 的内部请求（WORKER_SECRET 认证），版本校验在 Next.js 层完成。
-
-**修改文件**：
-- `packages/cli/src/commands/upload-engine.ts` — `sendBatchWithRetry` 添加 `X-Pew-Client-Version` header
-- `packages/web/src/lib/ingest-handler.ts` — 添加版本校验逻辑
-- `packages/core/src/types.ts` — 可选：导出 `MIN_CLIENT_VERSION` 常量
-
-### Step 3: `pew reset` CLI Command
-
-**目标**：提供一条命令完成"清除本地状态 → 全量重扫 → 上传正确值"的全流程，替代手动执行 `rm cursors.json queue.jsonl queue.state.json && pew sync`。
+**目标**：一条命令清除所有会导致 token inflation 的本地状态，然后全量重建。
 
 **安全约束**：
-- **绝不触碰用户原始数据**（`~/.claude/`, `~/.gemini/`, `~/.local/share/opencode/`, `~/.openclaw/` 等）。
-- 只删除 pew 自身的状态文件（`~/.config/pew/` 下的 cursors、queue 文件）。
+- **绝不触碰用户原始数据**（`~/.claude/`, `~/.gemini/`, `~/.local/share/opencode/`, `~/.openclaw/` 等）
+- 只删除 pew 自身的状态文件（`~/.config/pew/` 下）
+
+**清理范围**（6 个文件）：
+
+| 文件 | 用途 |
+|------|------|
+| `cursors.json` | Token sync 游标 |
+| `queue.jsonl` | Token upload 队列 |
+| `queue.state.json` | Token upload offset |
+| `session-cursors.json` | Session sync 游标 |
+| `session-queue.jsonl` | Session upload 队列 |
+| `session-queue.state.json` | Session upload offset |
 
 **行为**：
 
 ```
 pew reset [--dev]
-  1. 删除 cursors.json（token cursor）
-  2. 删除 session-cursors.json（session cursor）
-  3. 删除 queue.jsonl + queue.state.json（token queue）
-  4. 删除 session-queue.jsonl + session-queue.state.json（session queue）
-  5. 打印已清除的文件列表
-  6. 自动执行 pew sync [--upload]（全量重扫 + 上传）
+  1. 删除上述 6 个文件（不存在则跳过，不报错）
+  2. 打印已清除的文件列表
+  3. 提示用户执行 pew sync 重建数据
 ```
 
+`pew reset` 只负责清理，不自动触发 sync + upload。用户手动执行 `pew sync` 来重建（sync 默认 `--upload`），这样用户对整个流程有完整控制。
+
 **修改文件**：
-- `packages/cli/src/commands/reset.ts` — 新建，实现 `executeReset()`
+- `packages/cli/src/commands/reset.ts` — 新建
 - `packages/cli/src/cli.ts` — 注册 `reset` 子命令
 
-### Step 4: Fix D1 Data with Correct Values
+### Step 3: Version Gate (Server-Side Defense)
 
-**目标**：用本机原始数据的正确值覆盖 D1 中 prod device 的膨胀数据。
+**目标**：拒绝未修复 bug 的老版本客户端上传，防止膨胀值写入 D1。
 
-**方案**：在 Step 1-3 完成并发布新版本后，在本机执行 `pew reset` 即可。
+**为什么需要**：客户端 bug 修复后，老版本 CLI 仍可能运行。Worker 无法区分"正确的 1000 tokens"和"4 次 cursor reset SUM 出来的 4000 tokens"——请求格式完全一样。
 
-**前置条件**：Step 1 必须先完成（否则 reset 后 queue 仍可能累积）。
+**实现**：
 
-**数据修复的局限性**：对于其他用户，D1 只存最终聚合值，无上传历史，无法仅从服务端数据判断膨胀倍数。唯一修复路径是用户在本机执行 `pew reset`（前提：原始日志文件仍存在）。
+1. **CLI 端**：upload 请求添加 `X-Pew-Client-Version` header。
 
-### Step 5: Merge `default` Device
+   ```
+   headers: {
+     "Content-Type": "application/json",
+     "Authorization": `Bearer ${token}`,
+     "X-Pew-Client-Version": "1.6.0"
+   }
+   ```
 
-**目标**：清理 `default` device 的重复数据，保留独有数据。
+   版本号从 `cli.ts` 的 `meta.version` 传入 upload engine。
 
-**方案**：
-1. 删除 `default` 中与 prod device 重叠的 2,837 行（prod 值 >= default 的 2,826 行直接删；11 行 default > prod 的先更新 prod 再删）
-2. 将 `default` 中独有的 2,046 行迁移到 prod device `7f2bdbdb-...`（UPDATE device_id）
-3. 删除 `default` 的 device_aliases 记录
+2. **Next.js 端**：`ingest-handler.ts` 认证通过后、校验 body 之前，检查 `X-Pew-Client-Version`：
+   - 缺失 → `400: { "error": "Client version too old. Run: npx @nocoo/pew@latest && pew reset" }`
+   - 低于 `MIN_CLIENT_VERSION` → 同上
+   - 通过 → 继续正常流程
 
-**风险**：`default` 中的 `openclaw` 数据（1,412 行）可能来自其他机器，迁移到本机 device 可能归属错误。需要进一步调查确认。
+3. **Worker 端**：无需修改。Worker 只接受来自 Next.js 的内部请求（WORKER_SECRET 认证），版本校验在 Next.js 层完成。
 
-### Step 6: Share Device ID Across dev/prod
+**修改文件**：
+- `packages/cli/src/commands/upload-engine.ts` — `sendBatchWithRetry` 添加版本 header
+- `packages/web/src/lib/ingest-handler.ts` — 添加版本校验
+- `packages/core/src/constants.ts` — 导出 `MIN_CLIENT_VERSION`
+
+### Step 4: Clear D1 Data
+
+**目标**：清除 D1 中的膨胀数据，等用户重新同步后重建正确数据。
+
+**方案**：直接清空 `usage_records` 和 `session_records` 表数据。不做复杂的数据修复、merge、迁移判断。
+
+```sql
+DELETE FROM usage_records;
+DELETE FROM session_records;
+```
+
+**时机**：Step 1-3 发布新版本、服务端版本门禁生效之后执行。确保清空后旧版本 CLI 无法再写入膨胀数据。
+
+**恢复流程**：每个用户升级新版 CLI → `pew reset` → `pew sync`。
+
+### Step 5: Share Device ID Across dev/prod
 
 **目标**：同一台机器 dev 和 prod 使用相同的 device ID。
 
 **方案**：将 `deviceId` 存储在独立的 `device.json` 文件中，不区分 dev/prod。`config.json` 和 `config.dev.json` 只存 `token`。
 
 **修改文件**：
-- `packages/cli/src/config/manager.ts` — 新增 `ensureDeviceId()` 读写 `device.json`
+- `packages/cli/src/config/manager.ts` — `ensureDeviceId()` 改为读写 `device.json`
 - `packages/core/src/types.ts` — `PewConfig` 中移除 `deviceId` 字段（或保留向后兼容）
 
 ### Execution Order
 
-1. Step 1 (fix queue accumulation bug) → commit
-2. Step 2 (worker version gate) → commit
-3. Step 3 (`pew reset` command) → commit
-4. Step 6 (share device ID) → commit
+1. Step 1 (fix token queue semantics) → commit
+2. Step 2 (`pew reset` command) → commit
+3. Step 3 (version gate) → commit
+4. Step 5 (share device ID) → commit
 5. Bump version to 1.6.0, `bun run build`, `npm publish`
-6. Step 4 (fix D1 data) → `pew reset` on local machine
-7. Step 5 (merge default device) → manual SQL operation
+6. Deploy web (version gate live)
+7. Step 4 (clear D1 data)
+8. Announce: "升级后执行 `pew reset` 再 `pew sync`"
