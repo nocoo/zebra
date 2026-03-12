@@ -235,7 +235,7 @@ const statusCommand = defineCommand({
     consola.log(pc.dim("─".repeat(40)));
     consola.log(`  Tracked files:   ${pc.cyan(String(result.trackedFiles))}`);
     consola.log(
-      `  Last sync:       ${result.lastSync ? pc.green(result.lastSync) : pc.dim("never")}`,
+      `  Last sync:       ${result.lastSync ? pc.green(new Date(result.lastSync).toLocaleString()) : pc.dim("never")}`,
     );
     consola.log(
       `  Pending upload:  ${result.pendingRecords > 0 ? pc.yellow(String(result.pendingRecords)) : pc.dim("0")} records`,
