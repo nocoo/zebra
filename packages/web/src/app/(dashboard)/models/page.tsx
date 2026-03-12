@@ -7,7 +7,7 @@ import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { groupByModel, toSourceTrendPoints } from "@/lib/usage-helpers";
 import { toModelEvolutionPoints } from "@/lib/model-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
-import { modelColor } from "@/lib/palette";
+import { modelColor, agentColor, withAlpha } from "@/lib/palette";
 import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
 import { SourceTrendChart } from "@/components/dashboard/source-trend-chart";
 import { ModelEvolutionChart } from "@/components/dashboard/model-evolution-chart";
@@ -149,14 +149,21 @@ export default function ModelsPage() {
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
                           <div className="flex gap-1.5">
-                            {group.sources.map((s) => (
-                              <span
-                                key={s}
-                                className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-                              >
-                                {sourceLabel(s)}
-                              </span>
-                            ))}
+                            {group.sources.map((s) => {
+                              const ac = agentColor(s);
+                              return (
+                                <span
+                                  key={s}
+                                  className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                  style={{
+                                    backgroundColor: withAlpha(ac.token, 0.12),
+                                    color: ac.color,
+                                  }}
+                                >
+                                  {sourceLabel(s)}
+                                </span>
+                              );
+                            })}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-right tabular-nums">{formatTokens(group.inputTokens)}</td>
