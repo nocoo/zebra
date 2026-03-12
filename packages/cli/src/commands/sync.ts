@@ -15,6 +15,7 @@ import type { ParsedDelta } from "../parsers/claude.js";
 import { toUtcHalfHourStart, bucketKey, addTokens, emptyTokenDelta } from "../utils/buckets.js";
 import { createTokenDrivers } from "../drivers/registry.js";
 import type { SyncContext, FileFingerprint } from "../drivers/types.js";
+import { aggregateRecords } from "./upload.js";
 
 /** Sync execution options */
 export interface SyncOptions {
@@ -106,6 +107,14 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
   const cursorStore = new CursorStore(stateDir);
   const queue = new LocalQueue(stateDir);
   const cursors = await cursorStore.load();
+
+  // Detect full-scan vs incremental BEFORE drivers populate cursors.files.
+  // If cursors were empty at start, this is a full scan (first run or after
+  // pew reset). The records represent the complete picture and should replace
+  // the queue entirely. Otherwise it's incremental and records are deltas
+  // that must be SUM'd with existing queue contents.
+  const initialCursorEmpty =
+    Object.keys(cursors.files).length === 0 && !cursors.openCodeSqlite;
 
   const allDeltas: ParsedDelta[] = [];
   const sourceCounts = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0, vscodeCopilot: 0 };
@@ -336,18 +345,34 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     });
   }
 
-  // ---------- Save cursor state FIRST (before queue) ----------
-  // Cursor must be persisted before the queue write so that a crash
-  // between the two operations does not cause double-counting on the
-  // next sync. Worst case: cursor saved but queue not written — data
-  // is lost for this cycle (acceptable), but never duplicated.
+  // ---------- Write to queue (overwrite, not append) ----------
+  // Full-scan/incremental dual-branch prevents token inflation on cursor reset.
+  //
+  // Full scan (empty cursors): records are the complete picture from all log
+  // files → overwrite queue entirely (discard any stale accumulated values).
+  //
+  // Incremental (cursors exist): records are deltas since last sync → SUM
+  // with existing queue contents to accumulate across multiple sync cycles
+  // that haven't been uploaded yet.
+  if (initialCursorEmpty) {
+    // Full scan: overwrite queue with complete snapshot
+    await queue.overwrite(records);
+  } else {
+    // Incremental: SUM with existing queue records
+    const { records: oldRecords } = await queue.readFromOffset(0);
+    const merged = aggregateRecords([...oldRecords, ...records]);
+    await queue.overwrite(merged);
+  }
+  await queue.saveOffset(0);
+
+  // ---------- Save cursor state AFTER queue ----------
+  // Queue must be written before cursor so that a crash between the two
+  // does not lose data. Worst case: queue overwritten + cursor not saved
+  // → next sync re-scans from old cursor position → produces a superset
+  // of the current records → overwrite queue → values ≥ true (minor
+  // over-count for one sync cycle, recoverable via pew reset).
   cursors.updatedAt = new Date().toISOString();
   await cursorStore.save(cursors);
-
-  // ---------- Write to queue ----------
-  if (records.length > 0) {
-    await queue.appendBatch(records);
-  }
 
   onProgress?.({
     source: "all",

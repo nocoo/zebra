@@ -235,4 +235,76 @@ describe("BaseQueue", () => {
     const queue = createQueue(tempDir);
     expect(queue.queuePath).toBe(join(tempDir, "test.jsonl"));
   });
+
+  // ---- overwrite ----
+
+  it("should overwrite queue with new records (replacing old)", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+
+    // Overwrite with different records
+    await queue.overwrite([makeRecord(10), makeRecord(20), makeRecord(30)]);
+
+    const { records } = await queue.readFromOffset(0);
+    expect(records).toHaveLength(3);
+    expect(records[0].id).toBe(10);
+    expect(records[1].id).toBe(20);
+    expect(records[2].id).toBe(30);
+  });
+
+  it("should overwrite with empty array to clear queue", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+
+    await queue.overwrite([]);
+
+    const { records, newOffset } = await queue.readFromOffset(0);
+    expect(records).toEqual([]);
+    expect(newOffset).toBe(0);
+  });
+
+  it("should overwrite when queue file does not exist yet", async () => {
+    const queue = createQueue(tempDir);
+    await queue.overwrite([makeRecord(1)]);
+
+    const { records } = await queue.readFromOffset(0);
+    expect(records).toHaveLength(1);
+    expect(records[0].id).toBe(1);
+  });
+
+  it("should overwrite atomically (tmp → rename)", async () => {
+    const queue = createQueue(tempDir);
+    await queue.appendBatch([makeRecord(1)]);
+
+    // Overwrite and verify no .tmp file remains
+    await queue.overwrite([makeRecord(99)]);
+
+    const tmpPath = join(tempDir, "test.jsonl.tmp");
+    let tmpExists = true;
+    try {
+      await readFile(tmpPath);
+    } catch {
+      tmpExists = false;
+    }
+    expect(tmpExists).toBe(false);
+
+    const { records } = await queue.readFromOffset(0);
+    expect(records).toHaveLength(1);
+    expect(records[0].id).toBe(99);
+  });
+
+  it("should create directory on overwrite if it does not exist", async () => {
+    const nestedDir = join(tempDir, "deep", "nested2");
+    const queue = new BaseQueue<TestRecord>(
+      nestedDir,
+      "test.jsonl",
+      "test.state.json",
+    );
+    await queue.overwrite([makeRecord(42)]);
+
+    const raw = await readFile(join(nestedDir, "test.jsonl"), "utf-8");
+    const lines = raw.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]).id).toBe(42);
+  });
 });

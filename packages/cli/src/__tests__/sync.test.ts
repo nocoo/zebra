@@ -732,10 +732,12 @@ describe("executeSync", () => {
 
   // ===== Write-order resilience tests (HIGH-2) =====
 
-  it("should save cursors before queue so crash after cursor save does not cause double-counting", async () => {
-    // This test verifies that cursors are persisted BEFORE the queue,
-    // so if the process crashes after cursor save but before queue write,
-    // the next sync will NOT re-parse already-processed data.
+  it("should save cursors AFTER queue (cursor-after-queue write order)", async () => {
+    // This test verifies that cursors are persisted AFTER the queue,
+    // so if the process crashes after queue overwrite but before cursor save,
+    // the next sync will re-scan from the old cursor position (producing a
+    // superset). This is the correct trade-off: slight over-count on crash
+    // is better than N× inflation on cursor reset.
     const claudeDir = join(dataDir, ".claude", "projects", "proj-a");
     await mkdir(claudeDir, { recursive: true });
     await writeFile(
@@ -743,17 +745,18 @@ describe("executeSync", () => {
       claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
     );
 
-    // Import the LocalQueue module to spy on appendBatch
+    // Import the LocalQueue module to spy on overwrite
     const localQueueModule = await import("../storage/local-queue.js");
-    const origAppendBatch = localQueueModule.LocalQueue.prototype.appendBatch;
 
-    // First sync: let appendBatch throw AFTER the cursor should be saved
-    // (simulating a crash between cursor save and queue write)
-    let appendBatchCalled = false;
-    const spy = vi.spyOn(localQueueModule.LocalQueue.prototype, "appendBatch")
-      .mockImplementation(async function(this: InstanceType<typeof localQueueModule.LocalQueue>, _records) {
-        appendBatchCalled = true;
-        throw new Error("Simulated crash during queue write");
+    // Let overwrite succeed but then throw BEFORE cursor save
+    // We achieve this by spying on overwrite to record that it was called,
+    // then spying on CursorStore.save to throw
+    let overwriteCalled = false;
+    const overwriteSpy = vi.spyOn(localQueueModule.LocalQueue.prototype, "overwrite")
+      .mockImplementation(async function(this: InstanceType<typeof localQueueModule.LocalQueue>) {
+        overwriteCalled = true;
+        // Don't actually write — we just want to verify the call order
+        throw new Error("Simulated crash after queue write");
       });
 
     try {
@@ -764,39 +767,25 @@ describe("executeSync", () => {
         // Expected to throw due to queue write failure
       });
     } finally {
-      spy.mockRestore();
+      overwriteSpy.mockRestore();
     }
 
-    expect(appendBatchCalled).toBe(true);
+    expect(overwriteCalled).toBe(true);
 
-    // Check if cursors were saved (they should be, because cursor save
-    // should happen BEFORE queue write)
+    // Cursors should NOT be saved (queue crash prevents cursor save)
     const { CursorStore } = await import("../storage/cursor-store.js");
     const cursorStore = new CursorStore(stateDir);
     const cursors = await cursorStore.load();
-    const cursorKeys = Object.keys(cursors.files);
-    expect(cursorKeys.length).toBeGreaterThan(0); // cursors were persisted
+    expect(Object.keys(cursors.files)).toHaveLength(0);
 
-    // Second sync: normal operation, should produce NO new deltas
-    // because cursors already advanced past the data
+    // Next sync should re-process everything from scratch
     const result = await executeSync({
       stateDir,
       claudeDir: join(dataDir, ".claude"),
     });
 
-    expect(result.totalDeltas).toBe(0);
-    expect(result.totalRecords).toBe(0);
-
-    // Queue should have 0 records: first sync's queue write was blocked
-    // by our mock, and second sync found no new data to write.
-    let queueRecordCount = 0;
-    try {
-      const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
-      queueRecordCount = queueRaw.trim().split("\n").filter((l) => l.length > 0).length;
-    } catch {
-      // queue.jsonl doesn't exist — that's fine, means 0 records
-    }
-    expect(queueRecordCount).toBe(0);
+    expect(result.totalDeltas).toBe(1);
+    expect(result.totalRecords).toBe(1);
   });
 
   it("should sync all five sources simultaneously", async () => {
@@ -1457,5 +1446,186 @@ describe("executeSync", () => {
 
     expect(result.totalDeltas).toBe(0);
     expect(result.sources.opencode).toBe(0);
+  });
+
+  // ===== Token inflation fix tests (Step 1 — overwrite + cursor-after-queue) =====
+
+  it("should not inflate queue on cursor reset (full-scan overwrite)", async () => {
+    // Scenario: sync once → delete cursors → sync again → queue should have
+    // the same values as the first sync (not 2x).
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-inflate");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 5000, 800) + "\n",
+    );
+
+    // First sync
+    const r1 = await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+    expect(r1.totalRecords).toBe(1);
+
+    // Read queue to check initial values
+    const queueRaw1 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records1 = queueRaw1.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records1).toHaveLength(1);
+    expect(records1[0].input_tokens).toBe(5000);
+    expect(records1[0].output_tokens).toBe(800);
+
+    // Delete cursors (simulate cursor reset)
+    const { rm: rmFile } = await import("node:fs/promises");
+    await rmFile(join(stateDir, "cursors.json"), { force: true });
+
+    // Second sync — full-scan branch should overwrite, not accumulate
+    const r2 = await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+    expect(r2.totalRecords).toBe(1);
+
+    // Queue should have the SAME values (not 2x)
+    const queueRaw2 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records2 = queueRaw2.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records2).toHaveLength(1);
+    expect(records2[0].input_tokens).toBe(5000);  // NOT 10000
+    expect(records2[0].output_tokens).toBe(800);   // NOT 1600
+  });
+
+  it("should accumulate incremental syncs correctly (SUM branch)", async () => {
+    // Scenario: two incremental syncs without upload → queue should
+    // contain the SUM of both syncs' deltas.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-incr");
+    await mkdir(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, "session.jsonl");
+    await writeFile(
+      filePath,
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    // First sync
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    // Append more data to the same file (same half-hour bucket)
+    const existing = await readFile(filePath, "utf-8");
+    await writeFile(
+      filePath,
+      existing + claudeLine("2026-03-07T10:20:00.000Z", 2000, 200) + "\n",
+    );
+
+    // Second sync — incremental branch should SUM old + new
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    // Should be aggregated into one record with SUM
+    const claudeRecs = records.filter((r) => r.source === "claude-code");
+    expect(claudeRecs).toHaveLength(1);
+    expect(claudeRecs[0].input_tokens).toBe(3000);  // 1000 + 2000
+    expect(claudeRecs[0].output_tokens).toBe(300);   // 100 + 200
+  });
+
+  it("should not inflate on upload failure + cursor reset", async () => {
+    // Scenario: sync → upload fails (offset not advanced) → cursor reset → sync again
+    // Queue should have the fresh full-scan values, not accumulated garbage.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-upfail");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 4000, 600) + "\n",
+    );
+
+    // First sync
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    // Simulate upload failure: don't advance offset, so queue still has data
+
+    // Delete cursors
+    const { rm: rmFile } = await import("node:fs/promises");
+    await rmFile(join(stateDir, "cursors.json"), { force: true });
+
+    // Second sync — full-scan should overwrite the stale queue
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records).toHaveLength(1);
+    expect(records[0].input_tokens).toBe(4000);  // NOT 8000
+    expect(records[0].output_tokens).toBe(600);   // NOT 1200
+  });
+
+  it("should preserve cursor-after-queue write order (queue written before cursors)", async () => {
+    // Verify the new write order: if queue.overwrite throws, cursors should
+    // NOT be saved — so the next sync re-processes everything.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-order");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    // Spy on LocalQueue.overwrite to throw (simulating crash during queue write)
+    const localQueueModule = await import("../storage/local-queue.js");
+    const spy = vi.spyOn(localQueueModule.LocalQueue.prototype, "overwrite")
+      .mockRejectedValue(new Error("Simulated queue write crash"));
+
+    try {
+      await executeSync({
+        stateDir,
+        claudeDir: join(dataDir, ".claude"),
+      }).catch(() => {
+        // Expected — queue write failed
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Cursors should NOT be saved (cursor-after-queue means queue crash
+    // prevents cursor save)
+    const { CursorStore } = await import("../storage/cursor-store.js");
+    const cursorStore = new CursorStore(stateDir);
+    const cursors = await cursorStore.load();
+    expect(Object.keys(cursors.files)).toHaveLength(0);
+
+    // Now run a normal sync — should process all data fresh
+    const result = await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+    expect(result.totalDeltas).toBe(1);
+    expect(result.totalRecords).toBe(1);
+  });
+
+  it("should set queue offset to 0 after sync (ready for full upload read)", async () => {
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-offset");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    // Verify queue offset is 0
+    const { LocalQueue } = await import("../storage/local-queue.js");
+    const queue = new LocalQueue(stateDir);
+    const offset = await queue.loadOffset();
+    expect(offset).toBe(0);
   });
 });

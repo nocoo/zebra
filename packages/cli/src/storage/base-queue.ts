@@ -1,4 +1,4 @@
-import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, appendFile, rename, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
@@ -41,6 +41,24 @@ export class BaseQueue<T> {
     await this.ensureDir();
     const data = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
     await appendFile(this.queuePath, data);
+  }
+
+  /**
+   * Atomically overwrite the queue with new records (write tmp → rename).
+   *
+   * This replaces the entire queue file contents. Empty array clears the file.
+   * The atomic write-then-rename prevents partial reads if the process crashes
+   * mid-write.
+   */
+  async overwrite(records: T[]): Promise<void> {
+    await this.ensureDir();
+    const data =
+      records.length > 0
+        ? records.map((r) => JSON.stringify(r)).join("\n") + "\n"
+        : "";
+    const tmpPath = this.queuePath + ".tmp";
+    await writeFile(tmpPath, data);
+    await rename(tmpPath, this.queuePath);
   }
 
   /**
