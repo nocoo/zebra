@@ -92,6 +92,10 @@ function ModelTooltip({
 /**
  * Horizontal stacked bar chart showing token breakdown by model.
  * Top 10 models by total token count.
+ *
+ * ModelAggregate rows are keyed by source:model, so the same model used in
+ * multiple sources (e.g. GLM-4.7 via OpenCode + Gemini CLI) produces separate
+ * entries.  We merge them here so the chart shows one bar per model.
  */
 export function ModelBreakdownChart({
   data,
@@ -110,12 +114,42 @@ export function ModelBreakdownChart({
     );
   }
 
-  // Show top 10 models
-  const top = data.slice(0, 10).map((m) => ({
-    ...m,
-    name: shortModel(m.model),
-    sourceLabel: sourceLabel(m.source),
-  }));
+  // Merge entries that share the same model name across different sources
+  const merged = new Map<
+    string,
+    { model: string; sources: string[]; input: number; output: number; cached: number; total: number }
+  >();
+  for (const m of data) {
+    const existing = merged.get(m.model);
+    if (existing) {
+      existing.input += m.input;
+      existing.output += m.output;
+      existing.cached += m.cached;
+      existing.total += m.total;
+      if (!existing.sources.includes(m.source)) {
+        existing.sources.push(m.source);
+      }
+    } else {
+      merged.set(m.model, {
+        model: m.model,
+        sources: [m.source],
+        input: m.input,
+        output: m.output,
+        cached: m.cached,
+        total: m.total,
+      });
+    }
+  }
+
+  // Sort by total descending, take top 10
+  const top = Array.from(merged.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10)
+    .map((m) => ({
+      ...m,
+      name: shortModel(m.model),
+      sourceLabel: m.sources.map(sourceLabel).join(", "),
+    }));
 
   // Reverse for horizontal bar (top item at top)
   const chartData = [...top].reverse();
