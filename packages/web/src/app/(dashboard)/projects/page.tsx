@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { formatDuration } from "@/lib/date-helpers";
 import { sourceLabel } from "@/hooks/use-usage-data";
+import { agentColor, withAlpha } from "@/lib/palette";
 import {
   useProjects,
   type Project,
@@ -272,8 +273,14 @@ function ProjectCard({
               key={`${alias.source}:${alias.project_ref}`}
               className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2 py-1 text-[11px]"
             >
-              <span className="text-muted-foreground">
-                {sourceLabel(alias.source)}:
+              <span
+                className="rounded px-1 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: withAlpha(agentColor(alias.source).token, 0.12),
+                  color: agentColor(alias.source).color,
+                }}
+              >
+                {sourceLabel(alias.source)}
               </span>
               <code className="font-mono text-foreground break-all">
                 {alias.project_ref}
@@ -548,8 +555,16 @@ export default function ProjectsPage() {
                         key={key}
                         className="border-b border-border/30 last:border-0"
                       >
-                        <td className="px-4 py-2.5 text-foreground whitespace-nowrap">
-                          {sourceLabel(ref.source)}
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <span
+                            className="inline-block rounded-md px-2 py-0.5 text-xs font-medium"
+                            style={{
+                              backgroundColor: withAlpha(agentColor(ref.source).token, 0.12),
+                              color: agentColor(ref.source).color,
+                            }}
+                          >
+                            {sourceLabel(ref.source)}
+                          </span>
                         </td>
                         <td className="px-4 py-2.5">
                           <code className="font-mono text-xs text-muted-foreground break-all">
