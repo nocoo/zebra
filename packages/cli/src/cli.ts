@@ -1,4 +1,4 @@
-import { defineCommand } from "citty";
+import { defineCommand, showUsage } from "citty";
 import { consola } from "consola";
 import pc from "picocolors";
 import { homedir } from "node:os";
@@ -608,5 +608,13 @@ export const main = defineCommand({
     notify: notifyCommand,
     init: initCommand,
     uninstall: uninstallCommand,
+  },
+  run({ rawArgs }) {
+    // Show usage only when invoked directly without a subcommand.
+    // citty still calls the parent run() after executing a subcommand,
+    // but rawArgs will be non-empty (e.g. ["status"]) in that case.
+    if (rawArgs.length === 0) {
+      showUsage(main);
+    }
   },
 });
