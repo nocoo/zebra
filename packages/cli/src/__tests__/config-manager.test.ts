@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConfigManager } from "../config/manager.js";
@@ -52,9 +52,10 @@ describe("ConfigManager", () => {
     expect(config.token).toBe("second");
   });
 
-  it("should expose configPath", () => {
+  it("should expose configPath and configDir", () => {
     const manager = new ConfigManager(tempDir);
     expect(manager.configPath).toBe(join(tempDir, "config.json"));
+    expect(manager.configDir).toBe(tempDir);
   });
 
   it("should use config.dev.json in dev mode", () => {
@@ -74,10 +75,139 @@ describe("ConfigManager", () => {
   });
 
   it("should handle corrupted config file gracefully", async () => {
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(join(tempDir, "config.json"), "not valid json{{{");
     const manager = new ConfigManager(tempDir);
     const config = await manager.load();
     expect(config).toEqual({});
+  });
+
+  // ---------------------------------------------------------------------------
+  // Shared device.json tests
+  // ---------------------------------------------------------------------------
+
+  describe("ensureDeviceId (shared device.json)", () => {
+    it("should generate a new UUID and write device.json on first call", async () => {
+      const manager = new ConfigManager(tempDir);
+      const id = await manager.ensureDeviceId();
+
+      expect(id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+
+      // Verify device.json was written
+      const raw = await readFile(join(tempDir, "device.json"), "utf-8");
+      const data = JSON.parse(raw);
+      expect(data.deviceId).toBe(id);
+    });
+
+    it("should return the same ID on subsequent calls", async () => {
+      const manager = new ConfigManager(tempDir);
+      const first = await manager.ensureDeviceId();
+      const second = await manager.ensureDeviceId();
+      expect(second).toBe(first);
+    });
+
+    it("should share device ID across dev and prod managers", async () => {
+      const prod = new ConfigManager(tempDir, false);
+      const dev = new ConfigManager(tempDir, true);
+
+      const prodId = await prod.ensureDeviceId();
+      const devId = await dev.ensureDeviceId();
+
+      expect(devId).toBe(prodId);
+    });
+
+    it("should migrate deviceId from legacy prod config to device.json", async () => {
+      // Simulate a legacy config.json with embedded deviceId
+      const legacyId = "legacy-uuid-1234";
+      await writeFile(
+        join(tempDir, "config.json"),
+        JSON.stringify({ token: "tk_abc", deviceId: legacyId }, null, 2),
+      );
+
+      const manager = new ConfigManager(tempDir);
+      const id = await manager.ensureDeviceId();
+
+      // Should preserve the legacy ID
+      expect(id).toBe(legacyId);
+
+      // device.json should now have it
+      const deviceRaw = await readFile(join(tempDir, "device.json"), "utf-8");
+      expect(JSON.parse(deviceRaw).deviceId).toBe(legacyId);
+
+      // config.json should no longer have deviceId, but still have token
+      const configRaw = await readFile(join(tempDir, "config.json"), "utf-8");
+      const config = JSON.parse(configRaw);
+      expect(config.token).toBe("tk_abc");
+      expect(config.deviceId).toBeUndefined();
+    });
+
+    it("should migrate deviceId from legacy dev config to device.json", async () => {
+      const legacyId = "dev-legacy-uuid-5678";
+      await writeFile(
+        join(tempDir, "config.dev.json"),
+        JSON.stringify({ token: "tk_dev", deviceId: legacyId }, null, 2),
+      );
+
+      const manager = new ConfigManager(tempDir, true);
+      const id = await manager.ensureDeviceId();
+
+      expect(id).toBe(legacyId);
+
+      // device.json written
+      const deviceRaw = await readFile(join(tempDir, "device.json"), "utf-8");
+      expect(JSON.parse(deviceRaw).deviceId).toBe(legacyId);
+
+      // config.dev.json cleaned
+      const configRaw = await readFile(
+        join(tempDir, "config.dev.json"),
+        "utf-8",
+      );
+      const config = JSON.parse(configRaw);
+      expect(config.token).toBe("tk_dev");
+      expect(config.deviceId).toBeUndefined();
+    });
+
+    it("should prefer existing device.json over legacy config deviceId", async () => {
+      // device.json already exists
+      const sharedId = "shared-device-id";
+      await writeFile(
+        join(tempDir, "device.json"),
+        JSON.stringify({ deviceId: sharedId }),
+      );
+
+      // Legacy config also has a (different) deviceId
+      await writeFile(
+        join(tempDir, "config.json"),
+        JSON.stringify({ token: "tk", deviceId: "stale-legacy-id" }),
+      );
+
+      const manager = new ConfigManager(tempDir);
+      const id = await manager.ensureDeviceId();
+
+      // Should use device.json, not legacy config
+      expect(id).toBe(sharedId);
+    });
+
+    it("should handle corrupted device.json gracefully", async () => {
+      await writeFile(join(tempDir, "device.json"), "not json!!!");
+      const manager = new ConfigManager(tempDir);
+      const id = await manager.ensureDeviceId();
+
+      // Should generate a new ID (no legacy config to migrate from)
+      expect(id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+    });
+
+    it("should create directory when writing device.json to nested path", async () => {
+      const nested = join(tempDir, "deep", "nested");
+      const manager = new ConfigManager(nested);
+      const id = await manager.ensureDeviceId();
+
+      expect(id).toBeTruthy();
+      const raw = await readFile(join(nested, "device.json"), "utf-8");
+      expect(JSON.parse(raw).deviceId).toBe(id);
+    });
   });
 });

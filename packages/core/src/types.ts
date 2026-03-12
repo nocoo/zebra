@@ -342,7 +342,10 @@ export interface UpdateDeviceRequest {
 export interface PewConfig {
   /** Auth token obtained via `pew login` */
   token?: string;
-  /** Stable device identifier (UUID, generated once per CLI install) */
+  /**
+   * @deprecated Since v1.6.0, deviceId lives in shared device.json (not per-env config).
+   * Kept for backward-compat migration — ensureDeviceId() moves it on first read.
+   */
   deviceId?: string;
 }
 
