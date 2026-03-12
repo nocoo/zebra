@@ -67,6 +67,19 @@ UNIQUE(user_id, device_id, source, model, hour_start)
 - **No device metadata table** — no alias/name storage
 - **`session_records`** has no `device_id` column (only `usage_records` tracks devices)
 
+### The `default` Device
+
+Old CLI versions (pre-006) did not send `device_id`, so their records carry the
+column default `'default'`. This is **not** a UUID and must be handled distinctly:
+
+| Aspect | Behavior |
+|--------|----------|
+| **Display name** | `"Legacy Device"` (hardcoded in `deviceLabel()`, not derived from `shortDeviceId`) |
+| **Alias** | Users **may** set an alias for `device_id = 'default'` via `PUT /api/devices`. Once set, the alias replaces `"Legacy Device"` everywhere. |
+| **Charts** | Appears as a normal line/bar alongside UUID devices. No special styling. |
+| **Management page** | Shown with a subtle info badge: `"Records from CLI versions before device tracking was added."` |
+| **`shortDeviceId('default')`** | Returns `'default'` unchanged (not truncated to 8 chars). The `shortDeviceId` helper must check for non-UUID inputs. |
+
 ---
 
 ## Database Changes
@@ -82,11 +95,19 @@ CREATE TABLE IF NOT EXISTS device_aliases (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, device_id)
 );
+
+-- Case-insensitive uniqueness: one alias name per user, regardless of casing
+CREATE UNIQUE INDEX IF NOT EXISTS idx_device_alias_unique
+  ON device_aliases (user_id, LOWER(TRIM(alias)));
 ```
 
 Design notes:
 
 - **Composite PK** `(user_id, device_id)` — no extra index needed, one alias per device per user
+- **Alias uniqueness** — `idx_device_alias_unique` on `(user_id, LOWER(TRIM(alias)))` prevents
+  two devices from sharing the same name (case-insensitive, trimmed). SQLite `UNIQUE INDEX`
+  on expressions handles this at the DB level. The API layer also pre-checks for duplicates
+  and returns a `409 Conflict` with a descriptive message before hitting the constraint.
 - **No foreign key to usage_records** — devices are discovered from usage data, not pre-registered
 - **`alias` is NOT NULL** — if the row exists, it has a name. No row = no alias = show short UUID
 - **Lightweight** — no device type, OS, hostname columns. Keep it simple, iterate later.
@@ -115,6 +136,7 @@ interface ByDeviceResponse {
     output_tokens: number;
     cached_input_tokens: number;
     reasoning_output_tokens: number;
+    estimated_cost: number;     // Server-computed, see "Cost Estimation" below
     sources: string[];          // GROUP_CONCAT(DISTINCT source)
     models: string[];           // GROUP_CONCAT(DISTINCT model)
   }>;
@@ -130,7 +152,23 @@ interface ByDeviceResponse {
 }
 ```
 
-SQL for `devices`:
+#### Cost Estimation
+
+Estimated cost is computed **server-side** to ensure a single consistent formula.
+The API route iterates per-device detail rows (not the aggregated totals) using
+the same `lookupPricing()` + `estimateCost()` pipeline from `@/lib/pricing` that
+powers the existing `/api/usage` endpoint. Specifically:
+
+1. Query detail rows grouped by `(device_id, source, model)` with token sums.
+2. For each `(source, model)` pair, call `lookupPricing(pricingMap, model, source)`
+   to resolve per-million rates, then `estimateCost(input, output, cached, pricing)`.
+3. Sum per-device and attach as `estimated_cost` (USD, 6 decimal places).
+
+This matches the existing cost calculation in `cost-helpers.ts:55` which also
+operates on per-`(source, model)` detail rows. The front-end receives a final
+number and does **not** re-derive cost from aggregated token counts.
+
+SQL for `devices` (summary — used for display fields):
 
 ```sql
 SELECT
@@ -154,6 +192,26 @@ WHERE ur.user_id = ?
 GROUP BY ur.device_id
 ORDER BY total_tokens DESC
 ```
+
+SQL for `devices` (cost detail — used to compute `estimated_cost`):
+
+```sql
+SELECT
+  ur.device_id,
+  ur.source,
+  ur.model,
+  SUM(ur.input_tokens) AS input_tokens,
+  SUM(ur.output_tokens) AS output_tokens,
+  SUM(ur.cached_input_tokens) AS cached_input_tokens
+FROM usage_records ur
+WHERE ur.user_id = ?
+  AND ur.hour_start >= ?
+  AND ur.hour_start < ?
+GROUP BY ur.device_id, ur.source, ur.model
+```
+
+The API route joins these two result sets in-memory: for each device, sum the
+per-`(source, model)` costs into `estimated_cost`, then merge into the summary row.
 
 SQL for `timeline`:
 
@@ -211,11 +269,33 @@ interface UpdateDeviceResponse {
 }
 ```
 
-Implementation: `INSERT OR REPLACE INTO device_aliases (user_id, device_id, alias, updated_at) VALUES (?, ?, ?, datetime('now'))`
+Implementation (two-step):
+
+1. **Duplicate check** — query for an existing alias with the same normalized name
+   belonging to a *different* device:
+   ```sql
+   SELECT device_id FROM device_aliases
+   WHERE user_id = ? AND LOWER(TRIM(alias)) = LOWER(TRIM(?)) AND device_id != ?
+   LIMIT 1
+   ```
+   If a row is returned → respond `409 Conflict` with
+   `{ error: "Alias already in use by another device" }`.
+
+2. **Upsert** — write the alias using `ON CONFLICT ... DO UPDATE` (not `INSERT OR REPLACE`,
+   which would delete + re-insert and could violate the alias uniqueness index if another
+   device already holds the same name):
+   ```sql
+   INSERT INTO device_aliases (user_id, device_id, alias, updated_at)
+   VALUES (?, ?, ?, datetime('now'))
+   ON CONFLICT (user_id, device_id) DO UPDATE
+     SET alias = excluded.alias, updated_at = excluded.updated_at
+   ```
 
 Validation:
 - `device_id` must be a non-empty string
-- `alias` must be 1-50 characters, trimmed
+- `alias` must be 1-50 characters after `trim()`
+- `alias` must be unique per user (case-insensitive, trimmed) — enforced by both
+  the API duplicate check and the DB `idx_device_alias_unique` index
 - `device_id` must exist in user's `usage_records` (prevent aliasing phantom devices)
 
 ---
@@ -257,11 +337,10 @@ devices: "By Device",
 
 | Function | Purpose |
 |----------|---------|
-| `shortDeviceId(uuid)` | Returns first 8 chars of UUID |
-| `deviceLabel(device)` | Returns `alias ?? shortDeviceId(device_id)` |
+| `shortDeviceId(id)` | Returns first 8 chars of UUID; returns `id` unchanged if not a UUID (e.g. `'default'`) |
+| `deviceLabel(device)` | Returns `alias ?? shortDeviceId(device_id)` — see "Default Device" below |
 | `toDeviceTrendPoints(timeline, devices)` | Pivots timeline into `{ date, [deviceLabel]: tokens }[]` for LineChart |
 | `toDeviceSharePoints(timeline, devices)` | Converts to percentage-based points for 100% stacked AreaChart |
-| `groupByDevice(devices, pricingMap)` | Enriches device summaries with estimated cost |
 
 ### Chart Components
 
@@ -315,7 +394,7 @@ Structure follows the By Model page pattern (`packages/web/src/app/(dashboard)/m
 - Period selector reuses `PeriodSelector` component
 - Loading state: skeleton (reuse existing pattern)
 - Empty state: "No device data. Sync from multiple devices to compare."
-- Device labels: alias if set, otherwise short UUID (first 8 chars)
+- Device labels: alias if set, `"Legacy Device"` for `device_id = 'default'`, otherwise short UUID (first 8 chars)
 
 ### Management Page: `/manage-devices` (`packages/web/src/app/(dashboard)/manage-devices/page.tsx`)
 
@@ -341,6 +420,16 @@ Structure follows the Projects page pattern (`packages/web/src/app/(dashboard)/p
 │  │  Tools: Gemini CLI                         │   │
 │  │  2 models · 500K tokens                    │   │
 │  └────────────────────────────────────────────┘   │
+│                                                   │
+│  DeviceCard (default device):                     │
+│  ┌────────────────────────────────────────────┐   │
+│  │  [Legacy Device ✏️]              default     │   │
+│  │  ℹ Records from CLI versions before device  │   │
+│  │    tracking was added.                      │   │
+│  │  First seen: Jan 15 · Last seen: Feb 28    │   │
+│  │  Tools: Claude Code                        │   │
+│  │  1 model · 200K tokens                     │   │
+│  └────────────────────────────────────────────┘   │
 ├──────────────────────────────────────────────────┤
 │  ℹ Device IDs are auto-generated per machine      │
 │    when you first run `pew sync`.                 │
@@ -349,7 +438,10 @@ Structure follows the Projects page pattern (`packages/web/src/app/(dashboard)/p
 
 Interactions (all inline, no modals — matches Projects pattern):
 - **Click alias** → inline text input, commits on blur/Enter → `PUT /api/devices`
-- **No alias** → shows `shortDeviceId()` + placeholder "Set a name..."
+- **Duplicate alias** → show inline error: "This name is already used by another device"
+  (409 response from server)
+- **No alias (UUID device)** → shows `shortDeviceId()` + placeholder "Set a name..."
+- **No alias (default device)** → shows `"Legacy Device"` + placeholder "Set a name..."
 - **No delete** — devices are auto-discovered from usage data, not user-created
 - **Full refetch** after every mutation
 
@@ -372,8 +464,75 @@ Interactions (all inline, no modals — matches Projects pattern):
 | **New** | `packages/web/src/app/(dashboard)/devices/page.tsx` |
 | **New** | `packages/web/src/app/(dashboard)/manage-devices/page.tsx` |
 | **Edit** | `packages/web/src/lib/navigation.ts` (add 2 sidebar entries + route labels) |
+| **New** | `packages/web/src/__tests__/device-helpers.test.ts` |
+| **Edit** | `packages/web/src/__tests__/navigation.test.ts` (add device nav tests) |
+| **New** | `packages/web/src/__tests__/by-device.test.ts` |
+| **New** | `packages/web/src/__tests__/devices.test.ts` |
 
-Total: **11 new files + 2 edits**. No CLI or Worker changes required.
+Total: **11 new files + 2 edits + 5 test files**. No CLI or Worker changes required.
+
+---
+
+## Testing Plan
+
+Tests follow the project's existing conventions (`packages/web/src/__tests__/`).
+
+### L1 — Unit Tests (pure logic, no I/O)
+
+**`device-helpers.test.ts`** — covers all helper functions:
+
+| Test | Input | Expected |
+|------|-------|----------|
+| `shortDeviceId` with UUID | `'a3f8c2d1-1234-5678-9abc-def012345678'` | `'a3f8c2d1'` |
+| `shortDeviceId` with `'default'` | `'default'` | `'default'` (unchanged) |
+| `shortDeviceId` with empty string | `''` | `''` |
+| `deviceLabel` with alias | `{ alias: 'MacBook', device_id: '...' }` | `'MacBook'` |
+| `deviceLabel` without alias, UUID | `{ alias: null, device_id: 'a3f8c2d1-...' }` | `'a3f8c2d1'` |
+| `deviceLabel` without alias, default | `{ alias: null, device_id: 'default' }` | `'Legacy Device'` |
+| `toDeviceTrendPoints` | timeline + devices fixture | pivoted `{ date, [label]: tokens }[]` |
+| `toDeviceSharePoints` | timeline + devices fixture | percentage rows summing to 100 |
+
+**`navigation.test.ts`** (extend existing):
+
+| Test | What |
+|------|------|
+| Analytics group includes `/devices` | Verify `By Device` entry exists with `Monitor` icon |
+| Settings group includes `/manage-devices` | Verify `Devices` entry exists with `MonitorSmartphone` icon |
+| `ROUTE_LABELS` includes new entries | `devices → "By Device"`, `manage-devices → "Devices"` |
+| `breadcrumbsFromPathname('/devices')` | Returns `[Home, By Device]` |
+
+### L2 — API Tests (mocked D1, real route handlers)
+
+**`by-device.test.ts`** — `GET /api/usage/by-device`:
+
+| Test | What |
+|------|------|
+| Returns devices + timeline for valid date range | Happy path with 2 devices |
+| Includes `estimated_cost` per device | Verify cost is a number, > 0 for devices with tokens |
+| Joins alias from `device_aliases` | Device with alias → `alias: "MacBook"`, without → `alias: null` |
+| `device_id = 'default'` appears in results | Legacy records included, not filtered out |
+| `sources` and `models` are arrays | Parsed from `GROUP_CONCAT` |
+| Missing/invalid auth → 401 | |
+| Missing date params → 400 | |
+
+**`devices.test.ts`** — `GET /api/devices` + `PUT /api/devices`:
+
+| Test | What |
+|------|------|
+| GET returns all devices with stats | Includes `device_id`, `alias`, `first_seen`, `last_seen`, `total_tokens` |
+| GET includes `'default'` device | Not filtered out |
+| PUT creates alias | New alias → 200, refetch shows alias |
+| PUT updates existing alias | Overwrite → 200 |
+| PUT rejects empty alias | `""` → 400 |
+| PUT rejects alias > 50 chars | → 400 |
+| PUT rejects duplicate alias (case-insensitive) | `"MacBook"` taken → `"macbook"` → 409 |
+| PUT allows same alias for same device | Updating own alias to same value → 200 |
+| PUT rejects phantom device_id | device_id not in usage_records → 400 |
+| PUT alias for `'default'` device | Allowed → 200 |
+
+### L3 — Integration (not required for this PR)
+
+Covered by existing E2E infrastructure if needed later.
 
 ---
 
@@ -383,13 +542,17 @@ Total: **11 new files + 2 edits**. No CLI or Worker changes required.
 |---|--------|-------|
 | 1 | `feat: add device_aliases migration` | `scripts/migrations/007-device-aliases.sql` |
 | 2 | `feat: add device-related types to core` | `packages/core/src/types.ts` |
-| 3 | `feat: add GET /api/usage/by-device endpoint` | API route |
-| 4 | `feat: add GET/PUT /api/devices endpoint` | API route |
-| 5 | `feat: add device data hooks and helpers` | hooks + lib |
-| 6 | `feat: add device chart components` | 3 chart components |
-| 7 | `feat: add By Device analytics page` | `/devices` page |
-| 8 | `feat: add Devices management page` | `/manage-devices` page |
-| 9 | `feat: add device entries to sidebar navigation` | `navigation.ts` |
+| 3 | `test: add by-device API tests` | `__tests__/by-device.test.ts` (TDD — tests first) |
+| 4 | `feat: add GET /api/usage/by-device endpoint` | API route (make tests pass) |
+| 5 | `test: add devices API tests` | `__tests__/devices.test.ts` (TDD — tests first) |
+| 6 | `feat: add GET/PUT /api/devices endpoint` | API route (make tests pass) |
+| 7 | `test: add device-helpers tests` | `__tests__/device-helpers.test.ts` (TDD — tests first) |
+| 8 | `feat: add device data hooks and helpers` | hooks + lib (make tests pass) |
+| 9 | `feat: add device chart components` | 3 chart components |
+| 10 | `feat: add By Device analytics page` | `/devices` page |
+| 11 | `feat: add Devices management page` | `/manage-devices` page |
+| 12 | `test: add device navigation tests` | extend `navigation.test.ts` (TDD — tests first) |
+| 13 | `feat: add device entries to sidebar navigation` | `navigation.ts` (make tests pass) |
 
 ---
 
