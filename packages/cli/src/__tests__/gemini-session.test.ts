@@ -94,7 +94,7 @@ describe("collectGeminiSessions", () => {
     expect(s.lastMessageAt).toBe("2026-03-07T10:15:00.000Z");
     expect(s.durationSeconds).toBe(900); // 15 min
     expect(s.model).toBe("gemini-2.5-pro");
-    expect(s.projectRef).toBe("proj-abc");
+    expect(s.projectRef).toBe("aeb3ff0f7e5763f9"); // sha256("proj-abc")[0:16]
     expect(s.snapshotAt).toBeDefined();
   });
 

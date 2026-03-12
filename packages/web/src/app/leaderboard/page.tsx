@@ -452,6 +452,13 @@ export default function LeaderboardPage() {
       {/* Top-right icons — same pattern as landing page */}
       <div className="absolute right-6 top-4 z-50 flex items-center gap-1">
         <a
+          href="/privacy"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
+          aria-label="Privacy policy"
+        >
+          <ShieldCheck className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+        </a>
+        <a
           href="https://github.com/nicnocquee/pew"
           target="_blank"
           rel="noopener noreferrer"
@@ -576,14 +583,14 @@ export default function LeaderboardPage() {
         )}
       </main>
 
-      {/* Footer — same pattern as landing page */}
+      {/* Footer — same as landing page */}
       <footer className="px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
-          Powered by{" "}
-          <Link href="/" className="text-primary hover:underline font-handwriting">
-            pew
-          </Link>{" "}
-          &mdash; AI token usage tracker
+          © {new Date().getFullYear()} pew.md
+          <span className="mx-1.5">·</span>
+          <a href="/privacy" className="hover:text-foreground transition-colors">
+            Privacy
+          </a>
         </p>
       </footer>
     </div>

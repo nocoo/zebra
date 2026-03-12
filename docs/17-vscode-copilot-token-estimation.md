@@ -8,7 +8,7 @@
 
 ## Context
 
-Pew currently tracks 5 AI coding tools (Claude Code, Codex, Gemini CLI, OpenCode, OpenClaw),
+Pew currently tracks 6 AI coding tools (Claude Code, Codex, Gemini CLI, OpenCode, OpenClaw, VS Code Copilot),
 all of which write structured logs locally with **exact** token counts provided by
 their respective APIs.
 

@@ -5,7 +5,7 @@
 
 ## Overview
 
-Pew collects token usage from 4 local AI coding tools and provides a SaaS dashboard
+Pew collects token usage from 6 local AI coding tools and provides a SaaS dashboard
 with auth, data display, public profiles, and leaderboards.
 
 ### Supported AI Tools
@@ -13,9 +13,11 @@ with auth, data display, public profiles, and leaderboards.
 | # | Tool | Data Location |
 |---|------|---------------|
 | 1 | Claude Code | `~/.claude/projects/**/` |
-| 2 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` |
-| 3 | OpenCode | `~/.local/share/opencode/storage/message/` |
-| 4 | OpenClaw | `~/.openclaw/agents/*/sessions/*.jsonl` |
+| 2 | Codex | `~/.codex/` |
+| 3 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` |
+| 4 | OpenCode | `~/.local/share/opencode/storage/message/` |
+| 5 | OpenClaw | `~/.openclaw/agents/*/sessions/*.jsonl` |
+| 6 | VS Code Copilot | `~/.config/github-copilot/chat/` |
 
 ### Tech Stack
 

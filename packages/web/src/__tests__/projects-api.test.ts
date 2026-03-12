@@ -358,6 +358,9 @@ describe("PATCH /api/projects/:id", () => {
       const body = await res.json();
       expect(body.name).toBe("New Name");
       expect(body.session_count).toBe(0);
+      expect(body.total_messages).toBe(0);
+      expect(body.total_duration).toBe(0);
+      expect(body.models).toEqual([]);
     });
 
     it("should add alias and return session stats", async () => {
@@ -380,6 +383,9 @@ describe("PATCH /api/projects/:id", () => {
             project_ref: "abc123",
             session_count: 5,
             last_active: "2026-03-10T12:00:00Z",
+            total_messages: 120,
+            total_duration: 3600,
+            models: "claude-4-opus,claude-4-sonnet",
           },
         ],
         meta: {},
@@ -393,6 +399,9 @@ describe("PATCH /api/projects/:id", () => {
       const body = await res.json();
       expect(body.session_count).toBe(5);
       expect(body.last_active).toBe("2026-03-10T12:00:00Z");
+      expect(body.total_messages).toBe(120);
+      expect(body.total_duration).toBe(3600);
+      expect(body.models).toEqual(["claude-4-opus", "claude-4-sonnet"]);
       expect(body.aliases).toEqual([
         { source: "claude-code", project_ref: "abc123" },
       ]);
@@ -418,6 +427,9 @@ describe("PATCH /api/projects/:id", () => {
             project_ref: "abc123",
             session_count: 5,
             last_active: "2026-03-10T12:00:00Z",
+            total_messages: 80,
+            total_duration: 1800,
+            models: "claude-4-opus",
           },
         ],
         meta: {},
@@ -456,6 +468,9 @@ describe("PATCH /api/projects/:id", () => {
             project_ref: "abc123",
             session_count: 5,
             last_active: "2026-03-10T12:00:00Z",
+            total_messages: 50,
+            total_duration: 900,
+            models: null,
           },
         ],
         meta: {},
@@ -664,7 +679,7 @@ describe("POST /api/projects", () => {
 
       mockClient.execute.mockResolvedValue({ meta: {} });
       mockClient.query.mockResolvedValueOnce({
-        results: [{ session_count: 3, last_active: "2026-03-10T00:00:00Z" }],
+        results: [{ session_count: 3, last_active: "2026-03-10T00:00:00Z", total_messages: 15, total_duration: 300, models: null }],
         meta: {},
       });
       // Read back created_at
@@ -751,6 +766,9 @@ describe("POST /api/projects", () => {
       const body = await res.json();
       expect(body.session_count).toBe(0);
       expect(body.last_active).toBeNull();
+      expect(body.total_messages).toBe(0);
+      expect(body.total_duration).toBe(0);
+      expect(body.models).toEqual([]);
       // created_at should come from server, not fabricated ISO string
       expect(body.created_at).toBe("2026-03-10 12:00:00");
     });
@@ -766,7 +784,7 @@ describe("POST /api/projects", () => {
       // Stats query returns real data
       mockClient.query.mockResolvedValueOnce({
         results: [
-          { session_count: 42, last_active: "2026-03-10T18:30:00Z" },
+          { session_count: 42, last_active: "2026-03-10T18:30:00Z", total_messages: 350, total_duration: 7200, models: "claude-4-opus,gemini-2.5-pro" },
         ],
         meta: {},
       });
@@ -787,6 +805,9 @@ describe("POST /api/projects", () => {
       const body = await res.json();
       expect(body.session_count).toBe(42);
       expect(body.last_active).toBe("2026-03-10T18:30:00Z");
+      expect(body.total_messages).toBe(350);
+      expect(body.total_duration).toBe(7200);
+      expect(body.models).toEqual(["claude-4-opus", "gemini-2.5-pro"]);
       expect(body.created_at).toBe("2026-03-10 12:00:00");
     });
   });
@@ -824,7 +845,7 @@ describe("POST /api/projects", () => {
 
       mockClient.execute.mockResolvedValue({ meta: {} });
       mockClient.query.mockResolvedValueOnce({
-        results: [{ session_count: 10, last_active: "2026-03-10T15:00:00Z" }],
+        results: [{ session_count: 10, last_active: "2026-03-10T15:00:00Z", total_messages: 75, total_duration: 1500, models: "gemini-2.5-pro" }],
         meta: {},
       });
 
@@ -841,6 +862,9 @@ describe("POST /api/projects", () => {
         { source: "opencode", project_ref: "xyz789" },
       ]);
       expect(body.session_count).toBe(10);
+      expect(body.total_messages).toBe(75);
+      expect(body.total_duration).toBe(1500);
+      expect(body.models).toEqual(["gemini-2.5-pro"]);
     });
   });
 });
@@ -890,6 +914,9 @@ describe("GET /api/projects", () => {
             project_ref: "abc",
             session_count: 5,
             last_active: "2026-03-10T12:00:00Z",
+            total_messages: 120,
+            total_duration: 3600,
+            models: "claude-4-opus,claude-4-sonnet",
           },
         ],
         meta: {},
@@ -901,6 +928,9 @@ describe("GET /api/projects", () => {
             project_ref: "unassigned-ref",
             session_count: 2,
             last_active: "2026-03-09T00:00:00Z",
+            total_messages: 15,
+            total_duration: 600,
+            models: "gemini-2.5-pro",
           },
         ],
         meta: {},
@@ -913,11 +943,17 @@ describe("GET /api/projects", () => {
     expect(body.projects).toHaveLength(1);
     expect(body.projects[0].name).toBe("Project A");
     expect(body.projects[0].session_count).toBe(5);
+    expect(body.projects[0].total_messages).toBe(120);
+    expect(body.projects[0].total_duration).toBe(3600);
+    expect(body.projects[0].models).toEqual(["claude-4-opus", "claude-4-sonnet"]);
     expect(body.projects[0].aliases).toEqual([
       { source: "claude-code", project_ref: "abc" },
     ]);
     expect(body.unassigned).toHaveLength(1);
     expect(body.unassigned[0].source).toBe("opencode");
+    expect(body.unassigned[0].total_messages).toBe(15);
+    expect(body.unassigned[0].total_duration).toBe(600);
+    expect(body.unassigned[0].models).toEqual(["gemini-2.5-pro"]);
   });
 
   it("should handle empty state", async () => {

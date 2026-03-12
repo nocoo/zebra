@@ -115,7 +115,7 @@ describe("collectOpenClawSessions", () => {
     expect(s.lastMessageAt).toBe("2026-03-07T10:15:00.000Z");
     expect(s.durationSeconds).toBe(900); // 15 min
     expect(s.model).toBe("claude-sonnet-4"); // last seen
-    expect(s.projectRef).toBe("my-agent");
+    expect(s.projectRef).toBe("178890c4e2da4e09"); // sha256("my-agent")[0:16]
     expect(s.snapshotAt).toBeDefined();
   });
 
@@ -137,7 +137,7 @@ describe("collectOpenClawSessions", () => {
 
     const result = await collectOpenClawSessions(f);
     expect(result).toHaveLength(1);
-    expect(result[0].projectRef).toBe("code-reviewer");
+    expect(result[0].projectRef).toBe("e08ba693bb6ad36a"); // sha256("code-reviewer")[0:16]
   });
 
   it("should set projectRef to null when path has no agents pattern", async () => {

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, Github } from "lucide-react";
+import { Menu, Github, ShieldCheck } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { ThemeToggle } from "./theme-toggle";
@@ -79,6 +79,13 @@ function AppShellInner({ children }: AppShellProps) {
             <Breadcrumbs items={breadcrumbs} />
           </div>
           <div className="flex items-center gap-1">
+            <a
+              href="/privacy"
+              aria-label="Privacy policy"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <ShieldCheck className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.5} />
+            </a>
             <a
               href="https://github.com/nocoo/pew"
               target="_blank"

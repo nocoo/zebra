@@ -366,7 +366,7 @@ describe("executeSessionSync", () => {
     expect(records[0].user_messages).toBe(2);
     expect(records[0].assistant_messages).toBe(2);
     expect(records[0].model).toBe("gpt-5.4");
-    expect(records[0].project_ref).toBe("f630ad93b344");
+    expect(records[0].project_ref).toBe("f630ad93b344dd6b");
   });
 
   it("should skip unchanged Codex files on second sync", async () => {
@@ -754,7 +754,7 @@ describe("executeSessionSync", () => {
     expect(records[0].user_messages).toBe(2);
     expect(records[0].assistant_messages).toBe(2);
     expect(records[0].total_messages).toBe(4);
-    expect(records[0].project_ref).toBe("proj_1");
+    expect(records[0].project_ref).toBe("f8d5ee0ecbba1420"); // sha256("proj_1")[0:16]
   });
 
   it("should be incremental for OpenCode SQLite sessions (second sync with no new sessions)", async () => {

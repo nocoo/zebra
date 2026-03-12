@@ -9,6 +9,7 @@ import {
   formatMonth,
   detectPeakHours,
   getLocalToday,
+  formatDuration,
 } from "@/lib/date-helpers";
 import type { UsageRow } from "@/hooks/use-usage-data";
 
@@ -348,5 +349,44 @@ describe("getLocalToday", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-10T12:00:00.000Z"));
     expect(getLocalToday()).toBe("2026-03-10");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDuration
+// ---------------------------------------------------------------------------
+
+describe("formatDuration", () => {
+  it('returns "—" for 0 seconds', () => {
+    expect(formatDuration(0)).toBe("—");
+  });
+
+  it('returns "—" for negative values', () => {
+    expect(formatDuration(-10)).toBe("—");
+  });
+
+  it('returns "< 1m" for values under 60 seconds', () => {
+    expect(formatDuration(1)).toBe("< 1m");
+    expect(formatDuration(30)).toBe("< 1m");
+    expect(formatDuration(59)).toBe("< 1m");
+  });
+
+  it("returns minutes only when under 1 hour", () => {
+    expect(formatDuration(60)).toBe("1m");
+    expect(formatDuration(150)).toBe("2m");
+    expect(formatDuration(3540)).toBe("59m");
+  });
+
+  it("returns hours only when minutes are zero", () => {
+    expect(formatDuration(3600)).toBe("1h");
+    expect(formatDuration(7200)).toBe("2h");
+    expect(formatDuration(86400)).toBe("24h");
+  });
+
+  it("returns hours and minutes combined", () => {
+    expect(formatDuration(3660)).toBe("1h 1m");
+    expect(formatDuration(3700)).toBe("1h 1m");
+    expect(formatDuration(5400)).toBe("1h 30m");
+    expect(formatDuration(90061)).toBe("25h 1m");
   });
 });

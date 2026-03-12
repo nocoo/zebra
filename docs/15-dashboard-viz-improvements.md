@@ -4,7 +4,7 @@
 
 ## Product Positioning
 
-Pew tracks token usage from local AI coding tools (Claude Code, Gemini CLI, OpenCode, OpenClaw). The dashboard should:
+Pew tracks token usage from local AI coding tools (Claude Code, Codex, Gemini CLI, OpenCode, OpenClaw, VS Code Copilot). The dashboard should:
 
 1. **Quantify value** — Show users how much they're using and what it costs
 2. **Reveal patterns** — Surface productivity insights and usage trends

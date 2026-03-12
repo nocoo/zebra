@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type { SessionSnapshot, Source } from "@pew/core";
+import { hashProjectRef } from "../utils/hash-project-ref.js";
 
 /**
  * Collect session snapshots from a Gemini CLI session JSON file.
@@ -52,9 +53,11 @@ export async function collectGeminiSessions(
     ? `gemini:${sessionId}`
     : `gemini:${createHash("sha256").update(resolve(filePath)).digest("hex").slice(0, 16)}`;
 
-  // Extract projectRef
-  const projectRef =
+  // Extract projectRef — re-hash even if Gemini claims it's already hashed
+  // (we can't verify their hashing, so we normalize through our own pipeline)
+  const rawProjectHash =
     typeof session.projectHash === "string" ? session.projectHash : null;
+  const projectRef = hashProjectRef(rawProjectHash);
 
   // Count messages and track timestamps/model
   let userMessages = 0;

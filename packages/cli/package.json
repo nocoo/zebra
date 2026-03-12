@@ -1,6 +1,6 @@
 {
   "name": "@nocoo/pew",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "The contribution graph for AI-native developers",
   "type": "module",
   "bin": {
@@ -29,6 +29,9 @@
     "codex",
     "gemini",
     "opencode",
+    "openclaw",
+    "copilot",
+    "vscode-copilot",
     "cli"
   ],
   "license": "MIT",
