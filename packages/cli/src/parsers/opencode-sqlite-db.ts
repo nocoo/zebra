@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import type { MessageRow, QueryMessagesFn } from "./opencode-sqlite.js";
 import type { SessionRow, SessionMessageRow } from "./opencode-sqlite-session.js";
 
@@ -6,20 +6,21 @@ import type { SessionRow, SessionMessageRow } from "./opencode-sqlite-session.js
  * Open an OpenCode SQLite database in read-only mode
  * and return a queryMessages function for use with parseOpenCodeSqlite().
  *
- * Uses bun:sqlite for zero-dependency SQLite access.
+ * Uses better-sqlite3 for cross-runtime SQLite access (works under both
+ * Node.js and Bun, unlike bun:sqlite which is Bun-only).
  * Returns null if the database cannot be opened.
  */
 export function openMessageDb(
   dbPath: string,
 ): { queryMessages: QueryMessagesFn; close: () => void } | null {
-  let db: Database;
+  let db: InstanceType<typeof Database>;
   try {
     db = new Database(dbPath, { readonly: true });
   } catch {
     return null;
   }
 
-  const stmt = db.query<MessageRow, [number]>(
+  const stmt = db.prepare(
     `SELECT id, session_id, time_created, json_extract(data, '$.role') as role, data
      FROM message
      WHERE time_created >= ?
@@ -27,7 +28,7 @@ export function openMessageDb(
   );
 
   return {
-    queryMessages: (lastTimeCreated: number) => stmt.all(lastTimeCreated),
+    queryMessages: (lastTimeCreated: number) => stmt.all(lastTimeCreated) as MessageRow[],
     close: () => db.close(),
   };
 }
@@ -51,14 +52,14 @@ export function openSessionDb(
   querySessionMessages: QuerySessionMessagesFn;
   close: () => void;
 } | null {
-  let db: Database;
+  let db: InstanceType<typeof Database>;
   try {
     db = new Database(dbPath, { readonly: true });
   } catch {
     return null;
   }
 
-  const sessionStmt = db.query<SessionRow, [number]>(
+  const sessionStmt = db.prepare(
     `SELECT id, project_id, title, time_created, time_updated
      FROM session
      WHERE time_updated >= ?
@@ -67,7 +68,7 @@ export function openSessionDb(
 
   return {
     querySessions: (lastTimeUpdated: number) =>
-      sessionStmt.all(lastTimeUpdated),
+      sessionStmt.all(lastTimeUpdated) as SessionRow[],
 
     querySessionMessages: (sessionIds: string[]) => {
       if (sessionIds.length === 0) return [];
@@ -78,13 +79,13 @@ export function openSessionDb(
       for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
         const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
         const placeholders = chunk.map(() => "?").join(",");
-        const stmt = db.query<SessionMessageRow, string[]>(
+        const stmt = db.prepare(
           `SELECT session_id, json_extract(data, '$.role') as role, time_created, data
            FROM message
            WHERE session_id IN (${placeholders})
            ORDER BY time_created ASC`,
         );
-        results.push(...stmt.all(...chunk));
+        results.push(...(stmt.all(...chunk) as SessionMessageRow[]));
       }
       // Re-sort across chunks to maintain global time_created order
       if (sessionIds.length > CHUNK_SIZE) {
