@@ -119,8 +119,8 @@ Design notes:
 ### `GET /api/usage/by-device`
 
 New endpoint for the analytics page. Accepts `from`, `to` query parameters
-(same convention as `/api/usage`). When omitted, defaults to the same fallback
-range as `/api/usage` (all-time or a sensible default) — does **not** return 400.
+(same convention as `/api/usage`). When omitted, defaults to the last 30 days
+(`from` = 30 days ago, `to` = now), matching `/api/usage` behavior.
 
 Returns two datasets in a single response:
 
@@ -497,8 +497,8 @@ Tests follow the project's existing conventions (`packages/web/src/__tests__/`).
 | `deviceLabel` with alias | `{ alias: 'MacBook', device_id: '...' }` | `'MacBook'` |
 | `deviceLabel` without alias, UUID | `{ alias: null, device_id: 'a3f8c2d1-...' }` | `'a3f8c2d1'` |
 | `deviceLabel` without alias, default | `{ alias: null, device_id: 'default' }` | `'Legacy Device'` |
-| `toDeviceTrendPoints` | timeline + devices fixture | pivoted `{ date, [label]: tokens }[]` |
-| `toDeviceSharePoints` | timeline + devices fixture | percentage rows summing to 100 |
+| `toDeviceTrendPoints` | timeline fixture | pivoted `{ date, [device_id]: tokens }[]` — keyed by `device_id`, not label |
+| `toDeviceSharePoints` | timeline fixture | percentage rows summing to 100, keyed by `device_id` |
 
 **`navigation.test.ts`** (extend existing):
 
