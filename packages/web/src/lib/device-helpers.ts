@@ -91,26 +91,40 @@ export interface DeviceTrendPoint {
 /**
  * Pivot timeline into trend points keyed by device_id.
  * Used for multi-line LineChart where each line is a device.
+ * Missing devices on a given date are zero-filled so all dates
+ * have the same set of keys (required for Recharts multi-series).
  */
 export function toDeviceTrendPoints(
   timeline: DeviceTimelinePoint[]
 ): DeviceTrendPoint[] {
   if (timeline.length === 0) return [];
 
-  const byDate = new Map<string, DeviceTrendPoint>();
+  // Collect all unique device IDs and accumulate by (date, device)
+  const allDevices = new Set<string>();
+  const byDate = new Map<string, Map<string, number>>();
 
   for (const point of timeline) {
-    let entry = byDate.get(point.date);
-    if (!entry) {
-      entry = { date: point.date };
-      byDate.set(point.date, entry);
+    allDevices.add(point.device_id);
+    let dateMap = byDate.get(point.date);
+    if (!dateMap) {
+      dateMap = new Map();
+      byDate.set(point.date, dateMap);
     }
-    entry[point.device_id] = point.total_tokens;
+    dateMap.set(point.device_id, point.total_tokens);
   }
 
-  return Array.from(byDate.values()).sort((a, b) =>
-    (a.date as string).localeCompare(b.date as string)
-  );
+  // Build result with zero-fill for missing devices
+  const deviceKeys = Array.from(allDevices);
+
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dateMap]) => {
+      const point: DeviceTrendPoint = { date };
+      for (const id of deviceKeys) {
+        point[id] = dateMap.get(id) ?? 0;
+      }
+      return point;
+    });
 }
 
 /** Percentage-based data point for 100% stacked AreaChart */
@@ -121,17 +135,20 @@ export interface DeviceSharePoint {
 
 /**
  * Convert timeline to percentage-based points for stacked area chart.
- * Each date's device values sum to 100 (percentage).
+ * Each date's device values sum to 100 (percentage). Missing devices
+ * on a given date are zero-filled so all dates have the same key set.
  */
 export function toDeviceSharePoints(
   timeline: DeviceTimelinePoint[]
 ): DeviceSharePoint[] {
   if (timeline.length === 0) return [];
 
-  // First, group by date and collect device totals
+  // Collect all unique device IDs and group by date
+  const allDevices = new Set<string>();
   const byDate = new Map<string, Map<string, number>>();
 
   for (const point of timeline) {
+    allDevices.add(point.device_id);
     let dateMap = byDate.get(point.date);
     if (!dateMap) {
       dateMap = new Map();
@@ -140,31 +157,30 @@ export function toDeviceSharePoints(
     dateMap.set(point.device_id, point.total_tokens);
   }
 
+  const deviceKeys = Array.from(allDevices);
+
   // Convert to percentage points using largest-remainder rounding
-  const result: DeviceSharePoint[] = [];
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dateMap]) => {
+      const point: DeviceSharePoint = { date };
 
-  for (const [date, deviceMap] of byDate) {
-    const total = Array.from(deviceMap.values()).reduce((a, b) => a + b, 0);
-    const point: DeviceSharePoint = { date };
+      // Include zero-filled values for all devices
+      const values = deviceKeys.map((id) => dateMap.get(id) ?? 0);
+      const total = values.reduce((a, b) => a + b, 0);
 
-    if (total > 0) {
-      const entries = Array.from(deviceMap.entries());
-      const rawPcts = entries.map(([, tokens]) => (tokens / total) * 100);
-      const rounded = roundPercentages(rawPcts);
-
-      for (let i = 0; i < entries.length; i++) {
-        point[entries[i]![0]] = rounded[i]!;
+      if (total > 0) {
+        const rawPcts = values.map((v) => (v / total) * 100);
+        const rounded = roundPercentages(rawPcts);
+        for (let i = 0; i < deviceKeys.length; i++) {
+          point[deviceKeys[i]!] = rounded[i]!;
+        }
+      } else {
+        for (const id of deviceKeys) {
+          point[id] = 0;
+        }
       }
-    } else {
-      for (const [deviceId] of deviceMap) {
-        point[deviceId] = 0;
-      }
-    }
 
-    result.push(point);
-  }
-
-  return result.sort((a, b) =>
-    (a.date as string).localeCompare(b.date as string)
-  );
+      return point;
+    });
 }

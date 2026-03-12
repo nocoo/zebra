@@ -109,7 +109,26 @@ describe("toDeviceTrendPoints", () => {
     expect(result[0]!["dev-b"]).toBe(500);
     expect(result[1]!.date).toBe("2026-03-02");
     expect(result[1]!["dev-a"]).toBe(2000);
-    expect(result[1]!["dev-b"]).toBeUndefined();
+    // dev-b missing on 2026-03-02 should be zero-filled, not undefined
+    expect(result[1]!["dev-b"]).toBe(0);
+  });
+
+  it("should zero-fill all devices on every date", () => {
+    // dev-a active on day 1 only, dev-b active on day 2 only
+    const timeline = [
+      { date: "2026-03-01", device_id: "dev-a", total_tokens: 1000, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 },
+      { date: "2026-03-02", device_id: "dev-b", total_tokens: 2000, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 },
+    ];
+
+    const result = toDeviceTrendPoints(timeline);
+
+    expect(result).toHaveLength(2);
+    // Day 1: dev-a=1000, dev-b=0
+    expect(result[0]!["dev-a"]).toBe(1000);
+    expect(result[0]!["dev-b"]).toBe(0);
+    // Day 2: dev-a=0, dev-b=2000
+    expect(result[1]!["dev-a"]).toBe(0);
+    expect(result[1]!["dev-b"]).toBe(2000);
   });
 
   it("should return empty array for empty timeline", () => {
@@ -170,6 +189,24 @@ describe("toDeviceSharePoints", () => {
     expect(result).toHaveLength(1);
     // When total is 0, percentage should be 0 (not NaN/Infinity)
     expect(result[0]!["dev-a"]).toBe(0);
+  });
+
+  it("should zero-fill missing devices to 0% on each date", () => {
+    // dev-a active on day 1 only, dev-b active on day 2 only
+    const timeline = [
+      { date: "2026-03-01", device_id: "dev-a", total_tokens: 1000, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 },
+      { date: "2026-03-02", device_id: "dev-b", total_tokens: 2000, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 },
+    ];
+
+    const result = toDeviceSharePoints(timeline);
+
+    expect(result).toHaveLength(2);
+    // Day 1: dev-a=100%, dev-b=0%
+    expect(result[0]!["dev-a"]).toBe(100);
+    expect(result[0]!["dev-b"]).toBe(0);
+    // Day 2: dev-a=0%, dev-b=100%
+    expect(result[1]!["dev-a"]).toBe(0);
+    expect(result[1]!["dev-b"]).toBe(100);
   });
 
   it("should guarantee percentages sum to exactly 100 (thirds case)", () => {
