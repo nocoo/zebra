@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.4.0
+
+### Features
+
+- **Privacy policy page** — New `/privacy` page with Privacy icon (ShieldCheck) linked from landing, leaderboard, and dashboard
+- **Enhanced project stats** — Projects API now returns `total_messages`, `total_duration`, and `models` arrays; responsive columns on projects table
+- **hashProjectRef** — SHA-256 truncated hash utility applied to all parsers for consistent 16-char hex project references
+- **formatDuration helper** — Human-readable duration formatting for session/project display
+
+### Fixes
+
+- **CLI no-subcommand usage** — Running `pew` without a subcommand now shows usage instead of citty's "No command specified" error
+
+### UI
+
+- **Unified public page styling** — Privacy ShieldCheck icon and `© {year} pew.md · Privacy` footer consistent across landing, leaderboard, and dashboard header
+
+### Infrastructure
+
+- **D1 migration 008** — Null out legacy unhashed `project_ref` values; re-sync repopulates with valid 16-char hex hashes
+
 ## v1.3.0
 
 ### Features

@@ -64,6 +64,7 @@ export const ADMIN_NAV_GROUP: NavGroupDef = {
   items: [
     { href: "/admin/pricing", label: "Token Pricing", icon: "DollarSign" },
     { href: "/admin/invites", label: "Invite Codes", icon: "Ticket" },
+    { href: "/admin/seasons", label: "Seasons", icon: "Trophy" },
   ],
 };
 
@@ -84,6 +85,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   agents: "By Agent",
   models: "By Model",
   leaderboard: "Leaderboard",
+  seasons: "Seasons",
 };
 
 export function breadcrumbsFromPathname(pathname: string) {

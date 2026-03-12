@@ -389,6 +389,65 @@ export interface CoordinatorRunResult {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Season system
+// ---------------------------------------------------------------------------
+
+/** Season status derived from dates, not stored */
+export type SeasonStatus = "upcoming" | "active" | "ended";
+
+/** Season definition */
+export interface Season {
+  id: string;
+  name: string;
+  slug: string;
+  /** YYYY-MM-DD (UTC) */
+  startDate: string;
+  /** YYYY-MM-DD (UTC), inclusive */
+  endDate: string;
+  status: SeasonStatus;
+  teamCount: number;
+  createdAt: string;
+}
+
+/** Season team registration */
+export interface SeasonTeamRegistration {
+  id: string;
+  seasonId: string;
+  teamId: string;
+  registeredBy: string;
+  registeredAt: string;
+}
+
+/** Season leaderboard entry (team level) */
+export interface SeasonLeaderboardEntry {
+  rank: number;
+  team: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  members?: SeasonMemberContribution[];
+}
+
+/** Individual member contribution within a team */
+export interface SeasonMemberContribution {
+  name: string | null;
+  image: string | null;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}
+
+// ---------------------------------------------------------------------------
+// Notifier / Trigger types (cont.)
+// ---------------------------------------------------------------------------
+
 /** Status of a notifier hook/plugin for a specific source */
 export type NotifierStatus = "installed" | "not-installed" | "outdated" | "error";
 

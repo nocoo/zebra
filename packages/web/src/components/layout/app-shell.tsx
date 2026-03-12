@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, Github } from "lucide-react";
+import { Menu, Github, ShieldCheck } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { ThemeToggle } from "./theme-toggle";
@@ -82,9 +82,9 @@ function AppShellInner({ children }: AppShellProps) {
             <a
               href="/privacy"
               aria-label="Privacy policy"
-              className="flex h-8 items-center justify-center rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
-              Privacy
+              <ShieldCheck className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.5} />
             </a>
             <a
               href="https://github.com/nocoo/pew"

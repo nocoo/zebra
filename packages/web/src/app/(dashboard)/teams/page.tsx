@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   Users,
@@ -9,6 +10,7 @@ import {
   Copy,
   Check,
   Trash2,
+  ChevronRight,
   Camera,
   X,
   ChevronDown,
@@ -422,7 +424,12 @@ function TeamCard({
             </div>
           ) : (
             <div className="flex items-center gap-1.5 group/name">
-              <p className="text-sm font-medium text-foreground truncate">{team.name}</p>
+              <Link
+                href={`/teams/${team.id}`}
+                className="text-sm font-medium text-foreground truncate hover:text-primary transition-colors"
+              >
+                {team.name}
+              </Link>
               {isOwner && (
                 <button
                   onClick={startEditing}
@@ -473,6 +480,14 @@ function TeamCard({
               <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>
           )}
+          {/* Navigate to detail */}
+          <Link
+            href={`/teams/${team.id}`}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="View team"
+          >
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </Link>
         </div>
       </div>
 
