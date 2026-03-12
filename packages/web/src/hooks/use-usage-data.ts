@@ -42,6 +42,8 @@ export interface DailyPoint {
 
 /** Source aggregate for donut chart */
 export interface SourceAggregate {
+  /** Raw source slug (e.g. "claude-code") */
+  source: string;
   label: string;
   value: number;
 }
@@ -105,7 +107,7 @@ export function toSourceAggregates(records: UsageRow[]): SourceAggregate[] {
   }
 
   return Array.from(bySource.entries())
-    .map(([label, value]) => ({ label, value }))
+    .map(([source, value]) => ({ source, label: source, value }))
     .sort((a, b) => b.value - a.value);
 }
 

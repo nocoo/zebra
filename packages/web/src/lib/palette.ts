@@ -44,3 +44,59 @@ export const chartNegative = v("destructive");
 
 /** Primary chart accent (most-used single color) */
 export const chartPrimary = chart.teal;
+
+// ---------------------------------------------------------------------------
+// Stable color mapping — deterministic colors for agents & models
+// ---------------------------------------------------------------------------
+
+export interface ChartColor {
+  /** CSS color string, e.g. `hsl(var(--chart-1))` */
+  color: string;
+  /** CSS variable name (without --) for use with `withAlpha()` */
+  token: string;
+}
+
+/**
+ * Fixed color assignment for known agent slugs.
+ * Every agent always renders the same color across all charts.
+ */
+const AGENT_COLOR_MAP: Record<string, ChartColor> = {
+  "claude-code":   { color: chart.teal,      token: "chart-1" },
+  "opencode":      { color: chart.sky,        token: "chart-2" },
+  "gemini-cli":    { color: chart.jade,       token: "chart-3" },
+  "codex":         { color: chart.green,      token: "chart-4" },
+  "openclaw":      { color: chart.lime,       token: "chart-5" },
+  "copilot-vscode":{ color: chart.amber,      token: "chart-6" },
+};
+
+/** Default color for unknown agents. */
+const AGENT_FALLBACK: ChartColor = { color: chart.orange, token: "chart-7" };
+
+/**
+ * Get a stable color for an agent (source slug).
+ * Known agents always get the same color; unknown agents get the fallback.
+ */
+export function agentColor(source: string): ChartColor {
+  return AGENT_COLOR_MAP[source] ?? AGENT_FALLBACK;
+}
+
+/**
+ * Simple string hash (djb2) mapped to chart color index.
+ * Same model name → same color, regardless of array order.
+ */
+function hashString(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) + hash + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Get a stable color for a model name.
+ * Uses a hash to deterministically pick from the 8 chart colors.
+ */
+export function modelColor(model: string): ChartColor {
+  const idx = hashString(model) % CHART_COLORS.length;
+  return { color: CHART_COLORS[idx]!, token: CHART_TOKENS[idx]! };
+}

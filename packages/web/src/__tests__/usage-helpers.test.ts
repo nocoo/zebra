@@ -93,9 +93,9 @@ describe("toSourceAggregates", () => {
     const result = toSourceAggregates(records);
 
     expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({ label: "claude-code", value: 3000 });
-    expect(result[1]).toEqual({ label: "gemini-cli", value: 3000 });
-    expect(result[2]).toEqual({ label: "opencode", value: 500 });
+    expect(result[0]).toEqual({ source: "claude-code", label: "claude-code", value: 3000 });
+    expect(result[1]).toEqual({ source: "gemini-cli", label: "gemini-cli", value: 3000 });
+    expect(result[2]).toEqual({ source: "opencode", label: "opencode", value: 500 });
   });
 });
 

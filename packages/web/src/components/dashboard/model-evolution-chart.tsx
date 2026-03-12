@@ -10,7 +10,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { chartAxis, CHART_COLORS } from "@/lib/palette";
+import { chartAxis } from "@/lib/palette";
+import { modelColor } from "@/lib/palette";
 import { shortModel } from "@/lib/model-helpers";
 import type { ModelEra } from "@/lib/model-helpers";
 import { DashboardResponsiveContainer } from "./dashboard-responsive-container";
@@ -33,6 +34,13 @@ interface ChartRow {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Stable gradient ID from model name (CSS-safe). */
+function gradId(model: string): string {
+  let h = 0;
+  for (let i = 0; i < model.length; i++) h = ((h << 5) - h + model.charCodeAt(i)) | 0;
+  return `gradModel${Math.abs(h)}`;
+}
 
 /** Format date string "2026-03-07" to "Mar 7" */
 function fmtDate(dateStr: string): string {
@@ -149,12 +157,12 @@ export function ModelEvolutionChart({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {modelKeys.map((model, i) => (
+          {modelKeys.map((model) => (
             <div key={model} className="flex items-center gap-1.5">
               <div
                 className="h-2 w-2 rounded-full"
                 style={{
-                  background: CHART_COLORS[i % CHART_COLORS.length]!,
+                  background: modelColor(model).color,
                 }}
               />
               <span className="text-xs text-muted-foreground">
@@ -173,10 +181,10 @@ export function ModelEvolutionChart({
             stackOffset="none"
           >
             <defs>
-              {modelKeys.map((model, i) => (
+              {modelKeys.map((model) => (
                 <linearGradient
                   key={model}
-                  id={`gradModel${i}`}
+                  id={gradId(model)}
                   x1="0"
                   y1="0"
                   x2="0"
@@ -184,12 +192,12 @@ export function ModelEvolutionChart({
                 >
                   <stop
                     offset="0%"
-                    stopColor={CHART_COLORS[i % CHART_COLORS.length]!}
+                    stopColor={modelColor(model).color}
                     stopOpacity={0.6}
                   />
                   <stop
                     offset="100%"
-                    stopColor={CHART_COLORS[i % CHART_COLORS.length]!}
+                    stopColor={modelColor(model).color}
                     stopOpacity={0.2}
                   />
                 </linearGradient>
@@ -219,15 +227,15 @@ export function ModelEvolutionChart({
             <Tooltip
               content={<EvolutionTooltip />}
             />
-            {modelKeys.map((model, i) => (
+            {modelKeys.map((model) => (
               <Area
                 key={model}
                 type="monotone"
                 dataKey={model}
                 stackId="1"
-                stroke={CHART_COLORS[i % CHART_COLORS.length]!}
+                stroke={modelColor(model).color}
                 strokeWidth={1.5}
-                fill={`url(#gradModel${i})`}
+                fill={`url(#${gradId(model)})`}
               />
             ))}
           </AreaChart>

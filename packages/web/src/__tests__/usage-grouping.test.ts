@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   groupByModel,
-  groupByApp,
+  groupByAgent,
   groupByDate,
   extractSources,
   extractModels,
@@ -108,12 +108,12 @@ describe("groupByModel", () => {
 });
 
 // ---------------------------------------------------------------------------
-// groupByApp
+// groupByAgent
 // ---------------------------------------------------------------------------
 
-describe("groupByApp", () => {
+describe("groupByAgent", () => {
   it("returns empty array for no records", () => {
-    expect(groupByApp([], pm())).toEqual([]);
+    expect(groupByAgent([], pm())).toEqual([]);
   });
 
   it("groups by source with correct aggregates", () => {
@@ -123,7 +123,7 @@ describe("groupByApp", () => {
       makeRow({ source: "opencode", model: "gpt-4o", total_tokens: 500 }),
     ];
 
-    const result = groupByApp(rows, pm());
+    const result = groupByAgent(rows, pm());
 
     expect(result).toHaveLength(2);
     // Sorted by totalTokens descending
@@ -141,11 +141,11 @@ describe("groupByApp", () => {
       makeRow({ source: "claude-code", model: "claude-opus-4-20250514", total_tokens: 700 }),
     ];
 
-    const result = groupByApp(rows, pm());
-    const app = result[0]!;
-    expect(app.models).toHaveLength(2);
-    expect(app.models[0]!.model).toBe("claude-opus-4-20250514");
-    expect(app.models[0]!.total).toBe(700);
+    const result = groupByAgent(rows, pm());
+    const agent = result[0]!;
+    expect(agent.models).toHaveLength(2);
+    expect(agent.models[0]!.model).toBe("claude-opus-4-20250514");
+    expect(agent.models[0]!.total).toBe(700);
   });
 
   it("computes estimated cost per app", () => {
@@ -159,7 +159,7 @@ describe("groupByApp", () => {
         total_tokens: 1_000_000,
       }),
     ];
-    const result = groupByApp(rows, pm());
+    const result = groupByAgent(rows, pm());
     expect(result[0]!.estimatedCost).toBeCloseTo(3, 1); // 1M input * $3/M
   });
 });

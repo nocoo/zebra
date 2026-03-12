@@ -5,19 +5,19 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useUsageData } from "@/hooks/use-usage-data";
 import { formatTokens } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
-import { groupByApp } from "@/lib/usage-helpers";
-import type { AppGroup } from "@/lib/usage-helpers";
+import { groupByAgent } from "@/lib/usage-helpers";
+import type { AgentGroup } from "@/lib/usage-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CHART_COLORS } from "@/lib/palette";
+import { agentColor } from "@/lib/palette";
 import { PeriodSelector } from "@/components/dashboard/period-selector";
 import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
 import type { Period } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
-// App card
+// Agent card
 // ---------------------------------------------------------------------------
 
-function AppCard({ group, color }: { group: AppGroup; color: string }) {
+function AgentCard({ group, color }: { group: AgentGroup; color: string }) {
   const [expanded, setExpanded] = useState(true);
   const pct = (v: number) => (group.totalTokens > 0 ? ((v / group.totalTokens) * 100).toFixed(1) : "0");
 
@@ -118,7 +118,7 @@ function AppCard({ group, color }: { group: AppGroup; color: string }) {
 // Skeleton
 // ---------------------------------------------------------------------------
 
-function AppsSkeleton() {
+function AgentsSkeleton() {
   return (
     <div className="space-y-4">
       {Array.from({ length: 3 }).map((_, i) => (
@@ -142,7 +142,7 @@ function AppsSkeleton() {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function AppsPage() {
+export default function AgentsPage() {
   const [period, setPeriod] = useState<Period>("all");
   const { from, to } = periodToDateRange(period);
 
@@ -153,8 +153,8 @@ export default function AppsPage() {
 
   const { pricingMap } = usePricingMap();
 
-  const appGroups = useMemo(
-    () => (data ? groupByApp(data.records, pricingMap) : []),
+  const agentGroups = useMemo(
+    () => (data ? groupByAgent(data.records, pricingMap) : []),
     [data, pricingMap],
   );
 
@@ -181,22 +181,22 @@ export default function AppsPage() {
       )}
 
       {/* Loading */}
-      {loading && <AppsSkeleton />}
+      {loading && <AgentsSkeleton />}
 
       {/* Content */}
       {!loading && data && (
         <>
-          {appGroups.length === 0 ? (
+          {agentGroups.length === 0 ? (
             <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
               No usage data yet. Start using your AI coding tools and sync with pew!
             </div>
           ) : (
             <div className="space-y-4">
-              {appGroups.map((group, i) => (
-                <AppCard
+              {agentGroups.map((group) => (
+                <AgentCard
                   key={group.source}
                   group={group}
-                  color={CHART_COLORS[i % CHART_COLORS.length]!}
+                  color={agentColor(group.source).color}
                 />
               ))}
             </div>

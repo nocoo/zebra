@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { formatDuration } from "@/lib/date-helpers";
+import { sourceLabel } from "@/hooks/use-usage-data";
 import {
   useProjects,
   type Project,
@@ -20,21 +21,8 @@ import {
 } from "@/hooks/use-projects";
 
 // ---------------------------------------------------------------------------
-// Source display helpers
+// Helpers
 // ---------------------------------------------------------------------------
-
-const SOURCE_LABELS: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-  opencode: "OpenCode",
-  openclaw: "OpenClaw",
-  "vscode-copilot": "VS Code Copilot",
-};
-
-function sourceLabel(source: string): string {
-  return SOURCE_LABELS[source] ?? source;
-}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "—";

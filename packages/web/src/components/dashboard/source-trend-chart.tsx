@@ -10,7 +10,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import { cn, formatTokens } from "@/lib/utils";
-import { chartAxis, CHART_COLORS } from "@/lib/palette";
+import { chartAxis } from "@/lib/palette";
+import { agentColor } from "@/lib/palette";
 import { sourceLabel } from "@/hooks/use-usage-data";
 import type { SourceTrendPoint } from "@/lib/usage-helpers";
 import { DashboardResponsiveContainer } from "./dashboard-responsive-container";
@@ -165,7 +166,7 @@ export function SourceTrendChart({ data, className }: SourceTrendChartProps) {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {sourceKeys.map((source, i) => {
+          {sourceKeys.map((source) => {
             const isHidden = hiddenSources.has(source);
             return (
               <button
@@ -179,7 +180,7 @@ export function SourceTrendChart({ data, className }: SourceTrendChartProps) {
               >
                 <div
                   className="h-2 w-2 rounded-full"
-                  style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                  style={{ background: agentColor(source).color }}
                 />
                 <span className="text-xs text-muted-foreground">
                   {sourceLabel(source)}
@@ -219,12 +220,12 @@ export function SourceTrendChart({ data, className }: SourceTrendChartProps) {
             <Tooltip
               content={<SourceTooltip hiddenSources={hiddenSources} />}
             />
-            {sourceKeys.map((source, i) => (
+            {sourceKeys.map((source) => (
               <Line
                 key={source}
                 type="monotone"
                 dataKey={source}
-                stroke={CHART_COLORS[i % CHART_COLORS.length]!}
+                stroke={agentColor(source).color}
                 strokeWidth={2}
                 dot={false}
                 hide={hiddenSources.has(source)}

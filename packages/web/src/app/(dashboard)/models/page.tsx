@@ -7,7 +7,7 @@ import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { groupByModel, toSourceTrendPoints } from "@/lib/usage-helpers";
 import { toModelEvolutionPoints } from "@/lib/model-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CHART_COLORS } from "@/lib/palette";
+import { modelColor } from "@/lib/palette";
 import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
 import { SourceTrendChart } from "@/components/dashboard/source-trend-chart";
 import { ModelEvolutionChart } from "@/components/dashboard/model-evolution-chart";
@@ -123,7 +123,7 @@ export default function ModelsPage() {
                   <thead>
                     <tr className="border-b border-border">
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Model</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground hidden lg:table-cell">App</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground hidden lg:table-cell">Agent</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Input</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Output</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground hidden md:table-cell">Cached</th>
@@ -133,7 +133,7 @@ export default function ModelsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {modelGroups.map((group, i) => (
+                    {modelGroups.map((group) => (
                       <tr
                         key={group.model}
                         className="border-b border-border/50 last:border-0 hover:bg-accent/50 transition-colors"
@@ -142,7 +142,7 @@ export default function ModelsPage() {
                           <div className="flex items-center gap-2.5">
                             <div
                               className="h-2.5 w-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                              style={{ backgroundColor: modelColor(group.model).color }}
                             />
                             <span className="text-sm font-mono font-medium text-foreground">{group.model}</span>
                           </div>
@@ -171,7 +171,7 @@ export default function ModelsPage() {
                                 className="h-full rounded-full transition-all"
                                 style={{
                                   width: `${group.pctOfTotal}%`,
-                                  backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                                  backgroundColor: modelColor(group.model).color,
                                 }}
                               />
                             </div>

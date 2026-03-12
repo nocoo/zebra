@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { formatTokens } from "@/lib/utils";
-import { CHART_COLORS } from "@/lib/palette";
+import { agentColor } from "@/lib/palette";
 import type { SourceAggregate } from "@/hooks/use-usage-data";
 import { DashboardResponsiveContainer } from "./dashboard-responsive-container";
 
@@ -77,10 +77,10 @@ export function SourceDonutChart({ data, className }: SourceDonutChartProps) {
   }
 
   const total = data.reduce((sum, d) => sum + d.value, 0);
-  const chartData = data.map((d, i) => ({
+  const chartData = data.map((d) => ({
     name: d.label,
     value: d.value,
-    fill: CHART_COLORS[i % CHART_COLORS.length],
+    fill: agentColor(d.source).color,
     percent: total > 0 ? d.value / total : 0,
   }));
 
@@ -107,8 +107,8 @@ export function SourceDonutChart({ data, className }: SourceDonutChartProps) {
                 strokeWidth={0}
                 paddingAngle={2}
               >
-                {chartData.map((entry, i) => (
-                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length] ?? CHART_COLORS[0]!} />
+                {chartData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.fill} />
                 ))}
               </Pie>
               <Tooltip content={<DonutTooltip />} />

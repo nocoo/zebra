@@ -2,7 +2,7 @@
  * Usage data aggregation helpers extracted from page components.
  *
  * These pure functions group UsageRow[] into higher-level aggregates
- * (by model, by app/source, by date) for the dashboard views.
+ * (by model, by agent/source, by date) for the dashboard views.
  */
 
 import type { UsageRow } from "@/hooks/use-usage-data";
@@ -35,7 +35,7 @@ export interface ModelRow {
   cost: number;
 }
 
-export interface AppGroup {
+export interface AgentGroup {
   source: string;
   label: string;
   records: UsageRow[];
@@ -171,11 +171,11 @@ export function groupByModel(records: UsageRow[], pricingMap: PricingMap): Model
 }
 
 // ---------------------------------------------------------------------------
-// groupByApp
+// groupByAgent
 // ---------------------------------------------------------------------------
 
-/** Group usage records by source (app), with nested per-model breakdown. */
-export function groupByApp(records: UsageRow[], pricingMap: PricingMap): AppGroup[] {
+/** Group usage records by source (agent), with nested per-model breakdown. */
+export function groupByAgent(records: UsageRow[], pricingMap: PricingMap): AgentGroup[] {
   const bySource = new Map<string, UsageRow[]>();
 
   for (const r of records) {
