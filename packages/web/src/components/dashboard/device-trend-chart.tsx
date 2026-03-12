@@ -14,7 +14,6 @@ import { chartAxis, CHART_COLORS } from "@/lib/palette";
 import {
   toDeviceTrendPoints,
   buildDeviceLabelMap,
-  type DeviceTrendPoint,
 } from "@/lib/device-helpers";
 import type { DeviceAggregate, DeviceTimelinePoint } from "@pew/core";
 import { DashboardResponsiveContainer } from "./dashboard-responsive-container";
