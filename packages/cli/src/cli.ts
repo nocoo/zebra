@@ -62,7 +62,17 @@ const syncCommand = defineCommand({
     const paths = resolveDefaultPaths();
     consola.start("Syncing token usage from AI coding tools...\n");
 
-    const { openMessageDb, openSessionDb } = await import("./parsers/opencode-sqlite-db.js");
+    // Dynamic import: opencode-sqlite-db.ts uses native SQLite bindings
+    // (bun:sqlite or better-sqlite3) which may fail to load on some platforms.
+    let openMessageDb: typeof import("./parsers/opencode-sqlite-db.js").openMessageDb | undefined;
+    let openSessionDb: typeof import("./parsers/opencode-sqlite-db.js").openSessionDb | undefined;
+    try {
+      const mod = await import("./parsers/opencode-sqlite-db.js");
+      openMessageDb = mod.openMessageDb;
+      openSessionDb = mod.openSessionDb;
+    } catch {
+      // Native SQLite module not available — SQLite sync will be skipped
+    }
 
     // Ensure a stable device ID exists for multi-device dedup
     const configManager = new ConfigManager(paths.stateDir, args.dev);
@@ -352,7 +362,17 @@ const notifyCommand = defineCommand({
 
     const paths = resolveDefaultPaths();
 
-    const { openMessageDb, openSessionDb } = await import("./parsers/opencode-sqlite-db.js");
+    // Dynamic import: opencode-sqlite-db.ts uses native SQLite bindings
+    // (bun:sqlite or better-sqlite3) which may fail to load on some platforms.
+    let openMessageDb2: typeof import("./parsers/opencode-sqlite-db.js").openMessageDb | undefined;
+    let openSessionDb2: typeof import("./parsers/opencode-sqlite-db.js").openSessionDb | undefined;
+    try {
+      const mod = await import("./parsers/opencode-sqlite-db.js");
+      openMessageDb2 = mod.openMessageDb;
+      openSessionDb2 = mod.openSessionDb;
+    } catch {
+      // Native SQLite module not available — SQLite sync will be skipped
+    }
 
     // Ensure a stable device ID exists for multi-device dedup
     const notifyConfigManager = new ConfigManager(paths.stateDir);
@@ -368,8 +388,8 @@ const notifyCommand = defineCommand({
       geminiDir: paths.geminiDir,
       openCodeMessageDir: paths.openCodeMessageDir,
       openCodeDbPath: paths.openCodeDbPath,
-      openMessageDb,
-      openSessionDb,
+      openMessageDb: openMessageDb2,
+      openSessionDb: openSessionDb2,
       openclawDir: paths.openclawDir,
       vscodeCopilotDirs: paths.vscodeCopilotDirs,
       version: "1.4.0",

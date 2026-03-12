@@ -1112,7 +1112,7 @@ describe("executeSync", () => {
       (e) => e.source === "opencode-sqlite" && e.phase === "warn",
     );
     expect(warnEvent).toBeDefined();
-    expect(warnEvent!.message).toContain("bun:sqlite is not available");
+    expect(warnEvent!.message).toContain("SQLite is not available");
   });
 
   it("should emit warning when openMessageDb returns null (DB can't be opened)", async () => {

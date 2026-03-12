@@ -216,7 +216,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
   // ---------- Phase 2: DB-based drivers ----------
   // SQLite warning paths are handled at the orchestrator level because:
-  // - "bun:sqlite not available": registry doesn't create a driver (no openMessageDb)
+  // - "SQLite not available": registry doesn't create a driver (no openMessageDb)
   // - "Failed to open": factory returns null, driver would silently return empty
   // We pre-probe the factory here to emit warnings BEFORE running the driver,
   // avoiding the need for double-open detection after the fact.
@@ -225,7 +225,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     const dbStat = await stat(opts.openCodeDbPath).catch(() => null);
     if (dbStat) {
       if (!opts.openMessageDb) {
-        // Case 1: DB file exists but bun:sqlite adapter is missing
+        // Case 1: DB file exists but SQLite adapter is missing (native module not available)
         onProgress?.({
           source: "opencode-sqlite",
           phase: "discover",
@@ -234,7 +234,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
         onProgress?.({
           source: "opencode-sqlite",
           phase: "warn",
-          message: `OpenCode SQLite database found at ${opts.openCodeDbPath} but bun:sqlite is not available — SQLite token data will NOT be synced`,
+          message: `OpenCode SQLite database found at ${opts.openCodeDbPath} but SQLite is not available — SQLite token data will NOT be synced`,
         });
       } else {
         // Case 2: Both provided — pre-probe if factory returns null

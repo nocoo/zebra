@@ -245,14 +245,14 @@ export async function executeSessionSync(
 
   // ---------- Phase 2: DB-based drivers ----------
   // SQLite warning paths are handled at the orchestrator level:
-  // - "bun:sqlite not available": registry doesn't create a driver (no openSessionDb)
+  // - "SQLite not available": registry doesn't create a driver (no openSessionDb)
   // - "Failed to open": factory returns null, pre-probed here to emit warning
   let activeDbDrivers = dbDrivers;
   if (opts.openCodeDbPath) {
     const dbStat = await stat(opts.openCodeDbPath).catch(() => null);
     if (dbStat) {
       if (!opts.openSessionDb) {
-        // Case 1: DB file exists but bun:sqlite adapter is missing
+        // Case 1: DB file exists but SQLite adapter is missing (native module not available)
         onProgress?.({
           source: "opencode-sqlite",
           phase: "discover",
@@ -261,7 +261,7 @@ export async function executeSessionSync(
         onProgress?.({
           source: "opencode-sqlite",
           phase: "warn",
-          message: `OpenCode SQLite database found at ${opts.openCodeDbPath} but bun:sqlite is not available — SQLite session data will NOT be synced`,
+          message: `OpenCode SQLite database found at ${opts.openCodeDbPath} but SQLite is not available — SQLite session data will NOT be synced`,
         });
       } else {
         // Case 2: Both provided — pre-probe if factory returns null

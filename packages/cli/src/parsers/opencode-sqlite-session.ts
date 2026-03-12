@@ -3,7 +3,7 @@
  *
  * Queries the `session` and `message` tables from opencode.db
  * to produce SessionSnapshot records. Uses dependency injection
- * (pre-fetched rows) for testability without bun:sqlite.
+ * (pre-fetched rows) for testability without native SQLite.
  */
 
 import type { SessionSnapshot, Source } from "@pew/core";

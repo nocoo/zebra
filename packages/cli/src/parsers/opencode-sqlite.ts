@@ -43,7 +43,7 @@ export type QueryMessagesFn = (lastTimeCreated: number) => MessageRow[];
  * Unlike the JSON file parser, no diffTotals is needed — each SQLite row
  * is an independent message with absolute token values.
  *
- * The `queryMessages` function is injected to decouple from `bun:sqlite`
+ * The `queryMessages` function is injected to decouple from the native SQLite module
  * for testability. Use `openMessageDb()` from `opencode-sqlite-db.ts` to
  * create the real adapter at runtime.
  */

@@ -6,7 +6,7 @@
  * Reads ctx.messageKeys for cross-source dedup with OpenCode JSON.
  *
  * This driver requires a factory function (openMessageDb) to be provided
- * via constructor options, since bun:sqlite is not always available.
+ * via constructor options, since the native SQLite module is not always available.
  */
 
 import { stat } from "node:fs/promises";
@@ -19,7 +19,7 @@ import type { DbTokenDriver, DbTokenResult, SyncContext } from "../types.js";
 export interface OpenCodeSqliteTokenDriverOpts {
   /** Path to the OpenCode SQLite database */
   dbPath: string;
-  /** Factory for opening the DB (DI for testability — bun:sqlite not always available) */
+  /** Factory for opening the DB (DI for testability — native SQLite not always available) */
   openMessageDb: (dbPath: string) => { queryMessages: QueryMessagesFn; close: () => void } | null;
 }
 
