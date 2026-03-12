@@ -132,6 +132,7 @@ describe("route labels", () => {
       agents: "By Agent",
       models: "By Model",
       leaderboard: "Leaderboard",
+      seasons: "Seasons",
     });
   });
 });
