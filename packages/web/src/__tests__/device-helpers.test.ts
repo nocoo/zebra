@@ -71,15 +71,15 @@ describe("deviceLabel", () => {
 describe("buildDeviceLabelMap", () => {
   it("should build a map from device array", () => {
     const devices = [
-      { device_id: "aaaa-1111-2222-3333", alias: "MacBook" },
-      { device_id: "bbbb-2222-3333-4444", alias: null },
+      { device_id: "aaaa1111-2222-3333-4444-555566667777", alias: "MacBook" },
+      { device_id: "bbbb2222-3333-4444-5555-666677778888", alias: null },
       { device_id: "default", alias: null },
     ];
 
     const map = buildDeviceLabelMap(devices);
 
-    expect(map.get("aaaa-1111-2222-3333")).toBe("MacBook");
-    expect(map.get("bbbb-2222-3333-4444")).toBe("bbbb-222");
+    expect(map.get("aaaa1111-2222-3333-4444-555566667777")).toBe("MacBook");
+    expect(map.get("bbbb2222-3333-4444-5555-666677778888")).toBe("bbbb2222");
     expect(map.get("default")).toBe("Legacy Device");
   });
 
