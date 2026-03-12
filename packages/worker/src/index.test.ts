@@ -241,6 +241,7 @@ describe("Worker ingest endpoint", () => {
       const bindMock = (env.DB.prepare as ReturnType<typeof vi.fn>).mock.results[0]!.value.bind;
       expect(bindMock).toHaveBeenCalledWith(
         "u1",
+        "default",
         VALID_RECORD.source,
         VALID_RECORD.model,
         VALID_RECORD.hour_start,

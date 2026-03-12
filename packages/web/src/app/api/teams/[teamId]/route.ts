@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getD1Client } from "@/lib/d1";
+import { deleteTeamLogoByUrl } from "@/lib/r2";
 
 // ---------------------------------------------------------------------------
 // GET — team details with members
@@ -42,8 +43,9 @@ export async function GET(
       slug: string;
       invite_code: string;
       created_at: string;
+      logo_url: string | null;
     }>(
-      "SELECT id, name, slug, invite_code, created_at FROM teams WHERE id = ?",
+      "SELECT id, name, slug, invite_code, created_at, logo_url FROM teams WHERE id = ?",
       [teamId],
     );
 
@@ -112,6 +114,7 @@ export async function GET(
 
     return NextResponse.json({
       ...team,
+      logo_url: team.logo_url ?? null,
       role: membership.role,
       members: members.results.map((m) => ({
         userId: m.user_id,
@@ -183,9 +186,24 @@ export async function DELETE(
       [teamId, authResult.userId],
     );
 
-    // If last member, delete the team
+    // If last member, delete the team and its logo
     if (memberCount <= 1) {
+      // Read logo URL before deleting
+      const team = await client.firstOrNull<{ logo_url: string | null }>(
+        "SELECT logo_url FROM teams WHERE id = ?",
+        [teamId],
+      );
+
       await client.execute("DELETE FROM teams WHERE id = ?", [teamId]);
+
+      // Best-effort logo cleanup — don't fail the request if R2 is unavailable
+      if (team?.logo_url) {
+        try {
+          await deleteTeamLogoByUrl(team.logo_url);
+        } catch {
+          // Silently ignore — orphaned R2 object is harmless
+        }
+      }
     }
 
     return NextResponse.json({ ok: true });

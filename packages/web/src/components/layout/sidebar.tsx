@@ -20,6 +20,7 @@ import {
   Users,
   Ticket,
   ArrowUpRight,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
@@ -55,6 +56,8 @@ const ICON_MAP: Record<string, ElementType> = {
   Users,
   DollarSign,
   Ticket,
+  ArrowUpRight,
+  FolderKanban,
 };
 
 interface NavItem {
@@ -222,7 +225,7 @@ export function Sidebar() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo-24.png"
-                alt="Pew"
+                alt="pew"
                 width={24}
                 height={24}
                 className="shrink-0"
@@ -328,12 +331,12 @@ export function Sidebar() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/logo-24.png"
-                    alt="Pew"
+                    alt="pew"
                     width={24}
                     height={24}
                     className="shrink-0"
                   />
-                  <span className="text-lg font-bold tracking-tighter">
+                  <span className="text-[31px] font-bold font-handwriting tracking-tighter mt-[-12px]">
                     pew
                   </span>
                   <Badge

@@ -10,13 +10,14 @@
 // Source: Supported AI coding tools
 // ---------------------------------------------------------------------------
 
-/** The 5 supported AI coding tools */
+/** The 6 supported AI coding tools */
 export type Source =
   | "claude-code"
   | "codex"
   | "gemini-cli"
   | "opencode"
-  | "openclaw";
+  | "openclaw"
+  | "vscode-copilot";
 
 // ---------------------------------------------------------------------------
 // Token types
@@ -117,6 +118,16 @@ export interface OpenCodeCursor extends FileCursorBase {
   messageKey: string | null;
 }
 
+/** Cursor for VSCode Copilot CRDT JSONL files (byte-offset + request metadata) */
+export interface VscodeCopilotCursor extends FileCursorBase {
+  /** Byte offset where we last stopped reading */
+  offset: number;
+  /** Request indices already emitted as records (JSON-serializable, not Set) */
+  processedRequestIndices: number[];
+  /** Index → metadata mapping for correlating kind=1 results with request info */
+  requestMeta: Record<number, { modelId: string; timestamp: number }>;
+}
+
 /** Cursor for OpenCode SQLite database (incremental by time_created) */
 export interface OpenCodeSqliteCursor {
   /** Max time_created seen from message table (epoch ms) */
@@ -132,7 +143,12 @@ export interface OpenCodeSqliteCursor {
 }
 
 /** Union of all cursor types, keyed by absolute file path */
-export type FileCursor = ByteOffsetCursor | CodexCursor | GeminiCursor | OpenCodeCursor;
+export type FileCursor =
+  | ByteOffsetCursor
+  | CodexCursor
+  | GeminiCursor
+  | OpenCodeCursor
+  | VscodeCopilotCursor;
 
 /** Top-level cursor store persisted to disk */
 export interface CursorState {
@@ -157,6 +173,8 @@ export interface QueueRecord {
   model: string;
   /** ISO 8601 half-hour boundary (e.g. "2026-03-07T10:30:00.000Z") */
   hour_start: string;
+  /** Stable device identifier (UUID, generated once per CLI install) */
+  device_id: string;
   input_tokens: number;
   cached_input_tokens: number;
   output_tokens: number;
@@ -266,6 +284,8 @@ export interface SessionCursorState {
 export interface PewConfig {
   /** Auth token obtained via `pew login` */
   token?: string;
+  /** Stable device identifier (UUID, generated once per CLI install) */
+  deviceId?: string;
 }
 
 // ---------------------------------------------------------------------------

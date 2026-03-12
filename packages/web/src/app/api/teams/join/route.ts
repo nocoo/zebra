@@ -56,12 +56,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Add as member
-    await client.execute(
+    // Enforce team member limit from app_settings (default: 5)
+    const DEFAULT_MAX_TEAM_MEMBERS = 5;
+    let maxMembers = DEFAULT_MAX_TEAM_MEMBERS;
+    try {
+      const setting = await client.firstOrNull<{ value: string }>(
+        "SELECT value FROM app_settings WHERE key = 'max_team_members'",
+        [],
+      );
+      if (setting) {
+        const parsed = parseInt(setting.value, 10);
+        if (!isNaN(parsed) && parsed > 0) maxMembers = parsed;
+      }
+    } catch {
+      // Settings table may not exist yet — use default
+    }
+
+    // Atomic check+insert: INSERT only if team is under the member limit.
+    // This prevents race conditions where concurrent joins both pass a
+    // separate COUNT check and both INSERT, exceeding the limit.
+    const result = await client.execute(
       `INSERT INTO team_members (id, team_id, user_id, role, joined_at)
-       VALUES (?, ?, ?, 'member', datetime('now'))`,
-      [crypto.randomUUID(), team.id, authResult.userId],
+       SELECT ?, ?, ?, 'member', datetime('now')
+       WHERE (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < ?`,
+      [crypto.randomUUID(), team.id, authResult.userId, team.id, maxMembers],
     );
+
+    if (result.changes === 0) {
+      return NextResponse.json(
+        { error: `Team is full (max ${maxMembers} members)` },
+        { status: 403 },
+      );
+    }
 
     return NextResponse.json({
       team_id: team.id,

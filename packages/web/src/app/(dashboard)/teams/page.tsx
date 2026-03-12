@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   Users,
   Plus,
@@ -10,6 +11,8 @@ import {
   Check,
   Trash2,
   ChevronRight,
+  Camera,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +27,7 @@ interface Team {
   invite_code: string;
   created_by: string;
   member_count: number;
+  logo_url: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +59,158 @@ function CopyButton({ text }: { text: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// TeamLogo — displays logo with upload overlay for owners
+// ---------------------------------------------------------------------------
+
+function TeamLogo({
+  team,
+  isOwner,
+  onUploaded,
+  onMessage,
+}: {
+  team: Team;
+  isOwner: boolean;
+  onUploaded: () => void;
+  onMessage: (msg: { type: "success" | "error"; text: string }) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Always reset the input so the same file can be re-selected
+    if (inputRef.current) inputRef.current.value = "";
+
+    // Client-side validation
+    if (!file.type.startsWith("image/png") && !file.type.startsWith("image/jpeg")) {
+      onMessage({ type: "error", text: "Only PNG and JPEG images are accepted." });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      onMessage({ type: "error", text: "File too large (max 2 MB)." });
+      return;
+    }
+
+    // Validate square aspect ratio on the client
+    const valid = await validateSquare(file);
+    if (!valid) {
+      onMessage({ type: "error", text: "Image must be square." });
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`/api/teams/${team.id}/logo`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        onMessage({ type: "success", text: "Logo updated!" });
+        onUploaded();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        onMessage({
+          type: "error",
+          text: (data as { error?: string }).error ?? "Failed to upload logo.",
+        });
+      }
+    } catch {
+      onMessage({ type: "error", text: "Network error." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Remove team logo?")) return;
+
+    try {
+      const res = await fetch(`/api/teams/${team.id}/logo`, { method: "DELETE" });
+      if (res.ok) {
+        onMessage({ type: "success", text: "Logo removed." });
+        onUploaded();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        onMessage({
+          type: "error",
+          text: (data as { error?: string }).error ?? "Failed to remove logo.",
+        });
+      }
+    } catch {
+      onMessage({ type: "error", text: "Network error." });
+    }
+  };
+
+  const hasLogo = !!team.logo_url;
+
+  return (
+    <div className="relative group shrink-0">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-muted-foreground overflow-hidden">
+        {hasLogo ? (
+          <img
+            src={team.logo_url!}
+            alt={`${team.name} logo`}
+            className="h-9 w-9 object-cover"
+          />
+        ) : (
+          <Users className="h-4 w-4" strokeWidth={1.5} />
+        )}
+      </div>
+      {isOwner && (
+        <>
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Change logo"
+          >
+            <Camera className="h-3.5 w-3.5 text-white" strokeWidth={1.5} />
+          </button>
+          {hasLogo && (
+            <button
+              onClick={handleRemoveLogo}
+              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Remove logo"
+            >
+              <X className="h-2.5 w-2.5" strokeWidth={2} />
+            </button>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function validateSquare(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(img.naturalWidth === img.naturalHeight);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(false);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Teams Page
 // ---------------------------------------------------------------------------
 
@@ -67,6 +223,8 @@ export default function TeamsPage() {
   const [inviteCode, setInviteCode] = useState("");
   const [joiningTeam, setJoiningTeam] = useState(false);
   const [teamMessage, setTeamMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? null;
 
   // ---------------------------------------------------------------------------
   // Fetch teams
@@ -315,9 +473,12 @@ export default function TeamsPage() {
                 className="rounded-xl bg-secondary p-4"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-muted-foreground shrink-0">
-                    <Users className="h-4 w-4" strokeWidth={1.5} />
-                  </div>
+                  <TeamLogo
+                    team={team}
+                    isOwner={currentUserId === team.created_by}
+                    onUploaded={fetchTeams}
+                    onMessage={setTeamMessage}
+                  />
                   <Link
                     href={`/teams/${team.id}`}
                     className="flex-1 min-w-0 group"

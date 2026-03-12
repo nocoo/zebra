@@ -34,6 +34,7 @@ interface Team {
   id: string;
   name: string;
   slug: string;
+  logo_url: string | null;
 }
 
 /** Scope dropdown value: "global" | "all" (admin) | team id */
@@ -48,6 +49,59 @@ const PERIODS: { value: LeaderboardPeriod; label: string }[] = [
   { value: "month", label: "This Month" },
   { value: "all", label: "All Time" },
 ];
+
+// ---------------------------------------------------------------------------
+// Team logo inline icon (with fallback)
+// ---------------------------------------------------------------------------
+
+function TeamLogoIcon({
+  logoUrl,
+  name,
+  className,
+}: {
+  logoUrl: string | null;
+  name: string;
+  className?: string;
+}) {
+  const [error, setError] = useState(false);
+
+  // Reset error state when logoUrl changes (e.g. switching selected team)
+  useEffect(() => {
+    setError(false);
+  }, [logoUrl]);
+
+  if (!logoUrl || error) {
+    return <Users className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", className)} strokeWidth={1.5} />;
+  }
+  return (
+    <img
+      src={logoUrl}
+      alt={name}
+      className={cn("h-3.5 w-3.5 shrink-0 rounded-sm object-cover", className)}
+      onError={() => setError(true)}
+    />
+  );
+}
+
+/** Tiny inline logo for team badges in leaderboard rows */
+function TeamLogoBadge({ logoUrl, name }: { logoUrl: string | null; name: string }) {
+  const [error, setError] = useState(false);
+
+  // Reset error state when logoUrl changes
+  useEffect(() => {
+    setError(false);
+  }, [logoUrl]);
+
+  if (!logoUrl || error) return null;
+  return (
+    <img
+      src={logoUrl}
+      alt={name}
+      className="h-2.5 w-2.5 shrink-0 rounded-[2px] object-cover"
+      onError={() => setError(true)}
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Scope dropdown (replaces team buttons + admin checkbox)
@@ -88,11 +142,15 @@ function ScopeDropdown({
         ? "All Users"
         : teams.find((t) => t.id === value)?.name ?? "Global";
 
+  const selectedTeam = teams.find((t) => t.id === value);
+
   const labelIcon =
     value === "global" ? (
       <Globe className={iconClass} strokeWidth={1.5} />
     ) : value === "all" ? (
       <ShieldCheck className={iconClass} strokeWidth={1.5} />
+    ) : selectedTeam ? (
+      <TeamLogoIcon logoUrl={selectedTeam.logo_url} name={selectedTeam.name} />
     ) : (
       <Users className={iconClass} strokeWidth={1.5} />
     );
@@ -140,7 +198,7 @@ function ScopeDropdown({
                 setOpen(false);
               }}
             >
-              <Users className={iconClass} strokeWidth={1.5} />
+              <TeamLogoIcon logoUrl={team.logo_url} name={team.name} />
               {team.name}
             </DropdownItem>
           ))}
@@ -295,8 +353,9 @@ function LeaderboardRow({
               {teams.map((team) => (
                 <span
                   key={team.id}
-                  className="text-[10px] leading-tight text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                  className="inline-flex items-center gap-1 text-[10px] leading-tight text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
                 >
+                  <TeamLogoBadge logoUrl={team.logo_url} name={team.name} />
                   {team.name}
                 </span>
               ))}
@@ -313,7 +372,7 @@ function LeaderboardRow({
 
       {/* Total — check-style handwriting font, full number */}
       <div className="relative z-10 shrink-0 text-right">
-        <span className="font-handwriting text-3xl leading-none tracking-tight text-foreground">
+        <span className="font-handwriting text-[39px] leading-none tracking-tight text-foreground">
           {formatTokensFull(total_tokens)}
         </span>
       </div>
@@ -416,15 +475,15 @@ export default function LeaderboardPage() {
           >
             <Image
               src="/logo-80.png"
-              alt="Pew"
+              alt="pew"
               width={48}
               height={48}
             />
           </Link>
           <div className="flex flex-col">
-            <h1 className="text-2xl font-bold font-display tracking-tight text-foreground">
-              pew{" "}
-              <span className="font-normal text-muted-foreground">
+            <h1 className="tracking-tight text-foreground">
+              <span className="text-[47px] font-bold font-handwriting leading-none mr-2">pew</span>
+              <span className="text-[19px] font-normal text-muted-foreground">
                 Leaderboard
               </span>
             </h1>
@@ -439,7 +498,7 @@ export default function LeaderboardPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-4 space-y-4">
         {/* Controls row */}
         <div
-          className="flex items-center gap-3 animate-fade-up"
+          className="relative z-20 flex items-center gap-3 animate-fade-up"
           style={{ animationDelay: "180ms" }}
         >
           {/* Period tabs */}
@@ -521,7 +580,7 @@ export default function LeaderboardPage() {
       <footer className="px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
           Powered by{" "}
-          <Link href="/" className="text-primary hover:underline">
+          <Link href="/" className="text-primary hover:underline font-handwriting">
             pew
           </Link>{" "}
           &mdash; AI token usage tracker

@@ -33,6 +33,7 @@ export async function executeNotify(
       try {
         const tokenResult = await executeSync({
           stateDir: opts.stateDir,
+          deviceId: opts.deviceId,
           claudeDir: opts.claudeDir,
           codexSessionsDir: opts.codexSessionsDir,
           geminiDir: opts.geminiDir,
@@ -40,6 +41,7 @@ export async function executeNotify(
           openCodeDbPath: opts.openCodeDbPath,
           openMessageDb: opts.openMessageDb,
           openclawDir: opts.openclawDir,
+          vscodeCopilotDirs: opts.vscodeCopilotDirs,
         });
         cycle.tokenSync = {
           totalDeltas: tokenResult.totalDeltas,

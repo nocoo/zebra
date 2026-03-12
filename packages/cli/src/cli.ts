@@ -15,6 +15,7 @@ import { executeInit } from "./commands/init.js";
 import { executeUninstall } from "./commands/uninstall.js";
 import { resolveNotifierPaths } from "./notifier/paths.js";
 import { statusAll } from "./notifier/registry.js";
+import { ConfigManager } from "./config/manager.js";
 
 // ---------------------------------------------------------------------------
 // Dev mode detection (otter pattern)
@@ -31,6 +32,7 @@ function isSource(value: string): value is Source {
     "gemini-cli",
     "opencode",
     "openclaw",
+    "vscode-copilot",
   ].includes(value);
 }
 
@@ -72,8 +74,13 @@ const syncCommand = defineCommand({
       // bun:sqlite not available — SQLite sync will be skipped
     }
 
+    // Ensure a stable device ID exists for multi-device dedup
+    const configManager = new ConfigManager(paths.stateDir, args.dev);
+    const deviceId = await configManager.ensureDeviceId();
+
     const result = await executeSync({
       stateDir: paths.stateDir,
+      deviceId,
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
@@ -81,6 +88,7 @@ const syncCommand = defineCommand({
       openCodeDbPath: paths.openCodeDbPath,
       openMessageDb,
       openclawDir: paths.openclawDir,
+      vscodeCopilotDirs: paths.vscodeCopilotDirs,
       onProgress(event) {
         if (event.phase === "parse" && event.current && event.total) {
           // Only log at 25% intervals or small counts
@@ -111,6 +119,7 @@ const syncCommand = defineCommand({
       if (result.sources.gemini > 0) deltaParts.push(`Gemini: ${result.sources.gemini}`);
       if (result.sources.opencode > 0) deltaParts.push(`OpenCode: ${result.sources.opencode}`);
       if (result.sources.openclaw > 0) deltaParts.push(`OpenClaw: ${result.sources.openclaw}`);
+      if (result.sources.vscodeCopilot > 0) deltaParts.push(`VSCode Copilot: ${result.sources.vscodeCopilot}`);
       if (deltaParts.length > 0) {
         consola.info(`  ${pc.dim(deltaParts.join("  |  "))}`);
       }
@@ -124,6 +133,7 @@ const syncCommand = defineCommand({
     if (fs.gemini > 0) scanParts.push(`Gemini: ${fs.gemini}`);
     if (fs.opencode > 0) scanParts.push(`OpenCode: ${fs.opencode}`);
     if (fs.openclaw > 0) scanParts.push(`OpenClaw: ${fs.openclaw}`);
+    if (fs.vscodeCopilot > 0) scanParts.push(`VSCode Copilot: ${fs.vscodeCopilot}`);
     if (scanParts.length > 0) {
       consola.info(`  Files scanned: ${pc.dim(scanParts.join("  |  "))}`);
     }
@@ -169,6 +179,7 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.gemini > 0) sessParts.push(`Gemini: ${sessionResult.sources.gemini}`);
       if (sessionResult.sources.opencode > 0) sessParts.push(`OpenCode: ${sessionResult.sources.opencode}`);
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
+      if (sessionResult.sources.vscodeCopilot > 0) sessParts.push(`VSCode Copilot: ${sessionResult.sources.vscodeCopilot}`);
       if (sessParts.length > 0) {
         consola.info(`  ${pc.dim(sessParts.join("  |  "))}`);
       }
@@ -182,6 +193,7 @@ const syncCommand = defineCommand({
     if (sfs.gemini > 0) sessScanParts.push(`Gemini: ${sfs.gemini}`);
     if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
     if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
+    if (sfs.vscodeCopilot > 0) sessScanParts.push(`VSCode Copilot: ${sfs.vscodeCopilot}`);
     if (sessScanParts.length > 0) {
       consola.info(`  Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
     }
@@ -213,6 +225,7 @@ const statusCommand = defineCommand({
         geminiDir: paths.geminiDir,
         openCodeMessageDir: paths.openCodeMessageDir,
         openclawDir: paths.openclawDir,
+        vscodeCopilotDirs: paths.vscodeCopilotDirs,
       },
       notifierStatuses,
     });
@@ -353,10 +366,15 @@ const notifyCommand = defineCommand({
       // bun:sqlite not available — SQLite sync will be skipped
     }
 
+    // Ensure a stable device ID exists for multi-device dedup
+    const notifyConfigManager = new ConfigManager(paths.stateDir);
+    const notifyDeviceId = await notifyConfigManager.ensureDeviceId();
+
     const result = await executeNotify({
       source: args.source,
       fileHint: args.file ?? null,
       stateDir: paths.stateDir,
+      deviceId: notifyDeviceId,
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
@@ -365,7 +383,8 @@ const notifyCommand = defineCommand({
       openMessageDb,
       openSessionDb,
       openclawDir: paths.openclawDir,
-      version: "1.1.1",
+      vscodeCopilotDirs: paths.vscodeCopilotDirs,
+      version: "1.2.0",
     });
 
     if (result.error) {
@@ -579,7 +598,7 @@ async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean):
 export const main = defineCommand({
   meta: {
     name: "pew",
-    version: "1.1.1",
+    version: "1.2.0",
     description: "The contribution graph for AI-native developers",
   },
   subCommands: {

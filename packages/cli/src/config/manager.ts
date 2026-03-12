@@ -1,4 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 import type { PewConfig } from "@pew/core";
 
@@ -32,5 +33,20 @@ export class ConfigManager {
     const dir = dirname(this.configPath);
     await mkdir(dir, { recursive: true });
     await writeFile(this.configPath, JSON.stringify(config, null, 2) + "\n");
+  }
+
+  /**
+   * Ensure the config has a stable deviceId.
+   * Generates a UUID on first call and persists it.
+   * Returns the deviceId (existing or newly created).
+   */
+  async ensureDeviceId(): Promise<string> {
+    const config = await this.load();
+    if (config.deviceId) {
+      return config.deviceId;
+    }
+    config.deviceId = randomUUID();
+    await this.save(config);
+    return config.deviceId;
   }
 }

@@ -70,7 +70,7 @@ export function LandingContent() {
         />
         <div>
           <h1 className="font-handwriting text-5xl tracking-tight text-foreground">
-            PEW
+            pew
           </h1>
           <p className="font-display text-sm font-medium text-muted-foreground">
             Show your tokens

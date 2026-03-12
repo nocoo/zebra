@@ -60,8 +60,8 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to pew
-83:           </Link>
+            Back to <span className="font-handwriting">pew</span>
+          </Link>
         </div>
       </div>
     );
@@ -78,7 +78,7 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to pew
+            Back to <span className="font-handwriting">pew</span>
           </Link>
         </div>
       </div>
@@ -95,7 +95,7 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             className="flex items-center gap-2 text-foreground hover:text-primary transition-colors"
           >
             <Zap className="h-5 w-5 text-primary" strokeWidth={1.5} />
-            <span className="font-bold tracking-tighter">pew</span>
+            <span className="font-bold font-handwriting tracking-tighter">pew</span>
           </Link>
         </div>
       </header>
@@ -222,7 +222,7 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
         <footer className="pt-4 pb-8 text-center">
           <p className="text-xs text-muted-foreground">
             Powered by{" "}
-            <Link href="/" className="text-primary hover:underline">
+            <Link href="/" className="text-primary hover:underline font-handwriting">
               pew
             </Link>{" "}
             — show your tokens

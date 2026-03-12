@@ -1,5 +1,5 @@
 -- Squashed schema: all tables and indexes for pew-db
--- Replaces previous migrations 002-005 and untracked DDL.
+-- Replaces previous migrations 002-007 and untracked DDL.
 -- Apply via: wrangler d1 execute pew-db --remote --file scripts/migrations/001-init.sql
 
 -- ============================================================
@@ -59,17 +59,19 @@ CREATE TABLE IF NOT EXISTS usage_records (
   source                  TEXT    NOT NULL,
   model                   TEXT    NOT NULL,
   hour_start              TEXT    NOT NULL,
+  device_id               TEXT    NOT NULL DEFAULT 'default',
   input_tokens            INTEGER NOT NULL DEFAULT 0,
   cached_input_tokens     INTEGER NOT NULL DEFAULT 0,
   output_tokens           INTEGER NOT NULL DEFAULT 0,
   reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens            INTEGER NOT NULL DEFAULT 0,
   created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(user_id, source, model, hour_start)
+  UNIQUE(user_id, device_id, source, model, hour_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_user_time ON usage_records(user_id, hour_start);
 CREATE INDEX IF NOT EXISTS idx_usage_source    ON usage_records(source);
+CREATE INDEX IF NOT EXISTS idx_usage_device    ON usage_records(user_id, device_id);
 
 -- ============================================================
 -- Session statistics
@@ -142,7 +144,8 @@ CREATE TABLE IF NOT EXISTS teams (
   slug        TEXT NOT NULL UNIQUE,
   invite_code TEXT NOT NULL UNIQUE,
   created_by  TEXT NOT NULL REFERENCES users(id),
-  created_at  TEXT NOT NULL
+  created_at  TEXT NOT NULL,
+  logo_url    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -170,3 +173,44 @@ CREATE TABLE IF NOT EXISTS user_budgets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_budget_user ON user_budgets(user_id);
+
+-- ============================================================
+-- Projects (two-layer: user-defined projects + alias mappings)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS projects (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
+
+CREATE TABLE IF NOT EXISTS project_aliases (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  source      TEXT NOT NULL,
+  project_ref TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, source, project_ref)
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_aliases_project ON project_aliases(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_aliases_lookup  ON project_aliases(user_id, source, project_ref);
+
+-- ============================================================
+-- App-wide settings (key-value store)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Default: max 5 members per team
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('max_team_members', '5');

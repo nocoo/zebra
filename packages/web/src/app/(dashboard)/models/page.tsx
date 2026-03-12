@@ -104,7 +104,7 @@ export default function ModelsPage() {
         <>
           {modelGroups.length === 0 ? (
             <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
-              No usage data yet. Start using your AI coding tools and sync with Pew!
+              No usage data yet. Start using your AI coding tools and sync with pew!
             </div>
           ) : (
             <>
