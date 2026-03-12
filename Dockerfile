@@ -1,6 +1,9 @@
 FROM oven/bun:1 AS base
 
 # --- Install dependencies ---
+# Include all workspace package.json files so bun.lock stays consistent,
+# but cli's native addon (better-sqlite3) is skipped via --ignore-scripts
+# since it needs Python/node-gyp which aren't in the Bun image.
 FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
@@ -8,7 +11,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/cli/package.json packages/cli/
 COPY packages/web/package.json packages/web/
 COPY packages/worker/package.json packages/worker/
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # --- Build ---
 FROM base AS builder
