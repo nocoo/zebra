@@ -413,21 +413,25 @@ sync:     parse deltas → aggregate into buckets (newRecords)
 | Upload 失败后增量 sync | exists | incremental | SUM(old + new) → overwrite | ✅ 正确：未上传的 old 被保留 |
 | Upload 失败后 cursor reset | empty | full-scan | overwrite(全量) | ✅ 正确 |
 | 两次增量 sync（无 upload） | exists | incremental | SUM(old + new₁) → SUM(result + new₂) | ✅ 正确 |
-| Crash: overwrite 后 cursor 前 | — | — | queue = 本次结果，cursor = 旧 | 下次判断为 incremental（cursor 存在但过时），SUM(queue + re-scan) → 可能微量多算一个 sync 周期 |
+| Crash: overwrite 后 cursor 前 | — | — | queue = 本次结果，cursor = 旧 | 下次判断为 incremental（cursor 存在但过时），SUM(queue + re-scan) → 重扫范围内的增量可能被多算一次 |
 
 **Crash safety 分析（cursor-after-queue 顺序）**：
 
 | Crash 时机 | Queue | Cursor | 下次 sync | 影响 |
 |-----------|-------|--------|-----------|------|
 | overwrite 前 | 旧 | 旧 | 完整重做本次 sync → 正确 | 无 |
-| overwrite 后、cursor save 前 | 新 | 旧 | Cursor 存在 → incremental 分支 → SUM(新 queue + 重扫旧→新区间的 delta) | **一个 sync 周期的增量可能被多算一次** |
+| overwrite 后、cursor save 前 | 新 | 旧 | Cursor 存在 → incremental 分支 → SUM(新 queue + 重扫旧→新区间的 delta) | **重扫范围内的增量可能被多算一次（范围取决于旧 cursor 与新 cursor 之间的距离，不一定恰好等于一个 sync 周期）** |
 | cursor save 后 | 新 | 新 | 正常增量 | 无 |
 
-第二种 crash 场景的影响是有限的：只多算一个 sync 周期的增量（而不是 Nx 倍数膨胀），且只在 crash 这种极端场景下发生。`pew reset` 可以恢复。
+第二种 crash 场景的影响是有限的：重扫范围内的增量被多算一次（而不是 Nx 倍数膨胀），且只在 crash 这种极端场景下发生。多算的范围取决于旧 cursor 与实际解析终点之间的距离，通常是上一个 sync 周期左右，但不应做精确承诺。`pew reset` 可以恢复。
 
 **如何判断 cursor 是空的？**
 
-在 `executeSync` 开头加载 cursor 后，检查 `cursors.files` 是否为空对象（且 `cursors.openCodeSqlite` 为 undefined）。`isFullScan = Object.keys(cursors.files).length === 0 && !cursors.openCodeSqlite`。
+在 `executeSync` 开头加载 cursor 后，**立即**检查 `cursors.files` 是否为空对象（且 `cursors.openCodeSqlite` 为 undefined），将结果存入 `initialCursorEmpty` 变量。
+
+`isFullScan = Object.keys(cursors.files).length === 0 && !cursors.openCodeSqlite`
+
+**必须在 sync 开始时判定，不能在 sync 结束后判定。** 因为 sync 过程中各 driver 会写入新的 file cursors（`cursors.files[path] = ...`），sync 结束后 `cursors.files` 不再为空，用结束时的状态判断会永远走 incremental 分支，首次 full-scan 也会错误地去 SUM 旧 queue。
 
 **详细实现**：
 
