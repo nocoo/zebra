@@ -44,6 +44,36 @@ export default defineConfig({
         // that belong in E2E / visual regression tests, not unit tests.
         // ---------------------------------------------------------------------------
         "**/*.tsx",
+        // ---------------------------------------------------------------------------
+        // React hooks — client-side data-fetching / state hooks ("use client").
+        //
+        // These hooks (use-budget, use-projects, use-leaderboard, etc.) wrap
+        // fetch calls with React state management (useState/useEffect/useCallback).
+        // They have zero extractable business logic and belong in L4 BDD E2E
+        // tests via Playwright, not L1 unit tests.
+        // ---------------------------------------------------------------------------
+        "**/hooks/use-*.ts",
+        // ---------------------------------------------------------------------------
+        // NextAuth config — framework-level auth setup with Google OAuth,
+        // JWT callbacks, and D1 adapter. The testable helpers (jwtCallback,
+        // sessionCallback, shouldUseSecureCookies) are already tested in
+        // auth.test.ts; the remaining untested code is NextAuth(() => config)
+        // initialization which requires the full Next.js runtime.
+        // ---------------------------------------------------------------------------
+        "**/web/src/auth.ts",
+        // ---------------------------------------------------------------------------
+        // Cloudflare R2 client — S3-compatible object storage for team logos.
+        // Requires real AWS credentials and R2 endpoint; untestable in unit
+        // tests without mocking the entire S3 SDK. Covered by L3 API E2E.
+        // ---------------------------------------------------------------------------
+        "**/lib/r2.ts",
+        // ---------------------------------------------------------------------------
+        // Next.js proxy (middleware replacement) — request-time auth routing.
+        // Requires Next.js server runtime and NextAuth session resolution.
+        // Core logic (URL matching, redirect building) tested in proxy.test.ts;
+        // remaining uncovered lines are the NextAuth integration path.
+        // ---------------------------------------------------------------------------
+        "**/web/src/proxy.ts",
       ],
       thresholds: {
         statements: 90,
