@@ -159,6 +159,18 @@ export interface CursorState {
   dirMtimes?: Record<string, number>;
   /** OpenCode SQLite database cursor (separate from per-file cursors) */
   openCodeSqlite?: OpenCodeSqliteCursor;
+  /**
+   * Set of file paths that have been scanned at least once (persisted as
+   * `Record<string, true>` for JSON compatibility). Used to distinguish
+   * "genuinely new file" (no cursor, path never seen) from "cursor entry
+   * lost/corrupted" (no cursor, path previously scanned). The latter
+   * triggers a full rescan to prevent SUM inflation.
+   *
+   * Absent in cursors.json files created before v1.6.0. When missing,
+   * the first sync after upgrade triggers a one-time full rescan and
+   * populates this field.
+   */
+  knownFilePaths?: Record<string, true>;
   /** ISO 8601 timestamp of last cursor update */
   updatedAt: string | null;
 }

@@ -113,18 +113,42 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
   const initialCursorEmpty =
     Object.keys(cursors.files).length === 0 && !cursors.openCodeSqlite;
 
-  // Track whether any file's inode changed during this scan. An inode change
-  // means the driver replayed from offset 0, producing the full historical
-  // total for that file. If we SUM this with the existing queue (which already
-  // contains the same historical total), we get 2× inflation.
+  // Upgrade detection: cursors.json created before knownFilePaths was added
+  // (pre-v1.6.0). We can't distinguish "cursor lost" from "new file" without
+  // this field, so trigger a one-time full rescan to safely populate it.
+  if (!initialCursorEmpty && !cursors.knownFilePaths) {
+    onProgress?.({
+      source: "all",
+      phase: "warn",
+      message: "Upgrading cursor format — one-time full rescan",
+    });
+    await cursorStore.save({
+      version: 1,
+      files: {},
+      updatedAt: null,
+    });
+    return executeSync(opts);
+  }
+
+  // Track whether a replay condition was detected during this scan.
+  // Replay conditions include:
+  //   1. File inode changed (file replaced/rotated) → driver reads from offset 0
+  //   2. Cursor entry lost for a previously-scanned file → driver reads from 0
   //
-  // When inode change is detected, we abort the current scan, clear all
-  // cursors, and restart as a full scan (equivalent to `pew reset` + sync).
-  let inodeChangeDetected = false;
+  // In either case, the driver produces the full historical total for that
+  // file. If we SUM this with the existing queue (which already contains
+  // the same historical total), we get 2× inflation.
+  //
+  // When detected, we abort the current scan, clear all cursors, and
+  // restart as a full scan (equivalent to `pew reset` + sync).
+  let replayDetected = false;
 
   const allDeltas: ParsedDelta[] = [];
   const sourceCounts = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0, vscodeCopilot: 0 };
   const filesScanned = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0, vscodeCopilot: 0 };
+
+  // Collect all discovered file paths (across all drivers) for knownFilePaths
+  const discoveredFiles = new Set<string>();
 
   // Build driver sets from options
   const { fileDrivers, dbDrivers } = createTokenDrivers(opts);
@@ -155,6 +179,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
     const files = await driver.discover(discoverOpts, ctx);
     filesScanned[key] = files.length;
+    for (const f of files) discoveredFiles.add(f);
 
     // Build discover message with skipped dirs info from context
     const skippedDirs = driver.source === "opencode" && ctx.dirMtimes
@@ -195,18 +220,36 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
         continue;
       }
 
-      // Detect inode change: file was replaced/rotated since last cursor.
-      // The driver will replay from offset 0 (full file content), but we're
-      // in incremental mode — SUM'ing a full replay with the existing queue
-      // would double-count. Abort and restart as full scan.
-      if (!initialCursorEmpty && cursor && cursor.inode !== fingerprint.inode) {
-        inodeChangeDetected = true;
-        onProgress?.({
-          source: driver.source,
-          phase: "warn",
-          message: `File inode changed for ${filePath} — restarting as full scan`,
-        });
-        break;
+      // Detect replay conditions that would cause SUM inflation:
+      //
+      // 1. Inode change: file was replaced/rotated → driver replays from 0.
+      // 2. Cursor entry lost: the cursor for a previously-scanned file was
+      //    deleted or corrupted → driver treats it as new and reads from 0.
+      //
+      // Condition 2 uses `knownFilePaths` to distinguish "cursor lost for a
+      // known file" (replay risk) from "genuinely new file" (safe to SUM).
+      //
+      // In both cases, SUM'ing a full replay with the existing queue would
+      // double-count. Abort and restart as full scan.
+      if (!initialCursorEmpty) {
+        if (cursor && cursor.inode !== fingerprint.inode) {
+          replayDetected = true;
+          onProgress?.({
+            source: driver.source,
+            phase: "warn",
+            message: `File inode changed for ${filePath} — restarting as full scan`,
+          });
+          break;
+        }
+        if (!cursor && cursors.knownFilePaths?.[filePath]) {
+          replayDetected = true;
+          onProgress?.({
+            source: driver.source,
+            phase: "warn",
+            message: `Cursor entry lost for known file ${filePath} — restarting as full scan`,
+          });
+          break;
+        }
       }
 
       // Extract resume state and parse
@@ -243,18 +286,18 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     driver.afterAll?.(cursors.files, ctx);
 
     // If inode change detected in inner loop, break outer driver loop too
-    if (inodeChangeDetected) break;
+    if (replayDetected) break;
   }
 
-  // ---------- Inode change → full rescan restart ----------
-  // An inode change means a file was replaced. The driver would replay from
-  // offset 0, but we're in incremental mode — SUM'ing would inflate.
+  // ---------- Replay condition → full rescan restart ----------
+  // A file inode change or lost cursor entry means the driver would replay
+  // from offset 0, but we're in incremental mode — SUM'ing would inflate.
   // Strategy: clear all cursors and restart as a clean full scan.
-  if (inodeChangeDetected) {
+  if (replayDetected) {
     onProgress?.({
       source: "all",
       phase: "warn",
-      message: "File rotation detected — clearing cursors and restarting full scan",
+      message: "Replay condition detected — clearing cursors and restarting full scan",
     });
     await cursorStore.save({
       version: 1,
@@ -356,6 +399,14 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
   // Persist context state
   cursors.dirMtimes = ctx.dirMtimes;
+
+  // Update knownFilePaths: merge newly discovered files with existing set.
+  // This grows monotonically — files are never removed from knownFilePaths
+  // even if the physical file is deleted, because we only need to know
+  // "was this path ever scanned?" for cursor-loss detection.
+  const known: Record<string, true> = cursors.knownFilePaths ?? {};
+  for (const fp of discoveredFiles) known[fp] = true;
+  cursors.knownFilePaths = known;
 
   // ---------- Aggregate into half-hour buckets ----------
   onProgress?.({

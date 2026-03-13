@@ -1704,6 +1704,176 @@ describe("executeSync", () => {
     expect(gemini!.input_tokens).toBe(2000);  // Preserved, not lost
   });
 
+  // ===== Bug A2: Partial replay inflation (single cursor entry missing/corrupted) =====
+
+  it("should not inflate when a single file's cursor entry is missing", async () => {
+    // Scenario: sync Claude + Gemini → manually delete Claude cursor entry →
+    // sync again → Claude driver replays from offset 0 (full file content)
+    // In the old code, this runs through the incremental SUM branch → 2× inflation.
+    // With the fix, sync should detect the missing cursor → full rescan → overwrite.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-cursor-miss");
+    await mkdir(claudeDir, { recursive: true });
+    const claudePath = join(claudeDir, "session.jsonl");
+    await writeFile(
+      claudePath,
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    const geminiDir = join(dataDir, ".gemini", "tmp", "proj-cursor-miss", "chats");
+    await mkdir(geminiDir, { recursive: true });
+    await writeFile(
+      join(geminiDir, "session-2026-03-07.json"),
+      geminiSession("2026-03-07T10:15:00.000Z", 2000, 200),
+    );
+
+    // First sync — both sources
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+    });
+
+    // Verify initial queue state
+    const queueRaw1 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records1 = queueRaw1.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const claude1 = records1.find((r) => r.source === "claude-code");
+    const gemini1 = records1.find((r) => r.source === "gemini-cli");
+    expect(claude1!.input_tokens).toBe(1000);
+    expect(gemini1!.input_tokens).toBe(2000);
+
+    // Tamper with cursors.json: delete only the Claude file cursor entry
+    const cursorsPath = join(stateDir, "cursors.json");
+    const cursorsData = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    const fileKeys = Object.keys(cursorsData.files);
+    // Remove all entries matching the Claude file path
+    for (const key of fileKeys) {
+      if (key.includes("proj-cursor-miss") && key.includes(".claude")) {
+        delete cursorsData.files[key];
+      }
+    }
+    await writeFile(cursorsPath, JSON.stringify(cursorsData));
+
+    // Second sync — Claude cursor is missing, Gemini cursor exists
+    // Without fix: Claude replays from 0 → incremental SUM → 2000/200 (2×)
+    // With fix: detects missing cursor → full rescan → overwrite → 1000/100
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+    });
+
+    const queueRaw2 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records2 = queueRaw2.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const claude2 = records2.find((r) => r.source === "claude-code");
+    const gemini2 = records2.find((r) => r.source === "gemini-cli");
+    expect(claude2).toBeDefined();
+    expect(gemini2).toBeDefined();
+    expect(claude2!.input_tokens).toBe(1000);   // NOT 2000
+    expect(claude2!.output_tokens).toBe(100);    // NOT 200
+    expect(gemini2!.input_tokens).toBe(2000);    // Preserved
+    expect(gemini2!.output_tokens).toBe(200);    // Preserved
+  });
+
+  it("should trigger one-time full rescan when upgrading from old cursors.json without knownFilePaths", async () => {
+    // Scenario: existing cursors.json from pre-v1.6.0 lacks knownFilePaths.
+    // First sync after upgrade should detect this and restart as full scan,
+    // then populate knownFilePaths for future use.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-upgrade");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 5000, 500) + "\n",
+    );
+
+    // First sync — establishes cursors normally
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    // Simulate old cursors.json: remove knownFilePaths field
+    const cursorsPath = join(stateDir, "cursors.json");
+    const cursorsData = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    expect(cursorsData.knownFilePaths).toBeDefined();
+    delete cursorsData.knownFilePaths;
+    await writeFile(cursorsPath, JSON.stringify(cursorsData));
+
+    // Second sync — should detect missing knownFilePaths → full rescan
+    // Queue should still have correct values (not inflated)
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records).toHaveLength(1);
+    expect(records[0].input_tokens).toBe(5000);  // NOT 10000
+
+    // Verify knownFilePaths was populated after the rescan
+    const updatedCursors = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    expect(updatedCursors.knownFilePaths).toBeDefined();
+    expect(Object.keys(updatedCursors.knownFilePaths).length).toBeGreaterThan(0);
+  });
+
+  it("should allow genuinely new files without triggering rescan", async () => {
+    // Scenario: sync Claude → add a new Gemini file → sync again.
+    // The new Gemini file should be picked up in incremental mode (SUM),
+    // NOT trigger a full rescan, because it's not in knownFilePaths.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-newfile");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    // First sync — only Claude
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+    });
+
+    const queueRaw1 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records1 = queueRaw1.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    expect(records1).toHaveLength(1);
+    expect(records1[0].source).toBe("claude-code");
+    expect(records1[0].input_tokens).toBe(1000);
+
+    // Add a genuinely new Gemini file
+    const geminiDir = join(dataDir, ".gemini", "tmp", "proj-newfile", "chats");
+    await mkdir(geminiDir, { recursive: true });
+    await writeFile(
+      join(geminiDir, "session-2026-03-07.json"),
+      geminiSession("2026-03-07T10:15:00.000Z", 2000, 200),
+    );
+
+    // Second sync — Claude + Gemini, incremental
+    const r2 = await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+    });
+
+    // Should pick up only the new Gemini delta (Claude skipped, unchanged)
+    expect(r2.totalDeltas).toBe(1);
+    expect(r2.sources.gemini).toBe(1);
+    expect(r2.sources.claude).toBe(0);
+
+    // Queue should have both sources with correct values
+    const queueRaw2 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records2 = queueRaw2.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const claude = records2.find((r) => r.source === "claude-code");
+    const gemini = records2.find((r) => r.source === "gemini-cli");
+    expect(claude!.input_tokens).toBe(1000);  // Preserved from first sync
+    expect(gemini!.input_tokens).toBe(2000);  // New file, correctly SUM'd
+  });
+
   // ===== Bug B: No-op sync re-marking history as unread =====
 
   it("should not re-mark uploaded records as unread on no-op sync", async () => {
