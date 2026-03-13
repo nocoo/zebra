@@ -29,6 +29,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 type SortKey =
+  | "team_count"
+  | "device_count"
   | "total_tokens"
   | "input_tokens"
   | "output_tokens"
@@ -361,6 +363,22 @@ export default function AdminStoragePage() {
                         User
                       </th>
                       <SortHeader
+                        label="Teams"
+                        sortKey="team_count"
+                        currentSort={sortKey}
+                        currentDir={sortDir}
+                        onSort={handleSort}
+                        className="text-right hidden sm:table-cell"
+                      />
+                      <SortHeader
+                        label="Devices"
+                        sortKey="device_count"
+                        currentSort={sortKey}
+                        currentDir={sortDir}
+                        onSort={handleSort}
+                        className="text-right hidden sm:table-cell"
+                      />
+                      <SortHeader
                         label="Total"
                         sortKey="total_tokens"
                         currentSort={sortKey}
@@ -449,6 +467,18 @@ export default function AdminStoragePage() {
                               </p>
                             </div>
                           </div>
+                        </td>
+                        {/* Teams */}
+                        <td className="px-4 py-3 text-right hidden sm:table-cell">
+                          <span className="text-sm text-muted-foreground tabular-nums">
+                            {user.team_count}
+                          </span>
+                        </td>
+                        {/* Devices */}
+                        <td className="px-4 py-3 text-right hidden sm:table-cell">
+                          <span className="text-sm text-muted-foreground tabular-nums">
+                            {user.device_count}
+                          </span>
                         </td>
                         {/* Total tokens */}
                         <td className="px-4 py-3 text-right">

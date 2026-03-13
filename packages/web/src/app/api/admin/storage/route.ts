@@ -18,6 +18,8 @@ export interface StorageUserRow {
   email: string | null;
   name: string | null;
   image: string | null;
+  team_count: number;
+  device_count: number;
   total_tokens: number;
   input_tokens: number;
   output_tokens: number;
@@ -58,18 +60,30 @@ export async function GET(request: Request) {
          u.email,
          u.name,
          u.image,
-         COALESCE(tok.total_tokens, 0)            AS total_tokens,
-         COALESCE(tok.input_tokens, 0)             AS input_tokens,
-         COALESCE(tok.output_tokens, 0)            AS output_tokens,
-         COALESCE(tok.cached_input_tokens, 0)      AS cached_input_tokens,
-         COALESCE(tok.reasoning_output_tokens, 0)  AS reasoning_output_tokens,
-         COALESCE(tok.usage_row_count, 0)          AS usage_row_count,
-         COALESCE(sess.session_count, 0)           AS session_count,
-         COALESCE(sess.total_messages, 0)          AS total_messages,
-         COALESCE(sess.total_duration_seconds, 0)  AS total_duration_seconds,
-         COALESCE(tok.first_seen, sess.first_seen) AS first_seen,
-         COALESCE(tok.last_seen, sess.last_seen)   AS last_seen
+         COALESCE(tm_cnt.team_count, 0)            AS team_count,
+         COALESCE(dev_cnt.device_count, 0)          AS device_count,
+         COALESCE(tok.total_tokens, 0)              AS total_tokens,
+         COALESCE(tok.input_tokens, 0)              AS input_tokens,
+         COALESCE(tok.output_tokens, 0)             AS output_tokens,
+         COALESCE(tok.cached_input_tokens, 0)       AS cached_input_tokens,
+         COALESCE(tok.reasoning_output_tokens, 0)   AS reasoning_output_tokens,
+         COALESCE(tok.usage_row_count, 0)           AS usage_row_count,
+         COALESCE(sess.session_count, 0)            AS session_count,
+         COALESCE(sess.total_messages, 0)           AS total_messages,
+         COALESCE(sess.total_duration_seconds, 0)   AS total_duration_seconds,
+         COALESCE(tok.first_seen, sess.first_seen)  AS first_seen,
+         COALESCE(tok.last_seen, sess.last_seen)    AS last_seen
        FROM users u
+       LEFT JOIN (
+         SELECT user_id, COUNT(*) AS team_count
+         FROM team_members
+         GROUP BY user_id
+       ) tm_cnt ON tm_cnt.user_id = u.id
+       LEFT JOIN (
+         SELECT user_id, COUNT(DISTINCT device_id) AS device_count
+         FROM usage_records
+         GROUP BY user_id
+       ) dev_cnt ON dev_cnt.user_id = u.id
        LEFT JOIN (
          SELECT
            user_id,
