@@ -253,4 +253,76 @@ describe("resolvePewBin", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  describe("win32", () => {
+    it("uses where.exe instead of which on win32", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "pew-win-"));
+      const binPath = join(tempDir, "pew.cmd");
+      const prevArgv = process.argv.slice();
+
+      try {
+        // Create a pew.cmd file so fileExists() passes
+        await writeFile(binPath, "@echo off\n", "utf8");
+
+        // argv[1] points to nonexistent dir so sibling lookup fails
+        process.argv = ["node", join(tempDir, "nonexistent", "entry.js")];
+
+        const mockExecFile = vi.fn().mockResolvedValue({ stdout: binPath + "\n", stderr: "" });
+
+        const resolved = await resolvePewBin({ platform: "win32", execFile: mockExecFile });
+
+        // Should have called where.exe, NOT which
+        expect(mockExecFile).toHaveBeenCalledWith("where.exe", ["pew"]);
+        expect(resolved).toBe(binPath);
+      } finally {
+        process.argv = prevArgv;
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("resolves sibling pew.cmd on win32 when pew is absent", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "pew-win-sibling-"));
+      const binDir = join(tempDir, "bin");
+      const argvEntry = join(binDir, "entry.js");
+      const siblingCmd = join(binDir, "pew.cmd");
+      const prevArgv = process.argv.slice();
+
+      try {
+        await mkdir(binDir, { recursive: true });
+        await writeFile(argvEntry, "", "utf8");
+        // Only pew.cmd exists, no pew (unix binary)
+        await writeFile(siblingCmd, "@echo off\n", "utf8");
+        process.argv = ["node", argvEntry];
+
+        const resolved = await resolvePewBin({ platform: "win32" });
+        expect(resolved).toBe(siblingCmd);
+      } finally {
+        process.argv = prevArgv;
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("picks first line from where.exe output on win32", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "pew-win-multi-"));
+      const binPath = join(tempDir, "pew.cmd");
+      const prevArgv = process.argv.slice();
+
+      try {
+        await writeFile(binPath, "@echo off\n", "utf8");
+        process.argv = ["node", join(tempDir, "nonexistent", "entry.js")];
+
+        // where.exe can return multiple lines
+        const mockExecFile = vi.fn().mockResolvedValue({
+          stdout: `${binPath}\nC:\\Other\\pew.cmd\n`,
+          stderr: "",
+        });
+
+        const resolved = await resolvePewBin({ platform: "win32", execFile: mockExecFile });
+        expect(resolved).toBe(binPath);
+      } finally {
+        process.argv = prevArgv;
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

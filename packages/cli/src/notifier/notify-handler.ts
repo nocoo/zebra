@@ -187,18 +187,35 @@ export async function removeNotifyHandler(
   };
 }
 
-export async function resolvePewBin(): Promise<string> {
-  const fromArgv =
-    typeof process.argv[1] === "string" ? join(dirname(process.argv[1]), "pew") : null;
+export interface ResolvePewBinDeps {
+  platform?: NodeJS.Platform;
+  execFile?: typeof execFileAsync;
+}
 
-  if (fromArgv && (await isExecutable(fromArgv))) {
-    return fromArgv;
+export async function resolvePewBin(deps?: ResolvePewBinDeps): Promise<string> {
+  const platform = deps?.platform ?? process.platform;
+  const isWin = platform === "win32";
+  const exec = deps?.execFile ?? execFileAsync;
+
+  // Step 1: Check sibling binary next to argv[1].
+  // On Windows, npm installs pew.cmd (shim), so check both pew and pew.cmd.
+  if (typeof process.argv[1] === "string") {
+    const dir = dirname(process.argv[1]);
+    const candidates = isWin ? [join(dir, "pew"), join(dir, "pew.cmd")] : [join(dir, "pew")];
+    for (const candidate of candidates) {
+      if (await fileExists(candidate, isWin)) {
+        return candidate;
+      }
+    }
   }
 
+  // Step 2: Look up via PATH — `where.exe` on Windows, `which` everywhere else.
   try {
-    const result = await execFileAsync("which", ["pew"]);
-    const candidate = result.stdout.trim();
-    if (candidate && (await isExecutable(candidate))) {
+    const [cmd, args] = isWin ? ["where.exe", ["pew"]] : ["which", ["pew"]];
+    const result = await exec(cmd, args);
+    // where.exe may return multiple lines; take the first.
+    const candidate = result.stdout.trim().split(/\r?\n/)[0]?.trim();
+    if (candidate && (await fileExists(candidate, isWin))) {
       return candidate;
     }
   } catch {
@@ -208,9 +225,14 @@ export async function resolvePewBin(): Promise<string> {
   throw new Error("Unable to resolve pew binary. Ensure `pew` is available in PATH.");
 }
 
-async function isExecutable(filePath: string): Promise<boolean> {
+/**
+ * Check whether a file exists and is usable as a binary.
+ * On Windows, X_OK is meaningless (NTFS has no Unix execute bit), so we
+ * check R_OK (file exists and is readable) instead.
+ */
+async function fileExists(filePath: string, isWin: boolean): Promise<boolean> {
   try {
-    await access(filePath, constants.X_OK);
+    await access(filePath, isWin ? constants.R_OK : constants.X_OK);
     return true;
   } catch {
     return false;
