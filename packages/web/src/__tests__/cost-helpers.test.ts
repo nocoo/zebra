@@ -165,6 +165,31 @@ describe("toDailyCostPoints", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.totalCost).toBe(0);
   });
+
+  it("shifts records across midnight with positive tzOffset (UTC-8)", () => {
+    // 2026-03-11T03:00Z → 2026-03-10T19:00 PST → local date 2026-03-10
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", input_tokens: 100_000, cached_input_tokens: 0, output_tokens: 0 }),
+      makeRow({ hour_start: "2026-03-11T03:00:00Z", input_tokens: 200_000, cached_input_tokens: 0, output_tokens: 0 }),
+    ];
+    const result = toDailyCostPoints(rows, pm, 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-10");
+    // 300k input * $3/M = $0.90
+    expect(result[0]!.inputCost).toBeCloseTo(0.90, 3);
+  });
+
+  it("shifts records across midnight with negative tzOffset (UTC+9)", () => {
+    // 2026-03-10T20:00Z → 2026-03-11T05:00 JST → local date 2026-03-11
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", input_tokens: 100_000, cached_input_tokens: 0, output_tokens: 0 }),
+    ];
+    const result = toDailyCostPoints(rows, pm, -540); // UTC+9
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-11");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -426,6 +451,33 @@ describe("toDailyCacheRates", () => {
     expect(result[0]!.cacheRate).toBe(0);
     expect(result[0]!.inputTokens).toBe(0);
     expect(result[0]!.cachedTokens).toBe(0);
+  });
+
+  it("shifts records across midnight with positive tzOffset (UTC-8)", () => {
+    // 2026-03-11T03:00Z → 2026-03-10T19:00 PST → local date 2026-03-10
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", input_tokens: 100_000, cached_input_tokens: 60_000 }),
+      makeRow({ hour_start: "2026-03-11T03:00:00Z", input_tokens: 100_000, cached_input_tokens: 40_000 }),
+    ];
+    const result = toDailyCacheRates(rows, 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-10");
+    expect(result[0]!.inputTokens).toBe(200_000);
+    expect(result[0]!.cachedTokens).toBe(100_000);
+    expect(result[0]!.cacheRate).toBeCloseTo(50, 1);
+  });
+
+  it("shifts records across midnight with negative tzOffset (UTC+9)", () => {
+    // 2026-03-10T20:00Z → 2026-03-11T05:00 JST → local date 2026-03-11
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", input_tokens: 100_000, cached_input_tokens: 80_000 }),
+    ];
+    const result = toDailyCacheRates(rows, -540); // UTC+9
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-11");
+    expect(result[0]!.cacheRate).toBeCloseTo(80, 1);
   });
 });
 

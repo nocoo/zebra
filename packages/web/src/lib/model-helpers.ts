@@ -3,6 +3,7 @@
  */
 
 import type { UsageRow } from "@/hooks/use-usage-data";
+import { toLocalDateStr } from "@/lib/usage-helpers";
 
 /**
  * Truncate long model names for chart Y-axis labels.
@@ -41,6 +42,7 @@ export interface ModelEra {
 export function toModelEvolutionPoints(
   rows: UsageRow[],
   topN = 5,
+  tzOffset: number = 0,
 ): ModelEra[] {
   if (rows.length === 0) return [];
 
@@ -60,7 +62,7 @@ export function toModelEvolutionPoints(
   const byDate = new Map<string, Map<string, number>>();
 
   for (const r of rows) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     const model = topModels.has(r.model) ? r.model : "Other";
 
     let dateMap = byDate.get(date);

@@ -230,6 +230,8 @@ export default function DetailsPage() {
 
   const { pricingMap } = usePricingMap();
 
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+
   // Filter records client-side for model filter (API only supports source filter)
   const filteredRecords = useMemo(() => {
     if (!data) return [];
@@ -238,7 +240,7 @@ export default function DetailsPage() {
   }, [data, modelFilter]);
 
   const daily = useMemo(() => {
-    const raw = toDailyPoints(filteredRecords);
+    const raw = toDailyPoints(filteredRecords, tzOffset);
     // Build a map for quick lookup
     const byDate = new Map(raw.map((d) => [d.date, d]));
     // Pad to full month: 1st to last day
@@ -258,11 +260,11 @@ export default function DetailsPage() {
       );
     }
     return padded;
-  }, [filteredRecords, year, month]);
+  }, [filteredRecords, year, month, tzOffset]);
 
   const dailyGroups = useMemo(
-    () => groupByDate(filteredRecords, pricingMap),
-    [filteredRecords, pricingMap]
+    () => groupByDate(filteredRecords, pricingMap, tzOffset),
+    [filteredRecords, pricingMap, tzOffset]
   );
 
   // Extract available sources/models from unfiltered data for filter dropdowns

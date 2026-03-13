@@ -54,6 +54,8 @@ export default function ModelsPage() {
 
   const { pricingMap } = usePricingMap();
 
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+
   const modelGroups = useMemo(
     () => (data ? groupByModel(data.records, pricingMap) : []),
     [data, pricingMap],
@@ -65,13 +67,13 @@ export default function ModelsPage() {
   );
 
   const sourceTrendData = useMemo(
-    () => (data ? toSourceTrendPoints(data.records) : []),
-    [data],
+    () => (data ? toSourceTrendPoints(data.records, tzOffset) : []),
+    [data, tzOffset],
   );
 
   const modelEvolutionData = useMemo(
-    () => (data ? toModelEvolutionPoints(data.records) : []),
-    [data],
+    () => (data ? toModelEvolutionPoints(data.records, undefined, tzOffset) : []),
+    [data, tzOffset],
   );
 
   const subtitle = periodLabel(period);

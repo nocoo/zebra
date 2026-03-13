@@ -222,6 +222,36 @@ describe("groupByDate", () => {
     const result = groupByDate(rows, pm());
     expect(result[0]!.records).toHaveLength(2);
   });
+
+  it("shifts records across midnight with positive tzOffset (UTC-8)", () => {
+    // 2026-03-11T03:00Z → 2026-03-10T19:00 PST → local date 2026-03-10
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", total_tokens: 100 }),
+      makeRow({ hour_start: "2026-03-11T03:00:00Z", total_tokens: 200 }),
+    ];
+    const result = groupByDate(rows, pm(), 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-10");
+    expect(result[0]!.totalTokens).toBe(300);
+    expect(result[0]!.records).toHaveLength(2);
+  });
+
+  it("shifts records across midnight with negative tzOffset (UTC+9)", () => {
+    // 2026-03-10T20:00Z → 2026-03-11T05:00 JST → local date 2026-03-11
+    const rows = [
+      makeRow({ hour_start: "2026-03-10T10:00:00Z", total_tokens: 100 }),
+      makeRow({ hour_start: "2026-03-10T20:00:00Z", total_tokens: 200 }),
+    ];
+    const result = groupByDate(rows, pm(), -540); // UTC+9
+
+    expect(result).toHaveLength(2);
+    // Sorted newest-first
+    expect(result[0]!.date).toBe("2026-03-11");
+    expect(result[0]!.totalTokens).toBe(200);
+    expect(result[1]!.date).toBe("2026-03-10");
+    expect(result[1]!.totalTokens).toBe(100);
+  });
 });
 
 // ---------------------------------------------------------------------------

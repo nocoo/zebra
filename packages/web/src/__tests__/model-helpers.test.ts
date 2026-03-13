@@ -146,4 +146,32 @@ describe("toModelEvolutionPoints", () => {
     expect(result[0]!.date).toBe("2026-03-07");
     expect(result[1]!.date).toBe("2026-03-09");
   });
+
+  it("should shift records across midnight with positive tzOffset (UTC-8)", () => {
+    // 2026-03-08T03:00Z → 2026-03-07T19:00 PST → local date 2026-03-07
+    const rows = [
+      makeRow({ model: "claude-sonnet-4-20250514", hour_start: "2026-03-07T20:00:00Z", total_tokens: 3000 }),
+      makeRow({ model: "claude-sonnet-4-20250514", hour_start: "2026-03-08T03:00:00Z", total_tokens: 2000 }),
+    ];
+    const result = toModelEvolutionPoints(rows, 5, 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.models["claude-sonnet-4-20250514"]).toBe(5000);
+  });
+
+  it("should shift records across midnight with negative tzOffset (UTC+9)", () => {
+    // 2026-03-07T20:00Z → 2026-03-08T05:00 JST → local date 2026-03-08
+    const rows = [
+      makeRow({ model: "claude-sonnet-4-20250514", hour_start: "2026-03-07T10:00:00Z", total_tokens: 1000 }),
+      makeRow({ model: "gemini-2.5-pro", hour_start: "2026-03-07T20:00:00Z", total_tokens: 2000 }),
+    ];
+    const result = toModelEvolutionPoints(rows, 5, -540); // UTC+9
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.models["claude-sonnet-4-20250514"]).toBe(1000);
+    expect(result[1]!.date).toBe("2026-03-08");
+    expect(result[1]!.models["gemini-2.5-pro"]).toBe(2000);
+  });
 });

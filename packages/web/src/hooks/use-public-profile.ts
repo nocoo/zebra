@@ -104,7 +104,7 @@ export function usePublicProfile(
     fetchData();
   }, [fetchData]);
 
-  const daily = data ? toDailyPoints(data.records) : [];
+  const daily = data ? toDailyPoints(data.records, new Date().getTimezoneOffset()) : [];
   const sources = data
     ? toSourceAggregates(data.records).map((s) => ({
         ...s,

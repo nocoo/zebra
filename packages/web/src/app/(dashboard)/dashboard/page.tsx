@@ -68,6 +68,9 @@ export default function DashboardPage() {
 
   const { pricingMap } = usePricingMap();
 
+  // Timezone offset for UTC→local date conversion (used by multiple helpers)
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+
   // Budget tracking — always fetch current month
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -78,8 +81,8 @@ export default function DashboardPage() {
   const estimatedCost = useMemo(() => computeTotalCost(models, pricingMap), [models, pricingMap]);
 
   const dailyCostPoints = useMemo(
-    () => (data ? toDailyCostPoints(data.records, pricingMap) : []),
-    [data, pricingMap],
+    () => (data ? toDailyCostPoints(data.records, pricingMap, tzOffset) : []),
+    [data, pricingMap, tzOffset],
   );
 
   const cacheSavings = useMemo(
@@ -110,12 +113,11 @@ export default function DashboardPage() {
   }, [budget, costForecast, currentMonthTokens]);
 
   const dailyCacheRates = useMemo(
-    () => (data ? toDailyCacheRates(data.records) : []),
-    [data],
+    () => (data ? toDailyCacheRates(data.records, tzOffset) : []),
+    [data, tzOffset],
   );
 
   // MoM growth (needs 2 months of data — use half-hour records)
-  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
 
   const mom = useMemo(
     () => (halfHourData.data ? computeMoMGrowth(halfHourData.data.records, pricingMap) : null),

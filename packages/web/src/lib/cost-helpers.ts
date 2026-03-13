@@ -9,6 +9,7 @@ import type { ModelAggregate } from "@/hooks/use-usage-data";
 import type { UsageRow, UsageSummary } from "@/hooks/use-usage-data";
 import { lookupPricing, estimateCost } from "@/lib/pricing";
 import type { PricingMap } from "@/lib/pricing";
+import { toLocalDateStr } from "@/lib/usage-helpers";
 
 /** Sum estimated cost across an array of model aggregates. */
 export function computeTotalCost(
@@ -47,11 +48,12 @@ export interface DailyCostPoint {
 export function toDailyCostPoints(
   rows: UsageRow[],
   pricingMap: PricingMap,
+  tzOffset: number = 0,
 ): DailyCostPoint[] {
   const byDate = new Map<string, DailyCostPoint>();
 
   for (const r of rows) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     const pricing = lookupPricing(pricingMap, r.model, r.source);
     const cost = estimateCost(
       r.input_tokens,
@@ -260,11 +262,11 @@ export interface DailyCacheRate {
  * Days with zero input tokens get `cacheRate = 0`.
  * Returns sorted ascending by date.
  */
-export function toDailyCacheRates(rows: UsageRow[]): DailyCacheRate[] {
+export function toDailyCacheRates(rows: UsageRow[], tzOffset: number = 0): DailyCacheRate[] {
   const byDate = new Map<string, { cachedTokens: number; inputTokens: number }>();
 
   for (const r of rows) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     const existing = byDate.get(date);
     if (existing) {
       existing.cachedTokens += r.cached_input_tokens;

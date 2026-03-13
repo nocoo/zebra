@@ -12,6 +12,24 @@ import type { PricingMap } from "@/lib/pricing";
 import { getLocalToday } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
+// Shared UTC→local date conversion
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a UTC `hour_start` timestamp to a local date string "YYYY-MM-DD".
+ *
+ * Applies `tzOffset` (minutes, from `new Date().getTimezoneOffset()`) to shift
+ * the timestamp from UTC to local time. When `tzOffset` is 0, this is
+ * equivalent to `hourStart.slice(0, 10)`.
+ */
+export function toLocalDateStr(hourStart: string, tzOffset: number): string {
+  if (tzOffset === 0) return hourStart.slice(0, 10);
+  const utcMs = new Date(hourStart).getTime();
+  const localMs = utcMs - tzOffset * 60_000;
+  return new Date(localMs).toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -248,11 +266,11 @@ export function groupByAgent(records: UsageRow[], pricingMap: PricingMap): Agent
 // ---------------------------------------------------------------------------
 
 /** Group usage records by date (YYYY-MM-DD), sorted newest-first. */
-export function groupByDate(records: UsageRow[], pricingMap: PricingMap): DailyGroup[] {
+export function groupByDate(records: UsageRow[], pricingMap: PricingMap, tzOffset: number = 0): DailyGroup[] {
   const byDate = new Map<string, UsageRow[]>();
 
   for (const r of records) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     const existing = byDate.get(date);
     if (existing) {
       existing.push(r);
@@ -646,7 +664,7 @@ export function computeStreak(
  * with one key per source. Sources missing on a given date are zero-filled
  * so all dates have the same set of keys (needed for Recharts stacking).
  */
-export function toSourceTrendPoints(rows: UsageRow[]): SourceTrendPoint[] {
+export function toSourceTrendPoints(rows: UsageRow[], tzOffset: number = 0): SourceTrendPoint[] {
   if (rows.length === 0) return [];
 
   // Collect all unique sources and accumulate by (date, source)
@@ -654,7 +672,7 @@ export function toSourceTrendPoints(rows: UsageRow[]): SourceTrendPoint[] {
   const byDate = new Map<string, Map<string, number>>();
 
   for (const r of rows) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     allSources.add(r.source);
 
     let dateMap = byDate.get(date);
@@ -687,14 +705,14 @@ export function toSourceTrendPoints(rows: UsageRow[]): SourceTrendPoint[] {
  * Group rows by date and identify the dominant source per day.
  * Ties are broken alphabetically by source name.
  */
-export function toDominantSourceTimeline(rows: UsageRow[]): DailyDominantSource[] {
+export function toDominantSourceTimeline(rows: UsageRow[], tzOffset: number = 0): DailyDominantSource[] {
   if (rows.length === 0) return [];
 
   // Accumulate tokens per (date, source)
   const byDate = new Map<string, Map<string, number>>();
 
   for (const r of rows) {
-    const date = r.hour_start.slice(0, 10);
+    const date = toLocalDateStr(r.hour_start, tzOffset);
     let dateMap = byDate.get(date);
     if (!dateMap) {
       dateMap = new Map<string, number>();

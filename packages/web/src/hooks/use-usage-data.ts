@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+import { toLocalDateStr } from "@/lib/usage-helpers";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -69,11 +71,11 @@ export interface ModelAggregate {
 // ---------------------------------------------------------------------------
 
 /** Aggregate records into daily points */
-export function toDailyPoints(records: UsageRow[]): DailyPoint[] {
+export function toDailyPoints(records: UsageRow[], tzOffset: number = 0): DailyPoint[] {
   const byDate = new Map<string, DailyPoint>();
 
   for (const r of records) {
-    const date = r.hour_start.slice(0, 10); // "2026-03-07"
+    const date = toLocalDateStr(r.hour_start, tzOffset); // "2026-03-07"
     const existing = byDate.get(date);
     if (existing) {
       existing.input += r.input_tokens;
@@ -238,7 +240,7 @@ export function useUsageData(
     fetchData();
   }, [fetchData]);
 
-  const daily = data ? toDailyPoints(data.records) : [];
+  const daily = data ? toDailyPoints(data.records, new Date().getTimezoneOffset()) : [];
   const sources = data
     ? toSourceAggregates(data.records).map((s) => ({
         ...s,

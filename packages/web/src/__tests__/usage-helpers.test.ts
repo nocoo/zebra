@@ -71,6 +71,34 @@ describe("toDailyPoints", () => {
       "2026-03-09",
     ]);
   });
+
+  it("should shift records across midnight for positive tzOffset (UTC-8 PST)", () => {
+    // 2026-03-08T03:00Z → 2026-03-07T19:00 PST → local date 2026-03-07
+    const records = [
+      makeRow({ hour_start: "2026-03-07T20:00:00Z", input_tokens: 100, output_tokens: 50, cached_input_tokens: 10, reasoning_output_tokens: 0, total_tokens: 160 }),
+      makeRow({ hour_start: "2026-03-08T03:00:00Z", input_tokens: 200, output_tokens: 100, cached_input_tokens: 20, reasoning_output_tokens: 0, total_tokens: 320 }),
+    ];
+
+    const daily = toDailyPoints(records, 480); // UTC-8
+
+    expect(daily).toHaveLength(1);
+    expect(daily[0]!.date).toBe("2026-03-07");
+    expect(daily[0]!.input).toBe(300);
+    expect(daily[0]!.total).toBe(480);
+  });
+
+  it("should shift records across midnight for negative tzOffset (UTC+9 JST)", () => {
+    // 2026-03-07T20:00Z → 2026-03-08T05:00 JST → local date 2026-03-08
+    const records = [
+      makeRow({ hour_start: "2026-03-07T20:00:00Z", input_tokens: 500, output_tokens: 200, cached_input_tokens: 50, reasoning_output_tokens: 0, total_tokens: 750 }),
+    ];
+
+    const daily = toDailyPoints(records, -540); // UTC+9
+
+    expect(daily).toHaveLength(1);
+    expect(daily[0]!.date).toBe("2026-03-08");
+    expect(daily[0]!.total).toBe(750);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -626,6 +654,34 @@ describe("toSourceTrendPoints", () => {
     expect(result[0]!.date).toBe("2026-03-07");
     expect(result[1]!.date).toBe("2026-03-09");
   });
+
+  it("should shift records across midnight with tzOffset (UTC-8)", () => {
+    // 2026-03-08T03:00Z → 2026-03-07T19:00 PST → local date 2026-03-07
+    const rows = [
+      makeRow({ source: "claude-code", hour_start: "2026-03-07T20:00:00Z", total_tokens: 1000 }),
+      makeRow({ source: "claude-code", hour_start: "2026-03-08T03:00:00Z", total_tokens: 2000 }),
+    ];
+    const result = toSourceTrendPoints(rows, 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.sources["claude-code"]).toBe(3000);
+  });
+
+  it("should shift records across midnight with tzOffset (UTC+9)", () => {
+    // 2026-03-07T20:00Z → 2026-03-08T05:00 JST → local date 2026-03-08
+    const rows = [
+      makeRow({ source: "claude-code", hour_start: "2026-03-07T10:00:00Z", total_tokens: 1000 }),
+      makeRow({ source: "claude-code", hour_start: "2026-03-07T20:00:00Z", total_tokens: 2000 }),
+    ];
+    const result = toSourceTrendPoints(rows, -540); // UTC+9
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.sources["claude-code"]).toBe(1000);
+    expect(result[1]!.date).toBe("2026-03-08");
+    expect(result[1]!.sources["claude-code"]).toBe(2000);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -692,5 +748,20 @@ describe("toDominantSourceTimeline", () => {
     const result = toDominantSourceTimeline(rows);
     expect(result[0]!.date).toBe("2026-03-07");
     expect(result[1]!.date).toBe("2026-03-09");
+  });
+
+  it("should shift records across midnight with tzOffset (UTC-8)", () => {
+    // 2026-03-08T03:00Z → 2026-03-07T19:00 PST → local date 2026-03-07
+    const rows = [
+      makeRow({ source: "claude-code", hour_start: "2026-03-07T20:00:00Z", total_tokens: 5000 }),
+      makeRow({ source: "gemini-cli", hour_start: "2026-03-08T03:00:00Z", total_tokens: 1000 }),
+    ];
+    const result = toDominantSourceTimeline(rows, 480); // UTC-8
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.date).toBe("2026-03-07");
+    expect(result[0]!.dominantSource).toBe("claude-code");
+    expect(result[0]!.sources["claude-code"]).toBe(5000);
+    expect(result[0]!.sources["gemini-cli"]).toBe(1000);
   });
 });
