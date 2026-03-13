@@ -85,6 +85,35 @@ describe("periodToDateRange", () => {
     const result = periodToDateRange("week");
     expect(result.from).toBe("2026-03-08");
   });
+
+  it("should not pad from for positive tzOffset (west of UTC)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15)); // March 15, 2026
+    const result = periodToDateRange("month", 480); // UTC-8
+    expect(result.from).toBe("2026-03-01");
+  });
+
+  it("should pad from by one day for negative tzOffset (east of UTC)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15)); // March 15, 2026
+    const result = periodToDateRange("month", -540); // UTC+9
+    // Local Mar 1 00:00 JST = Feb 28 15:00 UTC, so from must include Feb 28
+    expect(result.from).toBe("2026-02-28");
+  });
+
+  it("should pad week from by one day for negative tzOffset", () => {
+    vi.useFakeTimers();
+    // Wednesday March 11, 2026 — previous Sunday = March 8
+    vi.setSystemTime(new Date(2026, 2, 11));
+    const result = periodToDateRange("week", -540); // UTC+9
+    // Sunday is March 8, padded back to March 7
+    expect(result.from).toBe("2026-03-07");
+  });
+
+  it('should not pad "all" period regardless of tzOffset', () => {
+    const result = periodToDateRange("all", -540);
+    expect(result.from).toBe("2020-01-01");
+  });
 });
 
 // ---------------------------------------------------------------------------

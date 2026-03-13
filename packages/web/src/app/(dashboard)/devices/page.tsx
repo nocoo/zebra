@@ -83,7 +83,7 @@ function StatGrid({ devices }: { devices: DeviceAggregate[] }) {
 
 export default function ByDevicePage() {
   const [period, setPeriod] = useState<Period>("all");
-  const { from, to } = periodToDateRange(period);
+  const { from, to } = periodToDateRange(period, new Date().getTimezoneOffset());
 
   const { data, loading, error } = useDeviceData({
     from,

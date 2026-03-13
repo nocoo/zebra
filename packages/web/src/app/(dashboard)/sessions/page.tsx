@@ -30,7 +30,7 @@ import { formatTokens } from "@/lib/utils";
 export default function SessionsPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [projectFilter, setProjectFilter] = useState("");
-  const { from, to } = periodToDateRange(period);
+  const { from, to } = periodToDateRange(period, new Date().getTimezoneOffset());
 
   // Primary fetch: all sessions (no project filter) — used for breakdown + default display
   const allData = useSessionData({

@@ -46,7 +46,7 @@ type ChartTab = "tokens" | "cost";
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [chartTab, setChartTab] = useState<ChartTab>("tokens");
-  const { from, to } = periodToDateRange(period);
+  const { from, to } = periodToDateRange(period, new Date().getTimezoneOffset());
 
   const { data, daily, sources, models, loading, error } = useUsageData({
     from,

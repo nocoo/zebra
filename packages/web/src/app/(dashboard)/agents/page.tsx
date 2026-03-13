@@ -144,7 +144,7 @@ function AgentsSkeleton() {
 
 export default function AgentsPage() {
   const [period, setPeriod] = useState<Period>("all");
-  const { from, to } = periodToDateRange(period);
+  const { from, to } = periodToDateRange(period, new Date().getTimezoneOffset());
 
   const { data, loading, error } = useUsageData({
     from,

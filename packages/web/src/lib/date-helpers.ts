@@ -49,8 +49,22 @@ function toLocalDateString(d: Date): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Compute from/to date strings for a given period. */
-export function periodToDateRange(period: Period): { from: string; to?: string } {
+/**
+ * Compute from/to date strings for a given period.
+ *
+ * When `tzOffset` is provided the `from` boundary is padded by one day
+ * towards UTC so that the server-side query (which compares against UTC
+ * `hour_start`) never misses records that fall within the local period.
+ * East-of-UTC timezones (negative tzOffset) would otherwise lose up to
+ * 14 hours of data at the period start because local midnight maps to
+ * the previous UTC day.  Padding by one day is safe because the
+ * front-end aggregation helpers already convert each record to a local
+ * date before bucketing.
+ */
+export function periodToDateRange(
+  period: Period,
+  tzOffset: number = 0,
+): { from: string; to?: string } {
   const now = new Date();
 
   switch (period) {
@@ -58,12 +72,14 @@ export function periodToDateRange(period: Period): { from: string; to?: string }
       return { from: "2020-01-01" };
     case "month": {
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      if (tzOffset < 0) firstOfMonth.setDate(firstOfMonth.getDate() - 1);
       return { from: toLocalDateString(firstOfMonth) };
     }
     case "week": {
       const day = now.getDay();
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - day);
+      if (tzOffset < 0) sunday.setDate(sunday.getDate() - 1);
       return { from: toLocalDateString(sunday) };
     }
   }
