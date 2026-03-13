@@ -366,6 +366,136 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
     expect(sql).toContain("snapshot_ready");
   });
 
+  // -------------------------------------------------------------------------
+  // UUID vs slug branch coverage
+  // -------------------------------------------------------------------------
+
+  describe("UUID vs slug season lookup", () => {
+    const UUID_SEASON_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const SLUG_SEASON_ID = "s1";
+
+    it("should use WHERE id = ? when seasonId is a UUID", async () => {
+      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const req = makeRequest(
+        `http://localhost:7030/api/seasons/${UUID_SEASON_ID}/leaderboard`
+      );
+      await GET(req, {
+        params: Promise.resolve({ seasonId: UUID_SEASON_ID }),
+      });
+
+      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
+      const params = mockClient.firstOrNull.mock.calls[0]![1] as string[];
+      expect(sql).toContain("WHERE id = ?");
+      expect(sql).not.toContain("WHERE slug = ?");
+      expect(params[0]).toBe(UUID_SEASON_ID);
+    });
+
+    it("should use WHERE slug = ? when seasonId is a slug", async () => {
+      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const req = makeRequest(
+        `http://localhost:7030/api/seasons/${SLUG_SEASON_ID}/leaderboard`
+      );
+      await GET(req, {
+        params: Promise.resolve({ seasonId: SLUG_SEASON_ID }),
+      });
+
+      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
+      const params = mockClient.firstOrNull.mock.calls[0]![1] as string[];
+      expect(sql).toContain("WHERE slug = ?");
+      expect(sql).not.toContain("WHERE id = ?");
+      expect(params[0]).toBe(SLUG_SEASON_ID);
+    });
+
+    it("should return identical response shape for UUID and slug lookups", async () => {
+      // UUID lookup
+      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockClient.query.mockResolvedValueOnce({
+        results: [
+          {
+            team_id: "team-a",
+            team_name: "Team Alpha",
+            team_slug: "team-alpha",
+            total_tokens: 5000,
+            input_tokens: 3000,
+            output_tokens: 2000,
+            cached_input_tokens: 1000,
+          },
+        ],
+      });
+
+      const uuidRes = await GET(
+        makeRequest(
+          `http://localhost:7030/api/seasons/${UUID_SEASON_ID}/leaderboard`
+        ),
+        { params: Promise.resolve({ seasonId: UUID_SEASON_ID }) }
+      );
+      const uuidData = await uuidRes.json();
+
+      vi.clearAllMocks();
+      mockClient = createMockClient();
+      vi.mocked(d1Module.getD1Client).mockReturnValue(
+        mockClient as unknown as d1Module.D1Client
+      );
+
+      // Slug lookup — same mock data
+      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockClient.query.mockResolvedValueOnce({
+        results: [
+          {
+            team_id: "team-a",
+            team_name: "Team Alpha",
+            team_slug: "team-alpha",
+            total_tokens: 5000,
+            input_tokens: 3000,
+            output_tokens: 2000,
+            cached_input_tokens: 1000,
+          },
+        ],
+      });
+
+      const slugRes = await GET(
+        makeRequest(
+          `http://localhost:7030/api/seasons/${SLUG_SEASON_ID}/leaderboard`
+        ),
+        { params: Promise.resolve({ seasonId: SLUG_SEASON_ID }) }
+      );
+      const slugData = await slugRes.json();
+
+      // Both should have identical shapes
+      expect(uuidRes.status).toBe(200);
+      expect(slugRes.status).toBe(200);
+      expect(Object.keys(uuidData)).toEqual(Object.keys(slugData));
+      expect(Object.keys(uuidData.season)).toEqual(
+        Object.keys(slugData.season)
+      );
+      expect(uuidData.entries).toHaveLength(1);
+      expect(slugData.entries).toHaveLength(1);
+      expect(Object.keys(uuidData.entries[0])).toEqual(
+        Object.keys(slugData.entries[0])
+      );
+    });
+
+    it("should treat uppercase UUID as UUID (case-insensitive)", async () => {
+      const upperUUID = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890";
+      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      await GET(
+        makeRequest(
+          `http://localhost:7030/api/seasons/${upperUUID}/leaderboard`
+        ),
+        { params: Promise.resolve({ seasonId: upperUUID }) }
+      );
+
+      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
+      expect(sql).toContain("WHERE id = ?");
+    });
+  });
+
   it("should return 404 for non-existent season", async () => {
     mockClient.firstOrNull.mockResolvedValueOnce(null);
 
