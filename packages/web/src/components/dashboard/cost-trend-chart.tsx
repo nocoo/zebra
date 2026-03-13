@@ -69,32 +69,38 @@ function CostTooltip({
     cachedCost: "Cached",
   };
 
-  // Compute total from visible payload entries
   const total = payload.reduce((sum, e) => sum + e.value, 0);
+  const orderedKeys = ["inputCost", "outputCost", "cachedCost"] as const;
 
   return (
     <div className="rounded-[var(--radius-widget)] border border-border bg-card p-2.5 shadow-sm">
-      <p className="mb-1.5 text-xs font-medium text-foreground">
+      <p className="mb-1 text-xs font-medium text-foreground">
         {label ? fmtDate(label) : ""}
       </p>
-      {payload.map((entry) => (
-        <div key={entry.dataKey} className="flex items-center gap-2 text-xs">
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-muted-foreground">
-            {labels[entry.dataKey] ?? entry.dataKey}
-          </span>
-          <span className="ml-auto font-medium text-foreground">
-            {formatCost(entry.value)}
-          </span>
-        </div>
-      ))}
-      <div className="mt-1.5 border-t border-border pt-1.5 flex items-center justify-between text-xs">
+      <div className="mb-1 border-b border-border/50 pb-1 flex items-center gap-2 text-xs">
         <span className="text-muted-foreground">Total</span>
-        <span className="font-medium text-foreground">{formatCost(total)}</span>
+        <span className="ml-auto font-medium text-foreground">
+          {formatCost(total)}
+        </span>
       </div>
+      {orderedKeys.map((key) => {
+        const entry = payload.find((e) => e.dataKey === key);
+        if (!entry) return null;
+        return (
+          <div key={entry.dataKey} className="flex items-center gap-2 text-xs">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-muted-foreground">
+              {labels[entry.dataKey] ?? entry.dataKey}
+            </span>
+            <span className="ml-auto font-medium text-foreground">
+              {formatCost(entry.value)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

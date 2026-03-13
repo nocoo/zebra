@@ -56,6 +56,9 @@ function ModelTooltip({
   };
 
   const modelData = payload[0]?.payload;
+  const total = modelData?.total ?? 0;
+
+  const orderedKeys = ["input", "output", "cached"] as const;
 
   return (
     <div className="rounded-[var(--radius-widget)] border border-border bg-card p-2.5 shadow-sm">
@@ -63,24 +66,34 @@ function ModelTooltip({
         {label}
       </p>
       {modelData && (
-        <p className="mb-1.5 text-xs text-muted-foreground">
+        <p className="mb-1 text-xs text-muted-foreground">
           {modelData.sourceLabel} &middot; {formatTokens(modelData.total)} total
         </p>
       )}
-      {payload.map((entry) => (
-        <div key={entry.dataKey} className="flex items-center gap-2 text-xs">
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-muted-foreground">
-            {labels[entry.dataKey] ?? entry.dataKey}
-          </span>
-          <span className="ml-auto font-medium text-foreground">
-            {formatTokens(entry.value)}
-          </span>
-        </div>
-      ))}
+      <div className="mb-1 border-b border-border/50 pb-1 flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Total</span>
+        <span className="ml-auto font-medium text-foreground">
+          {formatTokens(total)}
+        </span>
+      </div>
+      {orderedKeys.map((key) => {
+        const entry = payload.find((e) => e.dataKey === key);
+        if (!entry) return null;
+        return (
+          <div key={entry.dataKey} className="flex items-center gap-2 text-xs">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-muted-foreground">
+              {labels[entry.dataKey] ?? entry.dataKey}
+            </span>
+            <span className="ml-auto font-medium text-foreground">
+              {formatTokens(entry.value)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
