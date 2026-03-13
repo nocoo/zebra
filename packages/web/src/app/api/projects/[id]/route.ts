@@ -427,10 +427,12 @@ export async function PATCH(
       aliases: aliasRows.results.map((a) => ({
         source: a.source,
         project_ref: a.project_ref,
+        session_count: a.session_count,
       })),
       tags: tagRows.results.map((r) => r.tag),
       session_count: sessionCount,
       last_active: lastActive,
+      absolute_last_active: lastActive, // PATCH is always all-time, so identical
       total_messages: totalMessages,
       total_duration: totalDuration,
       models: [...modelSet],

@@ -49,6 +49,7 @@ interface AliasStatsRow {
   total_messages: number;
   total_duration: number;
   models: string | null;
+  absolute_last_active: string | null;
 }
 
 interface UnassignedRow {
@@ -78,8 +79,14 @@ export async function GET(request: Request) {
   const userId = authResult.userId;
   const client = getD1Client();
 
+  // Parse optional date range
+  const url = new URL(request.url);
+  const from = url.searchParams.get("from"); // inclusive, YYYY-MM-DD
+  const to = url.searchParams.get("to"); // exclusive, YYYY-MM-DD
+  const hasDateRange = from !== null && to !== null;
+
   try {
-    // Query 1: Project metadata
+    // Query 1: Project metadata (unchanged — always returns all projects)
     const projectsResult = await client.query<ProjectRow>(
       `SELECT id, name, created_at
        FROM projects
@@ -89,49 +96,110 @@ export async function GET(request: Request) {
     );
 
     // Query 2: Aliases with per-alias session stats
-    const aliasesResult = await client.query<AliasStatsRow>(
-      `SELECT
-         pa.project_id,
-         pa.source,
-         pa.project_ref,
-         COUNT(sr.id) AS session_count,
-         MAX(sr.last_message_at) AS last_active,
-         COALESCE(SUM(sr.total_messages), 0) AS total_messages,
-         COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
-         GROUP_CONCAT(DISTINCT sr.model) AS models
-       FROM project_aliases pa
-       LEFT JOIN session_records sr
-         ON sr.user_id = pa.user_id
-         AND sr.source = pa.source
-         AND sr.project_ref = pa.project_ref
-       WHERE pa.user_id = ?
-       GROUP BY pa.project_id, pa.source, pa.project_ref`,
-      [userId],
-    );
+    // When from/to provided: two LEFT JOINs — sr (period-scoped), sr_all (all-time)
+    // When absent: single LEFT JOIN (sr), no sr_all needed
+    let aliasesResult;
+    if (hasDateRange) {
+      aliasesResult = await client.query<AliasStatsRow>(
+        `SELECT
+           pa.project_id,
+           pa.source,
+           pa.project_ref,
+           COUNT(sr.id) AS session_count,
+           MAX(sr.last_message_at) AS last_active,
+           COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+           COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+           GROUP_CONCAT(DISTINCT sr.model) AS models,
+           MAX(sr_all.last_message_at) AS absolute_last_active
+         FROM project_aliases pa
+         LEFT JOIN session_records sr
+           ON sr.user_id = pa.user_id
+           AND sr.source = pa.source
+           AND sr.project_ref = pa.project_ref
+           AND sr.started_at >= ?
+           AND sr.started_at < ?
+         LEFT JOIN session_records sr_all
+           ON sr_all.user_id = pa.user_id
+           AND sr_all.source = pa.source
+           AND sr_all.project_ref = pa.project_ref
+         WHERE pa.user_id = ?
+         GROUP BY pa.project_id, pa.source, pa.project_ref`,
+        [from, to, userId],
+      );
+    } else {
+      aliasesResult = await client.query<AliasStatsRow>(
+        `SELECT
+           pa.project_id,
+           pa.source,
+           pa.project_ref,
+           COUNT(sr.id) AS session_count,
+           MAX(sr.last_message_at) AS last_active,
+           COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+           COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+           GROUP_CONCAT(DISTINCT sr.model) AS models,
+           MAX(sr.last_message_at) AS absolute_last_active
+         FROM project_aliases pa
+         LEFT JOIN session_records sr
+           ON sr.user_id = pa.user_id
+           AND sr.source = pa.source
+           AND sr.project_ref = pa.project_ref
+         WHERE pa.user_id = ?
+         GROUP BY pa.project_id, pa.source, pa.project_ref`,
+        [userId],
+      );
+    }
 
-    // Query 3: Unassigned refs
-    const unassignedResult = await client.query<UnassignedRow>(
-      `SELECT
-         sr.source,
-         sr.project_ref,
-         COUNT(*) AS session_count,
-         MAX(sr.last_message_at) AS last_active,
-         COALESCE(SUM(sr.total_messages), 0) AS total_messages,
-         COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
-         GROUP_CONCAT(DISTINCT sr.model) AS models
-       FROM session_records sr
-       WHERE sr.user_id = ?
-         AND sr.project_ref IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM project_aliases pa
-           WHERE pa.user_id = sr.user_id
-             AND pa.source = sr.source
-             AND pa.project_ref = sr.project_ref
-         )
-       GROUP BY sr.source, sr.project_ref
-       ORDER BY last_active DESC`,
-      [userId],
-    );
+    // Query 3: Unassigned refs (date conditions in WHERE — no LEFT JOIN to protect)
+    let unassignedResult;
+    if (hasDateRange) {
+      unassignedResult = await client.query<UnassignedRow>(
+        `SELECT
+           sr.source,
+           sr.project_ref,
+           COUNT(*) AS session_count,
+           MAX(sr.last_message_at) AS last_active,
+           COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+           COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+           GROUP_CONCAT(DISTINCT sr.model) AS models
+         FROM session_records sr
+         WHERE sr.user_id = ?
+           AND sr.project_ref IS NOT NULL
+           AND sr.started_at >= ?
+           AND sr.started_at < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM project_aliases pa
+             WHERE pa.user_id = sr.user_id
+               AND pa.source = sr.source
+               AND pa.project_ref = sr.project_ref
+           )
+         GROUP BY sr.source, sr.project_ref
+         ORDER BY last_active DESC`,
+        [userId, from, to],
+      );
+    } else {
+      unassignedResult = await client.query<UnassignedRow>(
+        `SELECT
+           sr.source,
+           sr.project_ref,
+           COUNT(*) AS session_count,
+           MAX(sr.last_message_at) AS last_active,
+           COALESCE(SUM(sr.total_messages), 0) AS total_messages,
+           COALESCE(SUM(sr.duration_seconds), 0) AS total_duration,
+           GROUP_CONCAT(DISTINCT sr.model) AS models
+         FROM session_records sr
+         WHERE sr.user_id = ?
+           AND sr.project_ref IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM project_aliases pa
+             WHERE pa.user_id = sr.user_id
+               AND pa.source = sr.source
+               AND pa.project_ref = sr.project_ref
+           )
+         GROUP BY sr.source, sr.project_ref
+         ORDER BY last_active DESC`,
+        [userId],
+      );
+    }
 
     // Assemble: group tags by project_id
     const tagsByProject = new Map<string, string[]>();
@@ -166,6 +234,7 @@ export async function GET(request: Request) {
       const aliases = aliasesByProject.get(p.id) ?? [];
       let sessionCount = 0;
       let lastActive: string | null = null;
+      let absoluteLastActive: string | null = null;
       let totalMessages = 0;
       let totalDuration = 0;
       const modelSet = new Set<string>();
@@ -181,6 +250,13 @@ export async function GET(request: Request) {
         if (a.last_active && (!lastActive || a.last_active > lastActive)) {
           lastActive = a.last_active;
         }
+        if (
+          a.absolute_last_active &&
+          (!absoluteLastActive ||
+            a.absolute_last_active > absoluteLastActive)
+        ) {
+          absoluteLastActive = a.absolute_last_active;
+        }
       }
       return {
         id: p.id,
@@ -188,10 +264,12 @@ export async function GET(request: Request) {
         aliases: aliases.map((a) => ({
           source: a.source,
           project_ref: a.project_ref,
+          session_count: a.session_count,
         })),
         tags: tagsByProject.get(p.id) ?? [],
         session_count: sessionCount,
         last_active: lastActive,
+        absolute_last_active: absoluteLastActive,
         total_messages: totalMessages,
         total_duration: totalDuration,
         models: [...modelSet],
@@ -451,10 +529,12 @@ export async function POST(request: Request) {
         aliases: deduped.map((a) => ({
           source: a.source,
           project_ref: a.project_ref,
+          session_count: 0, // newly created — no period stats yet
         })),
         tags: [],
         session_count: sessionCount,
         last_active: lastActive,
+        absolute_last_active: lastActive, // POST is always all-time
         total_messages: totalMessages,
         total_duration: totalDuration,
         models: [...modelSet],
