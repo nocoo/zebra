@@ -326,21 +326,25 @@ export async function executeSessionSync(
   });
   const deduped = deduplicateSessionRecords(records);
 
-  // ---------- Save cursor state FIRST (before queue) ----------
-  // IMPORTANT: This is the OPPOSITE order from token sync (sync.ts), and
-  // intentionally so.  Token sync uses queue.overwrite() (idempotent), so
-  // "queue-then-cursor" is safe — a crash just replays an overwrite.
-  // Session sync uses queue.appendBatch(), so "queue-then-cursor" would
-  // re-append duplicates on crash.  "Cursor-then-queue" means a crash
-  // between the two loses the batch (not yet queued), but source files
-  // are immutable so `pew reset` can always rebuild from scratch.
-  cursors.updatedAt = new Date().toISOString();
-  await cursorStore.save(cursors);
-
-  // ---------- Write to session queue ----------
+  // ---------- Write to session queue FIRST (before cursor) ----------
+  // Queue must be persisted before cursor so that a crash between the two
+  // never loses data.  Worst case: queue appended + cursor not saved →
+  // next sync re-scans unchanged files → re-appends duplicates.  These
+  // duplicates are harmless because:
+  //   1. Client-side: upload engine calls deduplicateSessionRecords()
+  //      (preprocess) which collapses by session_key, keeping latest
+  //      snapshot_at.
+  //   2. Server-side: ON CONFLICT (user_id, session_key) with a
+  //      monotonic WHERE guard ensures idempotent upserts.
+  // This matches the same "prefer duplicates over data loss" invariant
+  // used by token sync (sync.ts).
   if (deduped.length > 0) {
     await queue.appendBatch(deduped);
   }
+
+  // ---------- Save cursor state AFTER queue ----------
+  cursors.updatedAt = new Date().toISOString();
+  await cursorStore.save(cursors);
 
   onProgress?.({
     source: "all",
