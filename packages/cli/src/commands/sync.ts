@@ -130,6 +130,14 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     return executeSync(opts);
   }
 
+  // Backfill knownDbSources for cursors created between v1.6.0 (added
+  // knownFilePaths) and this fix (added knownDbSources). If the DB cursor
+  // exists but knownDbSources doesn't, seed it from the existing cursor state.
+  // No rescan needed — the cursor itself is still valid.
+  if (!cursors.knownDbSources && cursors.openCodeSqlite) {
+    cursors.knownDbSources = { openCodeSqlite: true };
+  }
+
   // Track whether a replay condition was detected during this scan.
   // Replay conditions include:
   //   1. File inode changed (file replaced/rotated) → driver reads from offset 0
@@ -362,6 +370,25 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     });
 
     const prevCursor = cursors.openCodeSqlite as OpenCodeSqliteCursor | undefined;
+
+    // Detect DB cursor loss (parallel to file-based knownFilePaths logic):
+    // If the DB was previously synced (tracked in knownDbSources) but the
+    // cursor entry is missing, the driver will replay from rowId 0 — SUM'ing
+    // that with the existing queue would double-count. Trigger full rescan.
+    if (!initialCursorEmpty && !prevCursor && cursors.knownDbSources?.["openCodeSqlite"]) {
+      onProgress?.({
+        source: "opencode-sqlite",
+        phase: "warn",
+        message: "SQLite cursor entry lost — restarting as full scan",
+      });
+      await cursorStore.save({
+        version: 1,
+        files: {},
+        updatedAt: null,
+      });
+      return executeSync(opts);
+    }
+
     const result = await driver.run(prevCursor, ctx);
 
     // Detect DB inode change (same logic as file drivers)
@@ -385,6 +412,11 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     }
 
     cursors.openCodeSqlite = result.cursor as CursorState["openCodeSqlite"];
+
+    // Track this DB source as "previously synced" for cursor-loss detection
+    const knownDb: Record<string, true> = cursors.knownDbSources ?? {};
+    knownDb["openCodeSqlite"] = true;
+    cursors.knownDbSources = knownDb;
 
     allDeltas.push(...result.deltas);
     sourceCounts[key] += result.deltas.length;

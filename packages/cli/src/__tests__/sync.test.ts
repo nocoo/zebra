@@ -1874,6 +1874,130 @@ describe("executeSync", () => {
     expect(gemini!.input_tokens).toBe(2000);  // New file, correctly SUM'd
   });
 
+  // ===== Bug A2b: SQLite cursor entry lost (DB-based driver cursor-loss detection) =====
+
+  it("should not inflate when openCodeSqlite cursor entry is lost but file cursors exist", async () => {
+    // Scenario: sync Claude + OpenCode SQLite → manually delete openCodeSqlite
+    // cursor entry → sync again → SQLite driver replays from rowId 0.
+    // Without fix: incremental SUM → 2× inflation.
+    // With fix: detects missing DB cursor via knownDbSources → full rescan → overwrite.
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-dbcursor-loss");
+    await mkdir(claudeDir, { recursive: true });
+    const claudePath = join(claudeDir, "session.jsonl");
+    await writeFile(
+      claudePath,
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    const dbDir = join(dataDir, "opencode");
+    await mkdir(dbDir, { recursive: true });
+    const dbPath = join(dbDir, "opencode.db");
+    await writeFile(dbPath, "dummy-sqlite-db");
+
+    const sqliteRows = [
+      { id: "msg_001", session_id: "ses_001", time_created: 1739600000000, data: sqliteRowData({ role: "assistant", input: 500, output: 200, timeCreated: 1739600000000 }) },
+    ];
+
+    // First sync — both Claude (file) + OpenCode SQLite (DB)
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+      openCodeDbPath: dbPath,
+      openMessageDb: mockOpenMessageDb(sqliteRows),
+    });
+
+    // Verify initial queue state
+    const queueRaw1 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records1 = queueRaw1.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const claude1 = records1.find((r) => r.source === "claude-code");
+    const oc1 = records1.find((r) => r.source === "opencode");
+    expect(claude1!.input_tokens).toBe(1000);
+    expect(oc1!.input_tokens).toBe(500);
+
+    // Verify knownDbSources was populated
+    const cursorsPath = join(stateDir, "cursors.json");
+    const cursorsData = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    expect(cursorsData.knownDbSources).toBeDefined();
+    expect(cursorsData.knownDbSources.openCodeSqlite).toBe(true);
+
+    // Tamper: delete only the openCodeSqlite cursor entry (keep file cursors)
+    delete cursorsData.openCodeSqlite;
+    await writeFile(cursorsPath, JSON.stringify(cursorsData));
+
+    // Second sync — SQLite cursor is missing, file cursors still exist
+    // Without fix: SQLite replays from 0 → SUM → 1000/400 (2×)
+    // With fix: detects missing DB cursor → full rescan → overwrite → 500/200
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      claudeDir: join(dataDir, ".claude"),
+      openCodeDbPath: dbPath,
+      openMessageDb: mockOpenMessageDb(sqliteRows),
+    });
+
+    const queueRaw2 = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records2 = queueRaw2.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const claude2 = records2.find((r) => r.source === "claude-code");
+    const oc2 = records2.find((r) => r.source === "opencode");
+    expect(claude2).toBeDefined();
+    expect(oc2).toBeDefined();
+    expect(oc2!.input_tokens).toBe(500);   // NOT 1000
+    expect(oc2!.output_tokens).toBe(200);   // NOT 400
+    expect(claude2!.input_tokens).toBe(1000);  // Preserved
+    expect(claude2!.output_tokens).toBe(100);  // Preserved
+  });
+
+  it("should backfill knownDbSources from existing openCodeSqlite cursor on upgrade", async () => {
+    // Scenario: cursors.json has knownFilePaths (v1.6.0) but NOT knownDbSources
+    // (pre-fix). If openCodeSqlite cursor exists, knownDbSources should be
+    // backfilled without triggering a full rescan.
+    const dbDir = join(dataDir, "opencode");
+    await mkdir(dbDir, { recursive: true });
+    const dbPath = join(dbDir, "opencode.db");
+    await writeFile(dbPath, "dummy-sqlite-db");
+
+    const sqliteRows = [
+      { id: "msg_001", session_id: "ses_001", time_created: 1739600000000, data: sqliteRowData({ role: "assistant", input: 500, output: 200, timeCreated: 1739600000000 }) },
+    ];
+
+    // First sync — establishes cursor with knownDbSources
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      openCodeDbPath: dbPath,
+      openMessageDb: mockOpenMessageDb(sqliteRows),
+    });
+
+    // Simulate v1.6.0 cursors: has knownFilePaths but NOT knownDbSources
+    const cursorsPath = join(stateDir, "cursors.json");
+    const cursorsData = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    expect(cursorsData.knownDbSources).toBeDefined();
+    delete cursorsData.knownDbSources;
+    // Ensure knownFilePaths exists (v1.6.0+)
+    if (!cursorsData.knownFilePaths) cursorsData.knownFilePaths = {};
+    await writeFile(cursorsPath, JSON.stringify(cursorsData));
+
+    // Second sync — should backfill knownDbSources, not inflate
+    await executeSync({
+      stateDir,
+      deviceId: "dev-1",
+      openCodeDbPath: dbPath,
+      openMessageDb: mockOpenMessageDb(sqliteRows),
+    });
+
+    // Verify knownDbSources was backfilled
+    const updatedCursors = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    expect(updatedCursors.knownDbSources).toBeDefined();
+    expect(updatedCursors.knownDbSources.openCodeSqlite).toBe(true);
+
+    // Verify no inflation
+    const queueRaw = await readFile(join(stateDir, "queue.jsonl"), "utf-8");
+    const records = queueRaw.trim().split("\n").map((l) => JSON.parse(l) as QueueRecord);
+    const oc = records.find((r) => r.source === "opencode");
+    expect(oc!.input_tokens).toBe(500);  // NOT 1000
+  });
+
   // ===== Bug B: No-op sync re-marking history as unread =====
 
   it("should not re-mark uploaded records as unread on no-op sync", async () => {

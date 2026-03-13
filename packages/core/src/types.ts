@@ -171,6 +171,15 @@ export interface CursorState {
    * populates this field.
    */
   knownFilePaths?: Record<string, true>;
+  /**
+   * Set of DB source keys (e.g. "openCodeSqlite") that have been synced
+   * at least once. Parallel to `knownFilePaths` but for DB-based drivers.
+   * Used to detect "DB cursor lost" vs "first-time DB sync".
+   *
+   * Backfilled from existing cursor state on first access — no full
+   * rescan needed for the upgrade path since the DB cursor itself is valid.
+   */
+  knownDbSources?: Record<string, true>;
   /** ISO 8601 timestamp of last cursor update */
   updatedAt: string | null;
 }
