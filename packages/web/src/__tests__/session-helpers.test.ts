@@ -254,6 +254,73 @@ describe("toMessageDailyStats", () => {
       "2026-03-10",
     ]);
   });
+
+  it("should shift day boundary for west-of-UTC timezone (tzOffset=480, PST)", () => {
+    // 2026-03-09T02:00:00Z → PST local = 2026-03-08T18:00:00 → should bucket into Mar 8
+    const records = [
+      makeSession({
+        started_at: "2026-03-08T10:00:00Z",
+        user_messages: 10,
+        assistant_messages: 8,
+      }),
+      makeSession({
+        started_at: "2026-03-09T02:00:00Z",
+        user_messages: 5,
+        assistant_messages: 4,
+      }),
+    ];
+
+    const daily = toMessageDailyStats(records, 480);
+
+    // Both should be on 2026-03-08 in PST
+    expect(daily).toHaveLength(1);
+    expect(daily[0]).toEqual({
+      date: "2026-03-08",
+      user: 15,
+      assistant: 12,
+    });
+  });
+
+  it("should shift day boundary for east-of-UTC timezone (tzOffset=-540, JST)", () => {
+    // 2026-03-08T20:00:00Z → JST local = 2026-03-09T05:00:00 → should bucket into Mar 9
+    const records = [
+      makeSession({
+        started_at: "2026-03-08T20:00:00Z",
+        user_messages: 7,
+        assistant_messages: 6,
+      }),
+      makeSession({
+        started_at: "2026-03-09T10:00:00Z",
+        user_messages: 3,
+        assistant_messages: 2,
+      }),
+    ];
+
+    const daily = toMessageDailyStats(records, -540);
+
+    // Both should be on 2026-03-09 in JST
+    expect(daily).toHaveLength(1);
+    expect(daily[0]).toEqual({
+      date: "2026-03-09",
+      user: 10,
+      assistant: 8,
+    });
+  });
+
+  it("should match zero-offset behavior when tzOffset=0", () => {
+    const records = [
+      makeSession({
+        started_at: "2026-03-08T10:00:00Z",
+        user_messages: 10,
+        assistant_messages: 8,
+      }),
+    ];
+
+    const withTz = toMessageDailyStats(records, 0);
+    const without = toMessageDailyStats(records);
+
+    expect(withTz).toEqual(without);
+  });
 });
 
 // ---------------------------------------------------------------------------

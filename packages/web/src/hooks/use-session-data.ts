@@ -106,7 +106,7 @@ export function useSessionData(
   const overview = toSessionOverview(records);
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
   const hoursGrid = toWorkingHoursGrid(records, tzOffset);
-  const dailyMessages = toMessageDailyStats(records);
+  const dailyMessages = toMessageDailyStats(records, tzOffset);
   const projectBreakdown = toProjectBreakdown(records);
 
   return {

@@ -2,6 +2,8 @@
 // Session data helper types & pure functions
 // ---------------------------------------------------------------------------
 
+import { toLocalDateStr } from "@/lib/usage-helpers";
+
 /** Shape of a row returned by GET /api/sessions */
 export type SessionRow = {
   session_key: string;
@@ -106,14 +108,14 @@ export type MessageDailyStat = {
   assistant: number;
 };
 
-export function toMessageDailyStats(records: SessionRow[]): MessageDailyStat[] {
+export function toMessageDailyStats(records: SessionRow[], tzOffset: number = 0): MessageDailyStat[] {
   if (records.length === 0) return [];
 
   const byDate = new Map<string, { user: number; assistant: number }>();
 
   for (const r of records) {
-    // Extract YYYY-MM-DD from ISO timestamp
-    const date = r.started_at.slice(0, 10);
+    // Convert UTC timestamp to local date string
+    const date = toLocalDateStr(r.started_at, tzOffset);
     const existing = byDate.get(date);
     if (existing) {
       existing.user += r.user_messages;
