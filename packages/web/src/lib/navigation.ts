@@ -41,7 +41,7 @@ export const BASE_NAV_GROUPS: NavGroupDef[] = [
     label: "Analytics",
     defaultOpen: true,
     items: [
-      { href: "/recent", label: "Recent", icon: "CalendarDays" },
+      { href: "/recent", label: "Recent", icon: "Clock" },
       { href: "/daily-usage", label: "Daily Usage", icon: "CalendarDays" },
       { href: "/sessions", label: "Sessions", icon: "MessagesSquare" },
       { href: "/agents", label: "By Agent", icon: "AppWindow" },
