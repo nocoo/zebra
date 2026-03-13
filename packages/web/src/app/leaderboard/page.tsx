@@ -24,6 +24,7 @@ import { TableHeader } from "@/components/leaderboard/table-header";
 import { LeaderboardSkeleton } from "@/components/leaderboard/leaderboard-skeleton";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
 import { PageHeader } from "@/components/leaderboard/page-header";
+import { TokenTierBadge } from "@/components/leaderboard/token-tier-badge";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -335,8 +336,9 @@ function LeaderboardRow({
         </span>
       </div>
 
-      {/* Total — check-style handwriting font, full number */}
-      <div className="relative z-10 w-[140px] shrink-0 text-right">
+      {/* Total — check-style handwriting font, full number + tier badge */}
+      <div className="relative z-10 w-[140px] shrink-0 text-right flex items-center justify-end gap-1.5">
+        <TokenTierBadge totalTokens={total_tokens} />
         <span className="font-handwriting text-[39px] leading-none tracking-tight text-foreground">
           {formatTokensFull(total_tokens)}
         </span>

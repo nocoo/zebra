@@ -24,6 +24,7 @@ import { RankBadge } from "@/components/leaderboard/rank-badge";
 import { StatusBadge } from "@/components/leaderboard/status-badge";
 import { LeaderboardSkeleton } from "@/components/leaderboard/leaderboard-skeleton";
 import { PageHeader } from "@/components/leaderboard/page-header";
+import { TokenTierBadge } from "@/components/leaderboard/token-tier-badge";
 import { Trophy } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -152,7 +153,8 @@ function TeamRow({
         </div>
 
         {/* Total */}
-        <div className="relative z-10 w-[140px] shrink-0 text-right">
+        <div className="relative z-10 w-[140px] shrink-0 text-right flex items-center justify-end gap-1.5">
+          <TokenTierBadge totalTokens={entry.total_tokens} />
           <span className="font-handwriting text-[39px] leading-none tracking-tight text-foreground">
             {formatTokensFull(entry.total_tokens)}
           </span>
