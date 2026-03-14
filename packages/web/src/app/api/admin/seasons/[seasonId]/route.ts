@@ -123,7 +123,7 @@ export async function PATCH(
       (values[updates.indexOf("start_date = ?")] as string) ?? season.start_date;
     const finalEndDate =
       (values[updates.indexOf("end_date = ?")] as string) ?? season.end_date;
-    if (finalEndDate < finalStartDate) {
+    if (new Date(finalEndDate).getTime() < new Date(finalStartDate).getTime()) {
       return NextResponse.json(
         { error: "end_date must be >= start_date" },
         { status: 400 }

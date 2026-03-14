@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (end_date < start_date) {
+  if (new Date(end_date).getTime() < new Date(start_date).getTime()) {
     return NextResponse.json(
       { error: "end_date must be >= start_date" },
       { status: 400 }
