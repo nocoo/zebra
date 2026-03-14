@@ -188,6 +188,9 @@ function CreateSeasonForm({
             onChange={(e) => setStartDate(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
           />
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            Enter the exact UTC time — not your local time.
+          </p>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -199,6 +202,9 @@ function CreateSeasonForm({
             onChange={(e) => setEndDate(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
           />
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            Enter the exact UTC time — not your local time.
+          </p>
         </div>
       </div>
       <div className="mt-3">
@@ -375,6 +381,11 @@ function EditSeasonRow({
                   : "bg-muted text-muted-foreground cursor-not-allowed",
               )}
             />
+            {isUpcoming && (
+              <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                Enter the exact UTC time — not your local time.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -392,6 +403,11 @@ function EditSeasonRow({
                   : "bg-muted text-muted-foreground cursor-not-allowed",
               )}
             />
+            {isUpcoming && (
+              <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                Enter the exact UTC time — not your local time.
+              </p>
+            )}
           </div>
         </div>
         <div className="mt-3">
