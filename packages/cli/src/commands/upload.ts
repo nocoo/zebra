@@ -88,6 +88,7 @@ export async function executeUpload(opts: UploadOptions): Promise<UploadResult> 
     endpoint: "/api/ingest",
     entityName: "records",
     preprocess: aggregateRecords,
+    recordKey: (r) => `${r.source}|${r.model}|${r.hour_start}|${r.device_id}`,
   });
 
   return engine.execute(opts);

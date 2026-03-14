@@ -32,6 +32,14 @@ export interface UploadEngineConfig<T> {
   entityName: string;
   /** Pre-processing step: aggregation for tokens, dedup for sessions */
   preprocess: (records: T[]) => T[];
+  /**
+   * Extract a bucket key from a record for dirty-keys filtering.
+   *
+   * When provided, the engine uses `dirtyKeys` from queue state to filter
+   * records: only records whose key appears in the dirty set are uploaded.
+   * When omitted, the engine falls back to offset-based upload (legacy).
+   */
+  recordKey?: (record: T) => string;
 }
 
 export interface UploadExecuteOptions {
@@ -83,7 +91,7 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
 // ---------------------------------------------------------------------------
 
 export function createUploadEngine<T>(config: UploadEngineConfig<T>) {
-  const { queue, endpoint, entityName, preprocess } = config;
+  const { queue, endpoint, entityName, preprocess, recordKey } = config;
 
   async function execute(opts: UploadExecuteOptions): Promise<UploadResult> {
     const {
@@ -111,16 +119,47 @@ export function createUploadEngine<T>(config: UploadEngineConfig<T>) {
       };
     }
 
-    // 2. Read un-uploaded records
-    const currentOffset = await queue.loadOffset();
-    const { records: rawRecords, newOffset } =
-      await queue.readFromOffset(currentOffset);
+    // 2. Determine upload mode: dirty-keys vs legacy offset-based
+    const dirtyKeys = recordKey ? await queue.loadDirtyKeys() : undefined;
+    const useDirtyKeys = recordKey && dirtyKeys !== undefined;
+
+    // 2a. If dirtyKeys is an empty array, nothing to upload
+    if (useDirtyKeys && dirtyKeys.length === 0) {
+      return { success: true, uploaded: 0, batches: 0 };
+    }
+
+    // 2b. Read records — dirty-keys mode always reads from offset 0
+    let rawRecords: T[];
+    let newOffset: number;
+    if (useDirtyKeys) {
+      const result = await queue.readFromOffset(0);
+      rawRecords = result.records;
+      newOffset = result.newOffset;
+    } else {
+      const currentOffset = await queue.loadOffset();
+      const result = await queue.readFromOffset(currentOffset);
+      rawRecords = result.records;
+      newOffset = result.newOffset;
+    }
+
+    // 2c. Filter by dirty keys if applicable
+    if (useDirtyKeys) {
+      const dirtySet = new Set(dirtyKeys);
+      rawRecords = rawRecords.filter((r) => dirtySet.has(recordKey(r)));
+    }
 
     if (rawRecords.length === 0) {
       // Even with zero valid records, advance the offset past any corrupted
       // lines so we don't re-read (and re-warn about) them on every run.
-      if (newOffset !== currentOffset) {
-        await queue.saveOffset(newOffset);
+      if (!useDirtyKeys) {
+        const currentOffset = await queue.loadOffset();
+        if (newOffset !== currentOffset) {
+          await queue.saveOffset(newOffset);
+        }
+      }
+      // Clear dirty keys if we're in dirty-keys mode (nothing matched)
+      if (useDirtyKeys) {
+        await queue.saveDirtyKeys([]);
       }
       return { success: true, uploaded: 0, batches: 0 };
     }
@@ -173,8 +212,11 @@ export function createUploadEngine<T>(config: UploadEngineConfig<T>) {
       batchesCompleted++;
     }
 
-    // 5. All batches succeeded — save final offset
+    // 5. All batches succeeded — save state
     await queue.saveOffset(newOffset);
+    if (useDirtyKeys) {
+      await queue.saveDirtyKeys([]);
+    }
 
     onProgress?.({
       phase: "done",

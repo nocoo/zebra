@@ -691,6 +691,245 @@ describe("upload-engine", () => {
     expect(calls2).toHaveLength(0);
   });
 
+  // =========================================================================
+  // Dirty-keys filtering
+  // =========================================================================
+
+  describe("dirty-keys filtering", () => {
+    /** Helper: create engine with a recordKey extractor for dirty-keys support */
+    function createDirtyKeysEngine(testDir: string) {
+      const queue = new BaseQueue<TestRecord>(
+        testDir,
+        "test.jsonl",
+        "test.state.json",
+      );
+      const config: UploadEngineConfig<TestRecord> = {
+        queue,
+        endpoint: "/api/test-ingest",
+        entityName: "test records",
+        preprocess: (records) => records,
+        recordKey: (r) => `key-${r.id}`,
+      };
+      return { queue, config };
+    }
+
+    it("should upload only records matching dirtyKeys", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      // Queue has 4 records
+      await queue.appendBatch([
+        makeRecord(1),
+        makeRecord(2),
+        makeRecord(3),
+        makeRecord(4),
+      ]);
+
+      // Only 2 keys are dirty
+      await queue.saveDirtyKeys(["key-2", "key-4"]);
+
+      const { fetchFn, calls } = createMockFetch([
+        { status: 200, body: { ingested: 2 } },
+      ]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.uploaded).toBe(2);
+      expect(result.batches).toBe(1);
+
+      // Verify only dirty records were sent
+      const body = JSON.parse(calls[0].init.body as string) as TestRecord[];
+      const ids = body.map((r) => r.id).sort();
+      expect(ids).toEqual([2, 4]);
+    });
+
+    it("should skip upload when dirtyKeys is empty array", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+
+      // dirtyKeys is empty — nothing to upload
+      await queue.saveDirtyKeys([]);
+
+      const { fetchFn, calls } = createMockFetch([]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.uploaded).toBe(0);
+      expect(result.batches).toBe(0);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("should fall back to offset-based upload when dirtyKeys is undefined (legacy)", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      // Append records and set offset to skip the first one
+      await queue.append(makeRecord(1));
+      const { newOffset } = await queue.readFromOffset(0);
+      await queue.saveOffset(newOffset);
+
+      await queue.append(makeRecord(2));
+
+      // dirtyKeys is undefined (legacy state) — should use offset
+      // Don't call saveDirtyKeys at all, so it stays undefined
+
+      const { fetchFn, calls } = createMockFetch([
+        { status: 200, body: { ingested: 1 } },
+      ]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.uploaded).toBe(1);
+
+      // Should only upload record 2 (after offset)
+      const body = JSON.parse(calls[0].init.body as string) as TestRecord[];
+      expect(body).toHaveLength(1);
+      expect(body[0].id).toBe(2);
+    });
+
+    it("should clear dirtyKeys to [] after successful upload", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+      await queue.saveDirtyKeys(["key-1", "key-2"]);
+
+      const { fetchFn } = createMockFetch([
+        { status: 200, body: { ingested: 2 } },
+      ]);
+
+      const engine = createUploadEngine(config);
+      await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      // dirtyKeys should be cleared to empty array (not undefined)
+      const keys = await queue.loadDirtyKeys();
+      expect(keys).toEqual([]);
+    });
+
+    it("should NOT clear dirtyKeys on upload failure", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+      await queue.saveDirtyKeys(["key-1", "key-2"]);
+
+      const { fetchFn } = createMockFetch([
+        { status: 500, body: { error: "Server Error" } },
+        { status: 500, body: { error: "Server Error" } },
+        { status: 500, body: { error: "Server Error" } },
+      ]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+        maxRetries: 2,
+        retryDelayMs: 0,
+      });
+
+      expect(result.success).toBe(false);
+
+      // dirtyKeys should still be set (not cleared)
+      const keys = await queue.loadDirtyKeys();
+      expect(keys).toEqual(["key-1", "key-2"]);
+    });
+
+    it("should read from offset 0 when dirtyKeys is present (ignoring saved offset)", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      // Write records AND set offset to skip them all
+      await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+      const { newOffset } = await queue.readFromOffset(0);
+      await queue.saveOffset(newOffset); // offset = end of file
+
+      // But dirtyKeys says record 1 changed
+      await queue.saveDirtyKeys(["key-1"]);
+
+      const { fetchFn, calls } = createMockFetch([
+        { status: 200, body: { ingested: 1 } },
+      ]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      // Should upload record 1 even though offset says "past end"
+      expect(result.success).toBe(true);
+      expect(result.uploaded).toBe(1);
+
+      const body = JSON.parse(calls[0].init.body as string) as TestRecord[];
+      expect(body).toHaveLength(1);
+      expect(body[0].id).toBe(1);
+    });
+
+    it("should handle dirtyKeys with no matching records gracefully", async () => {
+      const { queue, config } = createDirtyKeysEngine(dir);
+      const cm = new ConfigManager(dir);
+      await cm.save({ token: "pk_test" });
+
+      await queue.appendBatch([makeRecord(1), makeRecord(2)]);
+
+      // Dirty key references a record that doesn't exist in queue
+      await queue.saveDirtyKeys(["key-999"]);
+
+      const { fetchFn, calls } = createMockFetch([]);
+
+      const engine = createUploadEngine(config);
+      const result = await engine.execute({
+        stateDir: dir,
+        apiUrl: DEFAULT_HOST,
+        fetch: fetchFn,
+      });
+
+      // No matching records → 0 uploaded, but should succeed
+      expect(result.success).toBe(true);
+      expect(result.uploaded).toBe(0);
+      expect(result.batches).toBe(0);
+      expect(calls).toHaveLength(0);
+
+      // dirtyKeys should be cleared (the upload "succeeded" with 0 records)
+      const keys = await queue.loadDirtyKeys();
+      expect(keys).toEqual([]);
+    });
+  });
+
+  // ---- All-corrupt queue: offset advancement ----
+
   it("should advance offset past corrupt lines followed by valid records", async () => {
     const { queue, config } = createTestEngine(dir);
     const cm = new ConfigManager(dir);
