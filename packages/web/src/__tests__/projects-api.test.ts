@@ -328,6 +328,126 @@ describe("PATCH /api/projects/:id", () => {
         }
       }
     });
+
+    it("should roll back tag additions when a later write fails", async () => {
+      // Scenario: tags are added successfully, but the updated_at write fails.
+      // The added tags should be rolled back.
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
+        .mockResolvedValueOnce(null); // tag "frontend" does NOT exist → truly new
+
+      // Phase 2: tag INSERT succeeds, but updated_at UPDATE fails
+      mockClient.execute
+        .mockResolvedValueOnce({ meta: {} }) // INSERT tag "frontend" succeeds
+        .mockRejectedValueOnce(new Error("D1 error")) // UPDATE updated_at fails
+        // Rollback: delete added tag
+        .mockResolvedValueOnce({ meta: {} });
+
+      const res = await callPatch({
+        add_tags: ["frontend"],
+      });
+
+      expect(res.status).toBe(500);
+
+      // Verify rollback deleted the added tag
+      const rollbackCalls = mockClient.execute.mock.calls.slice(2); // skip write + failed write
+      const deleteTagCall = rollbackCalls.find(
+        (call) => (call[0] as string).includes("DELETE FROM project_tags"),
+      );
+      expect(deleteTagCall).toBeDefined();
+      expect(deleteTagCall![1]).toContain("frontend");
+    });
+
+    it("should roll back tag removals when a later write fails", async () => {
+      // Scenario: tags are removed successfully, but the updated_at write fails.
+      // The removed tags should be re-inserted.
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
+        .mockResolvedValueOnce({ tag: "backend" }); // tag "backend" exists → will be deleted
+
+      // Phase 2: tag DELETE succeeds, but updated_at UPDATE fails
+      mockClient.execute
+        .mockResolvedValueOnce({ meta: {} }) // DELETE tag "backend" succeeds
+        .mockRejectedValueOnce(new Error("D1 error")) // UPDATE updated_at fails
+        // Rollback: re-insert removed tag
+        .mockResolvedValueOnce({ meta: {} });
+
+      const res = await callPatch({
+        remove_tags: ["backend"],
+      });
+
+      expect(res.status).toBe(500);
+
+      // Verify rollback re-inserted the removed tag
+      const rollbackCalls = mockClient.execute.mock.calls.slice(2);
+      const insertTagCall = rollbackCalls.find(
+        (call) => (call[0] as string).includes("INSERT OR IGNORE INTO project_tags"),
+      );
+      expect(insertTagCall).toBeDefined();
+      expect(insertTagCall![1]).toContain("backend");
+    });
+
+    it("should NOT delete pre-existing tag during rollback when add_tags includes it", async () => {
+      // Bug scenario: add_tags includes a tag that already exists on this project.
+      // If the INSERT OR IGNORE is tracked unconditionally, rollback would
+      // erroneously DELETE this pre-existing tag, corrupting state.
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
+        .mockResolvedValueOnce({ tag: "existing-tag" }) // tag already exists → skip INSERT
+        .mockResolvedValueOnce(null); // tag "new-tag" does NOT exist → truly new
+
+      // Phase 2: INSERT "new-tag" succeeds, updated_at fails
+      mockClient.execute
+        .mockResolvedValueOnce({ meta: {} }) // INSERT tag "new-tag" succeeds
+        .mockRejectedValueOnce(new Error("D1 error")) // UPDATE updated_at fails
+        // Rollback: should only delete "new-tag", NOT "existing-tag"
+        .mockResolvedValueOnce({ meta: {} });
+
+      const res = await callPatch({
+        add_tags: ["existing-tag", "new-tag"],
+      });
+
+      expect(res.status).toBe(500);
+
+      // Verify only "new-tag" was rolled back, not "existing-tag"
+      const rollbackCalls = mockClient.execute.mock.calls.slice(2); // skip INSERT + failed UPDATE
+      expect(rollbackCalls).toHaveLength(1);
+      const deleteCall = rollbackCalls[0];
+      expect(deleteCall![0]).toContain("DELETE FROM project_tags");
+      expect(deleteCall![1]).toContain("new-tag");
+      expect(deleteCall![1]).not.toContain("existing-tag");
+    });
+
+    it("should NOT insert phantom tag during rollback when remove_tags includes non-existent tag", async () => {
+      // Bug scenario: remove_tags includes a tag that doesn't actually exist.
+      // If the DELETE is tracked unconditionally, rollback would
+      // INSERT OR IGNORE this phantom tag, corrupting state.
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
+        .mockResolvedValueOnce({ tag: "real-tag" }) // "real-tag" exists → will be deleted
+        .mockResolvedValueOnce(null); // "phantom-tag" does NOT exist → skip DELETE
+
+      // Phase 2: DELETE "real-tag" succeeds, updated_at fails
+      mockClient.execute
+        .mockResolvedValueOnce({ meta: {} }) // DELETE tag "real-tag" succeeds
+        .mockRejectedValueOnce(new Error("D1 error")) // UPDATE updated_at fails
+        // Rollback: should only re-insert "real-tag", NOT "phantom-tag"
+        .mockResolvedValueOnce({ meta: {} });
+
+      const res = await callPatch({
+        remove_tags: ["real-tag", "phantom-tag"],
+      });
+
+      expect(res.status).toBe(500);
+
+      // Verify only "real-tag" was rolled back (re-inserted), not "phantom-tag"
+      const rollbackCalls = mockClient.execute.mock.calls.slice(2); // skip DELETE + failed UPDATE
+      expect(rollbackCalls).toHaveLength(1);
+      const insertCall = rollbackCalls[0];
+      expect(insertCall![0]).toContain("INSERT OR IGNORE INTO project_tags");
+      expect(insertCall![1]).toContain("real-tag");
+      expect(insertCall![1]).not.toContain("phantom-tag");
+    });
   });
 
   describe("successful update", () => {
@@ -350,7 +470,9 @@ describe("PATCH /api/projects/:id", () => {
         });
 
       mockClient.execute.mockResolvedValue({ meta: {} });
-      mockClient.query.mockResolvedValueOnce({ results: [], meta: {} }); // alias stats
+      mockClient.query
+        .mockResolvedValueOnce({ results: [], meta: {} }) // alias stats
+        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
 
       const res = await callPatch({ name: "New Name" });
 
@@ -376,20 +498,22 @@ describe("PATCH /api/projects/:id", () => {
         });
 
       mockClient.execute.mockResolvedValue({ meta: {} });
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          {
-            source: "claude-code",
-            project_ref: "abc123",
-            session_count: 5,
-            last_active: "2026-03-10T12:00:00Z",
-            total_messages: 120,
-            total_duration: 3600,
-            models: "claude-4-opus,claude-4-sonnet",
-          },
-        ],
-        meta: {},
-      });
+      mockClient.query
+        .mockResolvedValueOnce({
+          results: [
+            {
+              source: "claude-code",
+              project_ref: "abc123",
+              session_count: 5,
+              last_active: "2026-03-10T12:00:00Z",
+              total_messages: 120,
+              total_duration: 3600,
+              models: "claude-4-opus,claude-4-sonnet",
+            },
+          ],
+          meta: {},
+        }) // alias stats
+        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -403,8 +527,9 @@ describe("PATCH /api/projects/:id", () => {
       expect(body.total_duration).toBe(3600);
       expect(body.models).toEqual(["claude-4-opus", "claude-4-sonnet"]);
       expect(body.aliases).toEqual([
-        { source: "claude-code", project_ref: "abc123" },
+        { source: "claude-code", project_ref: "abc123", session_count: 5 },
       ]);
+      expect(body.tags).toEqual([]);
     });
 
     it("should skip INSERT for alias already attached to this project", async () => {
@@ -420,20 +545,22 @@ describe("PATCH /api/projects/:id", () => {
         });
 
       mockClient.execute.mockResolvedValue({ meta: {} });
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          {
-            source: "claude-code",
-            project_ref: "abc123",
-            session_count: 5,
-            last_active: "2026-03-10T12:00:00Z",
-            total_messages: 80,
-            total_duration: 1800,
-            models: "claude-4-opus",
-          },
-        ],
-        meta: {},
-      });
+      mockClient.query
+        .mockResolvedValueOnce({
+          results: [
+            {
+              source: "claude-code",
+              project_ref: "abc123",
+              session_count: 5,
+              last_active: "2026-03-10T12:00:00Z",
+              total_messages: 80,
+              total_duration: 1800,
+              models: "claude-4-opus",
+            },
+          ],
+          meta: {},
+        }) // alias stats
+        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -461,20 +588,22 @@ describe("PATCH /api/projects/:id", () => {
         });
 
       mockClient.execute.mockResolvedValue({ meta: {} });
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          {
-            source: "claude-code",
-            project_ref: "abc123",
-            session_count: 5,
-            last_active: "2026-03-10T12:00:00Z",
-            total_messages: 50,
-            total_duration: 900,
-            models: null,
-          },
-        ],
-        meta: {},
-      });
+      mockClient.query
+        .mockResolvedValueOnce({
+          results: [
+            {
+              source: "claude-code",
+              project_ref: "abc123",
+              session_count: 5,
+              last_active: "2026-03-10T12:00:00Z",
+              total_messages: 50,
+              total_duration: 900,
+              models: null,
+            },
+          ],
+          meta: {},
+        }) // alias stats
+        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
 
       const res = await callPatch({
         add_aliases: [
@@ -551,7 +680,7 @@ describe("DELETE /api/projects/:id", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(mockClient.execute).toHaveBeenCalledTimes(2);
+    expect(mockClient.execute).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -859,7 +988,7 @@ describe("POST /api/projects", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.aliases).toEqual([
-        { source: "opencode", project_ref: "xyz789" },
+        { source: "opencode", project_ref: "xyz789", session_count: 0 },
       ]);
       expect(body.session_count).toBe(10);
       expect(body.total_messages).toBe(75);
@@ -917,10 +1046,11 @@ describe("GET /api/projects", () => {
             total_messages: 120,
             total_duration: 3600,
             models: "claude-4-opus,claude-4-sonnet",
+            absolute_last_active: "2026-03-10T12:00:00Z",
           },
         ],
         meta: {},
-      }) // Query 2: aliases
+      }) // Query 2: aliases (no date range → absolute_last_active = last_active)
       .mockResolvedValueOnce({
         results: [
           {
@@ -934,7 +1064,8 @@ describe("GET /api/projects", () => {
           },
         ],
         meta: {},
-      }); // Query 3: unassigned
+      }) // Query 3: unassigned
+      .mockResolvedValueOnce({ results: [], meta: {} }); // Query 4: tags
 
     const res = await GET(new Request("http://localhost:7030/api/projects"));
 
@@ -947,8 +1078,10 @@ describe("GET /api/projects", () => {
     expect(body.projects[0].total_duration).toBe(3600);
     expect(body.projects[0].models).toEqual(["claude-4-opus", "claude-4-sonnet"]);
     expect(body.projects[0].aliases).toEqual([
-      { source: "claude-code", project_ref: "abc" },
+      { source: "claude-code", project_ref: "abc", session_count: 5 },
     ]);
+    expect(body.projects[0].absolute_last_active).toBe("2026-03-10T12:00:00Z");
+    expect(body.projects[0].tags).toEqual([]);
     expect(body.unassigned).toHaveLength(1);
     expect(body.unassigned[0].source).toBe("opencode");
     expect(body.unassigned[0].total_messages).toBe(15);
@@ -965,7 +1098,8 @@ describe("GET /api/projects", () => {
     mockClient.query
       .mockResolvedValueOnce({ results: [], meta: {} })
       .mockResolvedValueOnce({ results: [], meta: {} })
-      .mockResolvedValueOnce({ results: [], meta: {} });
+      .mockResolvedValueOnce({ results: [], meta: {} })
+      .mockResolvedValueOnce({ results: [], meta: {} }); // tags
 
     const res = await GET(new Request("http://localhost:7030/api/projects"));
 
@@ -986,5 +1120,191 @@ describe("GET /api/projects", () => {
     const res = await GET(new Request("http://localhost:7030/api/projects"));
 
     expect(res.status).toBe(500);
+  });
+
+  it("should pass date range to query params when from/to provided", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockClient.query
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 1: projects
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 2: aliases (date-scoped)
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 3: unassigned (date-scoped)
+      .mockResolvedValueOnce({ results: [], meta: {} }); // Query 4: tags
+
+    const res = await GET(
+      new Request(
+        "http://localhost:7030/api/projects?from=2026-03-01&to=2026-03-14",
+      ),
+    );
+
+    expect(res.status).toBe(200);
+
+    // Query 2 (aliases) should have date params: [from, to, userId]
+    const aliasCall = mockClient.query.mock.calls[1];
+    expect(aliasCall[1]).toEqual(["2026-03-01", "2026-03-14", "u1"]);
+    // SQL should use correlated subquery for absolute_last_active (not dual LEFT JOIN)
+    expect(aliasCall[0]).toContain("absolute_last_active");
+    expect(aliasCall[0]).not.toMatch(/LEFT JOIN session_records sr_all/);
+
+    // Query 3 (unassigned) should have date params: [userId, from, to]
+    const unassignedCall = mockClient.query.mock.calls[2];
+    expect(unassignedCall[1]).toEqual(["u1", "2026-03-01", "2026-03-14"]);
+    expect(unassignedCall[0]).toContain("started_at >=");
+    expect(unassignedCall[0]).toContain("started_at <");
+  });
+
+  it("should NOT use dual JOIN when from/to absent", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockClient.query
+      .mockResolvedValueOnce({ results: [], meta: {} })
+      .mockResolvedValueOnce({ results: [], meta: {} })
+      .mockResolvedValueOnce({ results: [], meta: {} })
+      .mockResolvedValueOnce({ results: [], meta: {} });
+
+    await GET(new Request("http://localhost:7030/api/projects"));
+
+    // Query 2: single JOIN, params = [userId] only
+    const aliasCall = mockClient.query.mock.calls[1];
+    expect(aliasCall[1]).toEqual(["u1"]);
+    // Should NOT have sr_all as a separate join alias
+    expect(aliasCall[0]).not.toMatch(/LEFT JOIN session_records sr_all/);
+  });
+
+  it("should default to tomorrow when only from param is provided", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockClient.query
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 1: projects
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 2: aliases (date-scoped)
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 3: unassigned (date-scoped)
+      .mockResolvedValueOnce({ results: [], meta: {} }); // Query 4: tags
+
+    const res = await GET(
+      new Request("http://localhost:7030/api/projects?from=2026-03-01"),
+    );
+
+    expect(res.status).toBe(200);
+
+    // Query 2 (aliases) should have date params with defaulted `to`
+    const aliasCall = mockClient.query.mock.calls[1];
+    expect(aliasCall[1][0]).toBe("2026-03-01"); // from
+    expect(aliasCall[1][1]).toMatch(/^\d{4}-\d{2}-\d{2}$/); // defaulted to (tomorrow)
+    expect(aliasCall[1][2]).toBe("u1"); // userId
+    // SQL should use correlated subquery for absolute_last_active (not dual LEFT JOIN)
+    expect(aliasCall[0]).toContain("absolute_last_active");
+    expect(aliasCall[0]).not.toMatch(/LEFT JOIN session_records sr_all/);
+  });
+
+  it("should return period-scoped stats with absolute_last_active when date range active", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockClient.query
+      .mockResolvedValueOnce({
+        results: [
+          { id: "p1", name: "Project A", created_at: "2026-01-01T00:00:00Z" },
+        ],
+        meta: {},
+      }) // Query 1
+      .mockResolvedValueOnce({
+        results: [
+          {
+            project_id: "p1",
+            source: "claude-code",
+            project_ref: "abc",
+            session_count: 2, // period-scoped: only 2 of 5 sessions
+            last_active: "2026-03-10T12:00:00Z",
+            total_messages: 40,
+            total_duration: 1200,
+            models: "claude-4-opus",
+            absolute_last_active: "2026-03-14T08:00:00Z", // all-time: different
+          },
+        ],
+        meta: {},
+      }) // Query 2
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 3
+      .mockResolvedValueOnce({ results: [], meta: {} }); // Query 4: tags
+
+    const res = await GET(
+      new Request(
+        "http://localhost:7030/api/projects?from=2026-03-01&to=2026-03-14",
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const project = body.projects[0];
+    // Period-scoped stats
+    expect(project.session_count).toBe(2);
+    expect(project.total_messages).toBe(40);
+    expect(project.last_active).toBe("2026-03-10T12:00:00Z");
+    // All-time absolute
+    expect(project.absolute_last_active).toBe("2026-03-14T08:00:00Z");
+    // Per-alias session_count exposed
+    expect(project.aliases[0].session_count).toBe(2);
+  });
+
+  it("should return zero-stats project when no sessions in date range", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockClient.query
+      .mockResolvedValueOnce({
+        results: [
+          { id: "p1", name: "Project A", created_at: "2026-01-01T00:00:00Z" },
+        ],
+        meta: {},
+      }) // Query 1: project exists
+      .mockResolvedValueOnce({
+        results: [
+          {
+            project_id: "p1",
+            source: "claude-code",
+            project_ref: "abc",
+            session_count: 0, // zero in this period
+            last_active: null,
+            total_messages: 0,
+            total_duration: 0,
+            models: null,
+            absolute_last_active: "2026-02-15T10:00:00Z", // but had activity before
+          },
+        ],
+        meta: {},
+      }) // Query 2: alias with zero period stats
+      .mockResolvedValueOnce({ results: [], meta: {} }) // Query 3
+      .mockResolvedValueOnce({ results: [], meta: {} }); // Query 4: tags
+
+    const res = await GET(
+      new Request(
+        "http://localhost:7030/api/projects?from=2026-03-01&to=2026-03-14",
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Project still appears (LEFT JOIN preserves it)
+    expect(body.projects).toHaveLength(1);
+    const project = body.projects[0];
+    expect(project.session_count).toBe(0);
+    expect(project.last_active).toBeNull();
+    expect(project.total_messages).toBe(0);
+    // absolute_last_active retains all-time value
+    expect(project.absolute_last_active).toBe("2026-02-15T10:00:00Z");
+    // Alias also reports zero session_count
+    expect(project.aliases[0].session_count).toBe(0);
   });
 });

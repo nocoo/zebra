@@ -22,6 +22,9 @@ const VALID_SOURCES = new Set([
 
 const MAX_NAME_LENGTH = 100;
 
+/** Tag format: lowercase alphanumeric + hyphens, 1-30 chars. */
+const TAG_REGEX = /^[a-z0-9-]{1,30}$/;
+
 /** Names reserved for internal UI/API use (case-insensitive comparison). */
 const RESERVED_NAMES = new Set(["unassigned"]);
 
@@ -254,6 +257,55 @@ export async function PATCH(
     removeAliases = valid;
   }
 
+  // Validate add_tags
+  let addTags: string[] = [];
+  if ("add_tags" in body) {
+    if (!Array.isArray(body.add_tags)) {
+      return NextResponse.json(
+        { error: "add_tags must be an array" },
+        { status: 400 },
+      );
+    }
+    for (const tag of body.add_tags) {
+      if (typeof tag !== "string") {
+        return NextResponse.json(
+          { error: "Each tag must be a string" },
+          { status: 400 },
+        );
+      }
+      const normalized = tag.toLowerCase();
+      if (!TAG_REGEX.test(normalized)) {
+        return NextResponse.json(
+          {
+            error: `Invalid tag "${tag}": must be 1-30 chars, lowercase alphanumeric + hyphens`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+    addTags = [...new Set(body.add_tags.map((t: string) => t.toLowerCase()))];
+  }
+
+  // Validate remove_tags
+  let removeTags: string[] = [];
+  if ("remove_tags" in body) {
+    if (!Array.isArray(body.remove_tags)) {
+      return NextResponse.json(
+        { error: "remove_tags must be an array" },
+        { status: 400 },
+      );
+    }
+    for (const tag of body.remove_tags) {
+      if (typeof tag !== "string") {
+        return NextResponse.json(
+          { error: "Each tag must be a string" },
+          { status: 400 },
+        );
+      }
+    }
+    removeTags = [...new Set(body.remove_tags.map((t: string) => t.toLowerCase()))];
+  }
+
   // -----------------------------------------------------------------------
   // Phase 2: All validation passed — execute writes with rollback on failure
   // -----------------------------------------------------------------------
@@ -262,6 +314,8 @@ export async function PATCH(
   let nameWritten = false;
   const aliasesAdded: AliasInput[] = [];
   const aliasesRemoved: AliasInput[] = [];
+  const tagsAdded: string[] = [];
+  const tagsRemoved: string[] = [];
 
   try {
     if (trimmedName !== undefined) {
@@ -290,7 +344,41 @@ export async function PATCH(
       aliasesRemoved.push(alias);
     }
 
-    if (trimmedName !== undefined || addAliases.length > 0 || removeAliases.length > 0) {
+    // Tag mutations — only track tags that actually changed so rollback
+    // doesn't corrupt pre-existing state (e.g. deleting an already-present
+    // tag or inserting a tag that never existed).
+    for (const tag of addTags) {
+      const existing = await client.firstOrNull<{ tag: string }>(
+        `SELECT tag FROM project_tags
+         WHERE user_id = ? AND project_id = ? AND tag = ?`,
+        [userId, projectId, tag],
+      );
+      if (!existing) {
+        await client.execute(
+          `INSERT INTO project_tags (user_id, project_id, tag, created_at)
+           VALUES (?, ?, ?, datetime('now'))`,
+          [userId, projectId, tag],
+        );
+        tagsAdded.push(tag);
+      }
+    }
+    for (const tag of removeTags) {
+      const existing = await client.firstOrNull<{ tag: string }>(
+        `SELECT tag FROM project_tags
+         WHERE user_id = ? AND project_id = ? AND tag = ?`,
+        [userId, projectId, tag],
+      );
+      if (existing) {
+        await client.execute(
+          `DELETE FROM project_tags
+           WHERE user_id = ? AND project_id = ? AND tag = ?`,
+          [userId, projectId, tag],
+        );
+        tagsRemoved.push(tag);
+      }
+    }
+
+    if (trimmedName !== undefined || addAliases.length > 0 || removeAliases.length > 0 || addTags.length > 0 || removeTags.length > 0) {
       await client.execute(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?",
         [projectId],
@@ -345,15 +433,26 @@ export async function PATCH(
       }
     }
 
+    // Fetch current tags
+    const tagRows = await client.query<{ tag: string }>(
+      `SELECT tag FROM project_tags
+       WHERE user_id = ? AND project_id = ?
+       ORDER BY tag`,
+      [userId, projectId],
+    );
+
     return NextResponse.json({
       id: updated!.id,
       name: updated!.name,
       aliases: aliasRows.results.map((a) => ({
         source: a.source,
         project_ref: a.project_ref,
+        session_count: a.session_count,
       })),
+      tags: tagRows.results.map((r) => r.tag),
       session_count: sessionCount,
       last_active: lastActive,
+      absolute_last_active: lastActive, // PATCH is always all-time, so identical
       total_messages: totalMessages,
       total_duration: totalDuration,
       models: [...modelSet],
@@ -380,6 +479,21 @@ export async function PATCH(
           `INSERT OR IGNORE INTO project_aliases (user_id, project_id, source, project_ref, created_at)
            VALUES (?, ?, ?, ?, datetime('now'))`,
           [userId, projectId, alias.source, alias.project_ref],
+        );
+      }
+      // Undo tag mutations
+      for (const tag of tagsAdded) {
+        await client.execute(
+          `DELETE FROM project_tags
+           WHERE user_id = ? AND project_id = ? AND tag = ?`,
+          [userId, projectId, tag],
+        );
+      }
+      for (const tag of tagsRemoved) {
+        await client.execute(
+          `INSERT OR IGNORE INTO project_tags (user_id, project_id, tag, created_at)
+           VALUES (?, ?, ?, datetime('now'))`,
+          [userId, projectId, tag],
         );
       }
     } catch (rollbackErr) {
@@ -421,6 +535,10 @@ export async function DELETE(
 
   try {
     // D1/SQLite may not enforce ON DELETE CASCADE via REST API, so delete explicitly
+    await client.execute(
+      "DELETE FROM project_tags WHERE project_id = ?",
+      [projectId],
+    );
     await client.execute(
       "DELETE FROM project_aliases WHERE project_id = ?",
       [projectId],

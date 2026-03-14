@@ -9,9 +9,7 @@ import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { WorkingHoursHeatmap } from "@/components/dashboard/working-hours-heatmap";
 import { MessageStatsChart } from "@/components/dashboard/message-stats-chart";
 import { PeakHoursCard } from "@/components/dashboard/peak-hours-card";
-import { ProjectBreakdownChart } from "@/components/dashboard/project-breakdown-chart";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
-import { FilterDropdown } from "@/components/dashboard/filter-dropdown";
 import {
   PeriodSelector,
   periodToDateRange,
@@ -29,32 +27,12 @@ import { formatTokens } from "@/lib/utils";
 
 export default function SessionsPage() {
   const [period, setPeriod] = useState<Period>("all");
-  const [projectFilter, setProjectFilter] = useState("");
   const { from, to } = periodToDateRange(period, new Date().getTimezoneOffset());
 
-  // Primary fetch: all sessions (no project filter) — used for breakdown + default display
-  const allData = useSessionData({
+  const sessionData = useSessionData({
     from,
     ...(to ? { to } : {}),
   });
-
-  // Secondary fetch: only fires when a project filter is active
-  const filteredData = useSessionData({
-    from,
-    ...(to ? { to } : {}),
-    ...(projectFilter ? { project: projectFilter } : {}),
-    enabled: !!projectFilter,
-  });
-
-  // Use filtered data for charts when a project filter is active,
-  // otherwise use the all-data results
-  const active = projectFilter ? filteredData : allData;
-
-  // Project names for the dropdown come from the unfiltered breakdown
-  const projectNames = useMemo(
-    () => allData.projectBreakdown.map((p) => p.projectName),
-    [allData.projectBreakdown],
-  );
 
   // Fetch usage data for token totals (needed for tokens/hour + reasoning ratio)
   const { data: usageData, loading: usageLoading } = useUsageData({
@@ -70,14 +48,13 @@ export default function SessionsPage() {
   });
 
   const subtitle = periodLabel(period);
-  const loading = active.loading || (projectFilter ? allData.loading : false);
 
   const efficiency = useMemo(
     () =>
       usageData
-        ? computeTokensPerHour(usageData.summary.total_tokens, active.overview)
+        ? computeTokensPerHour(usageData.summary.total_tokens, sessionData.overview)
         : null,
-    [usageData, active.overview],
+    [usageData, sessionData.overview],
   );
 
   const reasoning = useMemo(
@@ -102,34 +79,24 @@ export default function SessionsPage() {
             Session activity across your AI coding tools.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {projectNames.length > 0 && (
-            <FilterDropdown
-              value={projectFilter}
-              onChange={setProjectFilter}
-              options={projectNames.map((n) => ({ value: n, label: n }))}
-              allLabel="All Projects"
-            />
-          )}
-          <PeriodSelector value={period} onChange={setPeriod} />
-        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
       {/* Error state */}
-      {active.error && (
+      {sessionData.error && (
         <div className="rounded-[var(--radius-card)] bg-destructive/10 p-4 text-sm text-destructive">
-          Failed to load session data: {active.error}
+          Failed to load session data: {sessionData.error}
         </div>
       )}
 
       {/* Loading state */}
-      {(loading || usageLoading || halfHourLoading) && <DashboardSkeleton />}
+      {(sessionData.loading || usageLoading || halfHourLoading) && <DashboardSkeleton />}
 
       {/* Content */}
-      {!loading && !usageLoading && !halfHourLoading && (
+      {!sessionData.loading && !usageLoading && !halfHourLoading && (
         <>
           {/* Overview stat cards */}
-          <SessionOverview data={active.overview} subtitle={subtitle} />
+          <SessionOverview data={sessionData.overview} subtitle={subtitle} />
 
           {/* Efficiency metrics row */}
           {efficiency && (
@@ -155,21 +122,14 @@ export default function SessionsPage() {
             </StatGrid>
           )}
 
-          {/* Project breakdown (only when not filtering by a specific project) */}
-          {!projectFilter && (
-            <div className="grid grid-cols-1 gap-3 md:gap-4">
-              <ProjectBreakdownChart data={allData.projectBreakdown} />
-            </div>
-          )}
-
           {/* Charts row: working hours + peak hours */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <WorkingHoursHeatmap data={active.hoursGrid} />
+            <WorkingHoursHeatmap data={sessionData.hoursGrid} />
             <PeakHoursCard slots={peakSlots} />
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:gap-4">
-            <MessageStatsChart data={active.dailyMessages} />
+            <MessageStatsChart data={sessionData.dailyMessages} />
           </div>
         </>
       )}

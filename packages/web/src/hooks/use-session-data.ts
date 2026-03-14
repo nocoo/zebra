@@ -24,8 +24,6 @@ interface UseSessionDataOptions {
   to?: string;
   /** Source filter (optional) */
   source?: string;
-  /** Project filter — project name, or "_unassigned" for no-project sessions */
-  project?: string;
   /** When false, skip fetching entirely. Defaults to true. */
   enabled?: boolean;
 }
@@ -48,7 +46,7 @@ interface UseSessionDataResult {
 export function useSessionData(
   options: UseSessionDataOptions = {}
 ): UseSessionDataResult {
-  const { from: fromDate, to: toDate, source, project, enabled = true } = options;
+  const { from: fromDate, to: toDate, source, enabled = true } = options;
   const [records, setRecords] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -63,11 +61,6 @@ export function useSessionData(
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
       if (source) params.set("source", source);
-      if (project) {
-        // The breakdown helper labels unassigned sessions as "Unassigned";
-        // the API uses the sentinel "_unassigned" for null-project filtering.
-        params.set("project", project === "Unassigned" ? "_unassigned" : project);
-      }
 
       const qs = params.toString();
       const url = qs ? `/api/sessions?${qs}` : "/api/sessions";
@@ -87,7 +80,7 @@ export function useSessionData(
     } finally {
       setLoading(false);
     }
-    }, [fromDate, toDate, source, project, enabled]);
+    }, [fromDate, toDate, source, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
