@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.10.0
+
+### Features
+
+- **Projects analytics page** — New dedicated Projects page with stat grid, share chart, trend chart, summary table with inline tag editing, and tag filtering
+- **Project tags** — CRUD support for project tags via API with D1 migration (`011-project-tags.sql`)
+- **Projects timeline API** — New `/api/projects/timeline` endpoint for project trend data with date range filtering
+- **Dirty-keys upload optimization** — Track which token buckets changed during sync and upload only dirty records, reducing redundant uploads by ~99.9%
+
+### Fixes
+
+- **Token queue full re-upload** — Fixed bug where every incremental sync re-uploaded all records by introducing `dirtyKeys` tracking in `queue.state.json`
+- **Projects page ESLint** — Resolved `react-hooks/set-state-in-effect` warning in projects page
+- **Sidebar ordering** — Moved Projects below Sessions in analytics sidebar navigation
+- **Tag rollback and period filtering** — Fixed tag rollback logic and period date range filtering in projects API
+
+### Refactor
+
+- **Management page relocation** — Moved project management to `/manage-projects`, keeping `/projects` for analytics
+
+### Docs
+
+- **Vitest sole test runner** — Clarified in CLAUDE.md that vitest is the only supported test runner; `bun test` causes false failures
+- **Design docs** — Added doc 23 (By Project analytics) and doc 24 (Token queue full re-upload plan)
+
 ## v1.9.0
 
 ### Features
