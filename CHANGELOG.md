@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.10.2
+
+### Features
+
+- **Season toggle switches** — Added three per-season configurable flags: `allow_late_registration`, `allow_roster_changes`, `allow_late_withdrawal`. All default to off, preserving existing behavior. Admin can toggle from the season management page regardless of season status.
+- **Season roster sync** — New `syncSeasonRosters` helper automatically syncs team member changes to frozen season rosters for active seasons with roster changes enabled. Integrated into team join, kick, and leave endpoints.
+- **Admin UI for season toggles** — Checkbox controls in create/edit season forms, with `+reg`/`+roster`/`+wd` status badges in the season table.
+
+### Docs
+
+- **Docs index** — Renumbered conflicting doc files and created docs index README
+
 ## v1.10.1
 
 ### Fixes

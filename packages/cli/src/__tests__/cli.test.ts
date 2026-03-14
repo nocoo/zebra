@@ -9,7 +9,7 @@ import { main } from "../cli.js";
 describe("CLI main command", () => {
   it("should have correct meta", () => {
     expect(main.meta?.name).toBe("pew");
-    expect(main.meta?.version).toBe("1.10.1");
+    expect(main.meta?.version).toBe("1.10.2");
     expect(main.meta?.description).toBeDefined();
   });
 
