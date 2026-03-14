@@ -100,13 +100,13 @@ describe("sidebar navigation", () => {
       expect(byDevice!.icon).toBe("Monitor");
     });
 
-    it("Analytics group should include Projects after By Device", () => {
+    it("Analytics group should include Projects after Sessions", () => {
       const analyticsGroup = BASE_NAV_GROUPS.find((g) => g.label === "Analytics")!;
       const items = analyticsGroup.items.map((i) => i.label);
-      const deviceIdx = items.indexOf("By Device");
+      const sessionsIdx = items.indexOf("Sessions");
       const projectIdx = items.indexOf("Projects");
       expect(projectIdx).toBeGreaterThan(-1);
-      expect(projectIdx).toBe(deviceIdx + 1);
+      expect(projectIdx).toBe(sessionsIdx + 1);
     });
 
     it("Projects should link to /projects with FolderGit2 icon", () => {

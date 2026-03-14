@@ -44,10 +44,10 @@ export const BASE_NAV_GROUPS: NavGroupDef[] = [
       { href: "/recent", label: "Recent", icon: "Clock" },
       { href: "/daily-usage", label: "Daily Usage", icon: "CalendarDays" },
       { href: "/sessions", label: "Sessions", icon: "MessagesSquare" },
+      { href: "/projects", label: "Projects", icon: "FolderGit2" },
       { href: "/agents", label: "By Agent", icon: "AppWindow" },
       { href: "/models", label: "By Model", icon: "Cpu" },
       { href: "/devices", label: "By Device", icon: "Monitor" },
-      { href: "/projects", label: "Projects", icon: "FolderGit2" },
     ],
   },
   {
