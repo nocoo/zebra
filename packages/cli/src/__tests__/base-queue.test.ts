@@ -347,4 +347,86 @@ describe("BaseQueue", () => {
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).id).toBe(42);
   });
+
+  // -----------------------------------------------------------------------
+  // Dirty-keys state management
+  // -----------------------------------------------------------------------
+
+  it("should return undefined dirtyKeys for fresh (no state file) queue", async () => {
+    const queue = createQueue(tempDir);
+    const keys = await queue.loadDirtyKeys();
+    expect(keys).toBeUndefined();
+  });
+
+  it("should return undefined dirtyKeys for legacy state file (offset only)", async () => {
+    const queue = createQueue(tempDir);
+    // Simulate legacy state file written by old version
+    await writeFile(join(tempDir, "test.state.json"), '{"offset":42}\n');
+    const keys = await queue.loadDirtyKeys();
+    expect(keys).toBeUndefined();
+  });
+
+  it("should save and load dirty keys", async () => {
+    const queue = createQueue(tempDir);
+    const dirtyKeys = ["claude-code|sonnet|2026-03-14T10:00:00.000Z|dev1"];
+    await queue.saveDirtyKeys(dirtyKeys);
+
+    const loaded = await queue.loadDirtyKeys();
+    expect(loaded).toEqual(dirtyKeys);
+  });
+
+  it("should save empty dirtyKeys array (distinct from undefined)", async () => {
+    const queue = createQueue(tempDir);
+    await queue.saveDirtyKeys([]);
+
+    const loaded = await queue.loadDirtyKeys();
+    expect(loaded).toEqual([]);
+    // Must be an empty array, NOT undefined
+    expect(loaded).not.toBeUndefined();
+  });
+
+  it("should preserve dirtyKeys when saving offset", async () => {
+    const queue = createQueue(tempDir);
+    const dirtyKeys = ["key-a", "key-b"];
+    await queue.saveDirtyKeys(dirtyKeys);
+    await queue.saveOffset(999);
+
+    const loaded = await queue.loadDirtyKeys();
+    expect(loaded).toEqual(dirtyKeys);
+    expect(await queue.loadOffset()).toBe(999);
+  });
+
+  it("should preserve offset when saving dirtyKeys", async () => {
+    const queue = createQueue(tempDir);
+    await queue.saveOffset(500);
+    await queue.saveDirtyKeys(["key-x"]);
+
+    expect(await queue.loadOffset()).toBe(500);
+    expect(await queue.loadDirtyKeys()).toEqual(["key-x"]);
+  });
+
+  it("should clear dirtyKeys by saving undefined", async () => {
+    const queue = createQueue(tempDir);
+    await queue.saveDirtyKeys(["key-a"]);
+    expect(await queue.loadDirtyKeys()).toEqual(["key-a"]);
+
+    await queue.saveDirtyKeys(undefined);
+    expect(await queue.loadDirtyKeys()).toBeUndefined();
+  });
+
+  it("should load full state with both offset and dirtyKeys", async () => {
+    const queue = createQueue(tempDir);
+    await queue.saveState({ offset: 123, dirtyKeys: ["k1", "k2"] });
+
+    const state = await queue.loadState();
+    expect(state.offset).toBe(123);
+    expect(state.dirtyKeys).toEqual(["k1", "k2"]);
+  });
+
+  it("should return default state for missing state file", async () => {
+    const queue = createQueue(tempDir);
+    const state = await queue.loadState();
+    expect(state.offset).toBe(0);
+    expect(state.dirtyKeys).toBeUndefined();
+  });
 });

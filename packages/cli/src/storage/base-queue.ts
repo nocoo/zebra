@@ -4,6 +4,21 @@ import { join } from "node:path";
 /** Optional callback invoked when a corrupted JSONL line is skipped */
 export type OnCorruptLine = (line: string, error: unknown) => void;
 
+/** Persisted state for a queue (stored in the state JSON file) */
+export interface QueueState {
+  /** Byte offset into the queue file — records before this have been uploaded */
+  offset: number;
+  /**
+   * Bucket keys that were modified since the last successful upload.
+   *
+   * - `undefined` → legacy state file (pre-dirty-keys), upload engine falls
+   *   back to offset-based behavior.
+   * - `[]` → nothing changed since last upload.
+   * - `["source|model|hour|device", ...]` → only these buckets need uploading.
+   */
+  dirtyKeys?: string[];
+}
+
 /**
  * Generic append-only JSONL queue with byte-offset tracking.
  *
@@ -112,20 +127,64 @@ export class BaseQueue<T> {
     return { records, newOffset };
   }
 
-  /** Save the upload byte offset to the state file */
-  async saveOffset(offset: number): Promise<void> {
+  // -------------------------------------------------------------------------
+  // State persistence — unified { offset, dirtyKeys } object
+  // -------------------------------------------------------------------------
+
+  /** Load the full persisted state. Returns defaults on missing/corrupt file. */
+  async loadState(): Promise<QueueState> {
+    try {
+      const raw = await readFile(this.statePath, "utf-8");
+      const state = JSON.parse(raw) as Partial<QueueState>;
+      return {
+        offset: state.offset ?? 0,
+        // Preserve undefined vs [] distinction for legacy detection
+        dirtyKeys: state.dirtyKeys,
+      };
+    } catch {
+      return { offset: 0 };
+    }
+  }
+
+  /** Atomically persist the full state object. */
+  async saveState(state: QueueState): Promise<void> {
     await this.ensureDir();
-    await writeFile(this.statePath, JSON.stringify({ offset }) + "\n");
+    await writeFile(this.statePath, JSON.stringify(state) + "\n");
+  }
+
+  /** Save the upload byte offset (preserves dirtyKeys). */
+  async saveOffset(offset: number): Promise<void> {
+    const state = await this.loadState();
+    state.offset = offset;
+    await this.saveState(state);
   }
 
   /** Load the upload byte offset. Returns 0 if not found or corrupted. */
   async loadOffset(): Promise<number> {
-    try {
-      const raw = await readFile(this.statePath, "utf-8");
-      const state = JSON.parse(raw) as { offset: number };
-      return state.offset ?? 0;
-    } catch {
-      return 0;
-    }
+    const state = await this.loadState();
+    return state.offset;
+  }
+
+  /**
+   * Save dirty bucket keys (preserves offset).
+   *
+   * Pass `undefined` to remove the dirtyKeys field entirely (revert to
+   * legacy state). Pass `[]` to indicate nothing is dirty.
+   */
+  async saveDirtyKeys(keys: string[] | undefined): Promise<void> {
+    const state = await this.loadState();
+    state.dirtyKeys = keys;
+    await this.saveState(state);
+  }
+
+  /**
+   * Load dirty bucket keys.
+   *
+   * Returns `undefined` for legacy state files (no dirtyKeys field),
+   * or the array (possibly empty) if the field exists.
+   */
+  async loadDirtyKeys(): Promise<string[] | undefined> {
+    const state = await this.loadState();
+    return state.dirtyKeys;
   }
 }
