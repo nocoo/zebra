@@ -195,7 +195,7 @@ export function RecentBarChart({ data, className }: RecentBarChartProps) {
               tickLine={false}
               width={48}
             />
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
             <Bar
               dataKey="input"
               stackId="1"

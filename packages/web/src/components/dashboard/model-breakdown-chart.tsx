@@ -226,7 +226,7 @@ export function ModelBreakdownChart({
               tickLine={false}
               width={140}
             />
-            <Tooltip content={<ModelTooltip />} />
+            <Tooltip content={<ModelTooltip />} isAnimationActive={false} />
             <Bar
               dataKey="input"
               stackId="1"

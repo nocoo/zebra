@@ -219,6 +219,7 @@ export function SourceTrendChart({ data, className }: SourceTrendChartProps) {
             />
             <Tooltip
               content={<SourceTooltip hiddenSources={hiddenSources} />}
+              isAnimationActive={false}
             />
             {sourceKeys.map((source) => (
               <Line

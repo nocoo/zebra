@@ -163,7 +163,7 @@ export function WeekdayWeekendChart({
               tickFormatter={(v: number) => formatCost(v)}
               width={50}
             />
-            <Tooltip content={<WdWeTooltip />} cursor={false} />
+            <Tooltip content={<WdWeTooltip />} cursor={false} isAnimationActive={false} />
             <Bar
               yAxisId="tokens"
               dataKey="tokens"

@@ -206,7 +206,7 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
               tickLine={false}
               width={48}
             />
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
             <Area
               type="monotone"
               dataKey="input"

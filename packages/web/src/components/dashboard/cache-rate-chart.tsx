@@ -160,7 +160,7 @@ export function CacheRateChart({ data, className }: CacheRateChartProps) {
               strokeDasharray="4 4"
               strokeOpacity={0.6}
             />
-            <Tooltip content={<CacheRateTooltip />} />
+            <Tooltip content={<CacheRateTooltip />} isAnimationActive={false} />
             <Line
               type="monotone"
               dataKey="cacheRate"

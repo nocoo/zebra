@@ -226,6 +226,7 @@ export function ModelEvolutionChart({
             />
             <Tooltip
               content={<EvolutionTooltip />}
+              isAnimationActive={false}
             />
             {modelKeys.map((model) => (
               <Area

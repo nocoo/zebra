@@ -111,7 +111,7 @@ export function SourceDonutChart({ data, className }: SourceDonutChartProps) {
                   <Cell key={entry.name} fill={entry.fill} />
                 ))}
               </Pie>
-              <Tooltip content={<DonutTooltip />} />
+              <Tooltip content={<DonutTooltip />} isAnimationActive={false} />
             </PieChart>
           </DashboardResponsiveContainer>
         </div>

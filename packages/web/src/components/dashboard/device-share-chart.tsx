@@ -206,7 +206,7 @@ export function DeviceShareChart({
               width={44}
               domain={[0, 100]}
             />
-            <Tooltip content={<ShareTooltip labelMap={labelMap} />} />
+            <Tooltip content={<ShareTooltip labelMap={labelMap} />} isAnimationActive={false} />
             {deviceKeys.map((deviceId, i) => (
               <Area
                 key={deviceId}

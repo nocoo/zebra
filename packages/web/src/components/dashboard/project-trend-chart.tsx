@@ -213,6 +213,7 @@ export function ProjectTrendChart({
               content={
                 <ProjectTrendTooltip hiddenProjects={hiddenProjects} />
               }
+              isAnimationActive={false}
             />
             {projectKeys.map((name, i) => (
               <Line

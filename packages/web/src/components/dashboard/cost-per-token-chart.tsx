@@ -185,7 +185,7 @@ export function CostPerTokenChart({
               tickLine={false}
               width={140}
             />
-            <Tooltip content={<CostPerTokenTooltip />} />
+            <Tooltip content={<CostPerTokenTooltip />} isAnimationActive={false} />
             <Bar dataKey="costPer1K" radius={[0, 4, 4, 0]}>
               {chartData.map((entry) => {
                 const ratio =

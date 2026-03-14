@@ -206,7 +206,7 @@ export function ProjectShareChart({
               width={44}
               domain={[0, 100]}
             />
-            <Tooltip content={<ShareTooltip />} />
+            <Tooltip content={<ShareTooltip />} isAnimationActive={false} />
             {projectKeys.map((name, i) => (
               <Area
                 key={name}

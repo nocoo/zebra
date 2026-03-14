@@ -133,7 +133,7 @@ export function IoRatioChart({
                   <Cell key={entry.name} fill={SLICE_COLORS[i]!} />
                 ))}
               </Pie>
-              <Tooltip content={<IoTooltip />} />
+              <Tooltip content={<IoTooltip />} isAnimationActive={false} />
             </PieChart>
           </DashboardResponsiveContainer>
           {/* Center label showing I/O ratio */}

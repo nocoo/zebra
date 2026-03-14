@@ -161,7 +161,7 @@ export function ProjectBreakdownChart({
               tickLine={false}
               width={140}
             />
-            <Tooltip content={<ProjectTooltip />} />
+            <Tooltip content={<ProjectTooltip />} isAnimationActive={false} />
             <Bar
               dataKey="sessions"
               fill={chart.teal}

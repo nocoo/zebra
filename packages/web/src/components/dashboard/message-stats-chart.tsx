@@ -155,7 +155,7 @@ export function MessageStatsChart({ data, className }: MessageStatsChartProps) {
               tickLine={false}
               width={36}
             />
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
             <Bar
               dataKey="user"
               stackId="1"

@@ -181,7 +181,7 @@ export function DeviceBreakdownChart({
               tickLine={false}
               width={140}
             />
-            <Tooltip content={<DeviceBreakdownTooltip />} />
+            <Tooltip content={<DeviceBreakdownTooltip />} isAnimationActive={false} />
             <Bar
               dataKey="input_tokens"
               stackId="1"

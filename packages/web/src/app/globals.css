@@ -261,6 +261,11 @@
   font-family: var(--font-caveat), "Caveat", cursive;
 }
 
+/* Recharts — suppress focus outline on click */
+.recharts-wrapper *:focus {
+  outline: none;
+}
+
 /* Landing page entrance animations — respect reduced motion */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }

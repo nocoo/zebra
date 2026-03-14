@@ -197,7 +197,7 @@ export function CostTrendChart({ data, className }: CostTrendChartProps) {
               tickLine={false}
               width={52}
             />
-            <Tooltip content={<CostTooltip />} />
+            <Tooltip content={<CostTooltip />} isAnimationActive={false} />
             <Area
               type="monotone"
               dataKey="inputCost"

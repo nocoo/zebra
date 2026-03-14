@@ -229,6 +229,7 @@ export function DeviceTrendChart({
                   labelMap={labelMap}
                 />
               }
+              isAnimationActive={false}
             />
             {deviceKeys.map((deviceId, i) => (
               <Line
