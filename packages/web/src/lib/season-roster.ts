@@ -29,8 +29,8 @@ export async function syncSeasonRosters(
      JOIN seasons s ON s.id = st.season_id
      WHERE st.team_id = ?
        AND s.allow_roster_changes = 1
-       AND s.start_date <= datetime('now')
-       AND s.end_date >= datetime('now')`,
+       AND datetime(s.start_date) <= datetime('now')
+       AND datetime(s.end_date) >= datetime('now')`,
     [teamId],
   );
 
