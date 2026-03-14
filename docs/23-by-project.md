@@ -558,17 +558,17 @@ Update `useProjects()` hook to accept optional `{ from, to }` options.
 
 8. ~~**Navigation** — Add sidebar entry + route label + icon~~ ✅
 9. ~~**Hook update** — Add `tags`, `allTags`, `from`/`to` to `useProjects()`~~ ✅
-10. **Page skeleton** — Create `/by-project/page.tsx` with stat grid + existing
-    `ProjectBreakdownChart` (data from `useProjects`)
-11. **Trend chart** — `ProjectTrendChart` component + wire to timeline API
-12. **Share chart** — `ProjectShareChart` component
-13. **Summary table** — Full table with tag chips + inline tag editing
-14. **Tag filter** — `FilterDropdown` for tag-based filtering (whole-page scope)
+10. ~~**Page skeleton** — Create `/by-project/page.tsx` with stat grid + existing
+    `ProjectBreakdownChart` (data from `useProjects`)~~ ✅
+11. ~~**Trend chart** — `ProjectTrendChart` component + wire to timeline API~~ ✅
+12. ~~**Share chart** — `ProjectShareChart` component~~ ✅
+13. ~~**Summary table** — Full table with tag chips + inline tag editing~~ ✅
+14. ~~**Tag filter** — `FilterDropdown` for tag-based filtering (whole-page scope)~~ ✅
 
 ### Phase D: Polish
 
-15. **Empty states** — Handle zero projects, loading, errors
-16. **Worker migration** — Update Worker if it runs schema migrations
+15. ~~**Empty states** — Handle zero projects, loading, errors~~ ✅
+16. ~~**Worker migration** — No-op: Worker only does ingest writes, does not run schema migrations~~ ✅
 
 ---
 
