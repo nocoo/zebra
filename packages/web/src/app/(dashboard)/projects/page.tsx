@@ -9,6 +9,7 @@ import {
   ProjectTrendChart,
   type ProjectTimelinePoint,
 } from "@/components/dashboard/project-trend-chart";
+import { ProjectShareChart } from "@/components/dashboard/project-share-chart";
 import type { ProjectBreakdownItem } from "@/lib/session-helpers";
 import { PeriodSelector } from "@/components/dashboard/period-selector";
 import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
@@ -211,7 +212,7 @@ export default function ProjectsPage() {
               {/* Charts row */}
               <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
                 <ProjectTrendChart timeline={timeline} />
-                {/* ProjectShareChart placeholder for step 12 */}
+                <ProjectShareChart timeline={timeline} />
               </div>
 
               {/* Breakdown chart */}
