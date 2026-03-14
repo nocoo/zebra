@@ -7,14 +7,14 @@
 
 | # | Commit | Description | Status |
 |---|--------|-------------|--------|
-| 1 | `docs: add token queue full re-upload plan` | This document | pending |
-| 2 | `test: add dirty-keys tracking tests for sync` | L1 failing tests | pending |
-| 3 | `feat: add dirtyKeys to queue state schema` | Extend state | pending |
-| 4 | `feat: track dirty bucket keys during sync` | Modify sync.ts merge logic | pending |
-| 5 | `test: add dirty-keys filtering tests for upload-engine` | L1 failing tests | pending |
-| 6 | `feat: upload only dirty records in upload-engine` | Filter by dirtyKeys | pending |
-| 7 | `test: verify reset triggers full re-upload` | Ensure reset marks all dirty | pending |
-| 8 | `refactor: remove offset-reset-to-0 in sync.ts` | Clean up legacy offset | pending |
+| 1 | `docs: add token queue full re-upload plan` | This document | done |
+| 2 | `test: add dirty-keys tracking tests for sync` | L1 failing tests | done |
+| 3 | `feat: add dirtyKeys to queue state schema` | Extend state | done |
+| 4 | `feat: track dirty bucket keys during sync` | Modify sync.ts merge logic | done |
+| 5 | `test: add dirty-keys filtering tests for upload-engine` | L1 failing tests | done |
+| 6 | `feat: upload only dirty records in upload-engine` | Filter by dirtyKeys | done |
+| 7 | `test: verify reset triggers full re-upload` | Ensure reset marks all dirty | done |
+| 8 | `refactor: remove offset-reset-to-0 in sync.ts` | Clean up legacy offset | done |
 
 ## Problem
 

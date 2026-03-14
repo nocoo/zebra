@@ -38,7 +38,7 @@ Additionally, users have no way to **tag or label** projects (e.g., "work",
 > **Projects are session-layer only.** `usage_records` has no `project_ref`
 > column — its key is `(user_id, device_id, source, model, hour_start)`. Token
 > data cannot be broken down by project. Only session-based metrics (session
-> count, duration, messages) are available. See doc 16 for rationale.
+> count, duration, messages) are available. See doc 17 for rationale.
 
 This means the By Project page works exclusively with `session_records` data
 joined through `project_aliases` → `projects`. No token/cost columns.

@@ -1,4 +1,4 @@
-# 22 - D1 Query Optimization
+# 24 - D1 Query Optimization
 
 > Collected 2026-03-13 via `wrangler d1 insights pew-db --timePeriod 7d`
 

@@ -539,7 +539,7 @@ ORDER BY total_tokens DESC
 This document.
 
 **Files changed:**
-- `docs/17-season-system.md` (new)
+- `docs/18-season-system.md` (new)
 
 ---
 

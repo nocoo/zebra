@@ -1,4 +1,4 @@
-# 17 — VSCode Copilot Token Tracking Research
+# 19 — VSCode Copilot Token Tracking Research
 
 > Research spike: can we extract token usage from VSCode Copilot Chat local data?
 

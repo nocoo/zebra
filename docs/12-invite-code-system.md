@@ -451,7 +451,7 @@ All paths relative to `packages/web/`:
 
 | # | File | Op | Description |
 |---|------|----|-------------|
-| 1 | `docs/14-invite-code-system.md` | NEW | This plan document |
+| 1 | `docs/12-invite-code-system.md` | NEW | This plan document |
 | 2 | `scripts/migrations/004-invite-codes.sql` | NEW | Database migration |
 | 3 | `packages/web/src/lib/invite.ts` | NEW | Shared helpers: `generateInviteCode`, `validateInviteCode`, `handleInviteGate` |
 | 4 | `packages/web/src/app/api/admin/invites/route.ts` | NEW | Admin CRUD API |
@@ -544,7 +544,7 @@ Each commit is independently buildable and testable. Ordered by dependency:
 
 | # | Type | Message | Files | Depends On |
 |---|------|---------|-------|------------|
-| 1 | docs | `docs: add invite code system plan` | `docs/14-invite-code-system.md` | — |
+| 1 | docs | `docs: add invite code system plan` | `docs/12-invite-code-system.md` | — |
 | 2 | feat | `feat: add invite_codes migration script` | `scripts/migrations/004-invite-codes.sql` | — |
 | 3 | feat | `feat: add invite code shared helpers` | `packages/web/src/lib/invite.ts` | — |
 | 4 | feat | `feat: add admin invites CRUD API` | `packages/web/src/app/api/admin/invites/route.ts` | #2, #3 |

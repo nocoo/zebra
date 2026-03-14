@@ -1,4 +1,4 @@
-# 21 — Session Queue Unbounded Growth
+# 23 — Session Queue Unbounded Growth
 
 ## Problem
 
@@ -160,5 +160,5 @@ if (queueFileSize > COMPACT_THRESHOLD) {
 - `packages/cli/src/storage/base-queue.ts` — BaseQueue implementation (overwrite vs appendBatch)
 - `packages/cli/src/commands/session-upload.ts` — deduplicateSessionRecords + upload
 - `packages/cli/src/commands/upload-engine.ts` — offset-based upload engine
-- doc/20 — E2E validation 中发现此问题
-- doc/19 — Token inflation audit (原始 bug 修复计划)
+- doc/22 — E2E validation 中发现此问题
+- doc/21 — Token inflation audit (原始 bug 修复计划)
