@@ -14,13 +14,14 @@ import {
 //   A7.5  = 50,000,000–59,999,999 (7-digit, leading 5)
 //   A10.1 = 1,000,000,000+      (10-digit, leading 1)
 //
-// Colors are grouped by digit count (magnitude):
-//   A4–A5  = muted grey    (thousands)
-//   A6     = slate/blue    (hundred-thousands)
-//   A7     = teal/primary  (millions)
-//   A8     = violet        (ten-millions)
-//   A9     = amber         (hundred-millions)
-//   A10+   = gold          (billions+)
+// Each digit-count magnitude maps to a distinct chart color (cold → warm):
+//   A4  = chart-4 green      (1K–9.9K)
+//   A5  = chart-3 jade       (10K–99K)
+//   A6  = chart-2 sky        (100K–999K)
+//   A7  = chart-1 teal       (1M–9.9M)
+//   A8  = chart-5 lime       (10M–99M)
+//   A9  = chart-6 amber      (100M–999M)
+//   A10 = chart-8 vermilion  (1B+)
 //
 // Below 1,000 = nothing rendered.
 // ---------------------------------------------------------------------------
@@ -36,15 +37,15 @@ interface TierInfo {
   tooltip: string;
 }
 
-/** Color class per digit-count tier */
+/** Color class per digit-count tier — uses project chart palette for max distinction */
 const TIER_COLORS: Record<number, string> = {
-  4: "bg-muted text-muted-foreground", // 1K–9.9K
-  5: "bg-muted text-muted-foreground", // 10K–99K
-  6: "bg-sky-500/15 text-sky-600 dark:text-sky-400", // 100K–999K
-  7: "bg-primary/15 text-primary", // 1M–9.9M
-  8: "bg-violet-500/15 text-violet-600 dark:text-violet-400", // 10M–99M
-  9: "bg-chart-7/15 text-chart-7", // 100M–999M
-  10: "bg-amber-500/15 text-amber-600 dark:text-amber-400", // 1B+
+  4: "bg-chart-4/15 text-chart-4", // green   — 1K–9.9K
+  5: "bg-chart-3/15 text-chart-3", // jade    — 10K–99K
+  6: "bg-chart-2/15 text-chart-2", // sky     — 100K–999K
+  7: "bg-chart-1/15 text-chart-1", // teal    — 1M–9.9M
+  8: "bg-chart-5/15 text-chart-5", // lime    — 10M–99M
+  9: "bg-chart-6/15 text-chart-6", // amber   — 100M–999M
+  10: "bg-chart-8/15 text-chart-8", // vermilion — 1B+
 };
 
 const MAGNITUDE_NAMES: Record<number, string> = {
