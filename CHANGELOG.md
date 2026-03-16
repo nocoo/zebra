@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.10.6
+
+### Features
+
+- **Season roster backfill** — Added `syncAllRostersForSeason()` for bulk roster sync. When `allow_roster_changes` is toggled from off to on for an active season, all registered teams' rosters are automatically backfilled. Also added a manual "Sync Rosters" button (RefreshCw icon) on the admin seasons page and a `POST /api/admin/seasons/[seasonId]/sync-rosters` endpoint.
+
+### Fixes
+
+- **CLI login broken since v1.8.2** — The `/api/auth/cli` endpoint silently discarded the `state` nonce parameter, causing every `pew login` to fail with "Invalid or missing state parameter". The state is now read from the incoming request and forwarded in the callback redirect.
+- **Project chart line breaks** — Filled dates had `projects: {}`, making all project keys `undefined` in Recharts (line breaks, collapsed stacked areas). Now all known project names are backfilled to 0 across every date point.
+- **Roster backfill skipped on upcoming→active transition** — The auto-backfill check used pre-update dates to derive season status. A single PATCH that changed dates (upcoming→active) and enabled roster changes would skip the backfill. Now uses post-update dates.
+
 ## v1.10.5
 
 ### Fixes
