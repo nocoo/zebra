@@ -197,9 +197,12 @@ function TeamRow({
                       {initial}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-sm text-muted-foreground truncate min-w-0">
-                    {displayName}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm text-muted-foreground truncate">
+                      {displayName}
+                    </span>
+                    <TokenTierBadge totalTokens={member.total_tokens} />
+                  </div>
                 </div>
 
                 {/* Session count — same width as team row */}
