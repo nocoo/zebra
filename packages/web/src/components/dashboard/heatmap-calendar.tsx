@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getYearWeeks, getColorIndex, formatDateISO } from "@/lib/calendar-helpers";
+import { getYearWeeks, getColorIndex, formatDateISO, computePercentileBoundaries } from "@/lib/calendar-helpers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,15 +66,20 @@ export function HeatmapCalendar({
   cellGap = 2,
   className,
 }: HeatmapCalendarProps) {
-  const { weeks, dataMap, maxValue, monthLabels } = useMemo(() => {
+  const { weeks, dataMap, boundaries, monthLabels } = useMemo(() => {
     const weeks = getYearWeeks(year);
     const dataMap = new Map<string, number>();
-    let maxValue = 0;
+    const nonZeroValues: number[] = [];
 
     for (const d of data) {
       dataMap.set(d.date, d.value);
-      if (d.value > maxValue) maxValue = d.value;
+      if (d.value > 0) nonZeroValues.push(d.value);
     }
+
+    // Sort for percentile computation
+    nonZeroValues.sort((a, b) => a - b);
+    const levels = colorScale.length - 1; // index 0 = zero/empty
+    const boundaries = computePercentileBoundaries(nonZeroValues, levels);
 
     // Month label positions
     const monthLabels: { month: string; weekIndex: number }[] = [];
@@ -93,7 +98,7 @@ export function HeatmapCalendar({
       }
     }
 
-    return { weeks, dataMap, maxValue, monthLabels };
+    return { weeks, dataMap, boundaries, monthLabels };
   }, [data, year]);
 
   const labelWidth = 30;
@@ -152,7 +157,7 @@ export function HeatmapCalendar({
                     const isCurrentYear = date.getFullYear() === year;
                     const colorIndex = getColorIndex(
                       value,
-                      maxValue,
+                      boundaries,
                       colorScale
                     );
 

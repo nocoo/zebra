@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getYearWeeks, getColorIndex, formatDateISO } from "@/lib/calendar-helpers";
+import { getYearWeeks, getColorIndex, formatDateISO, computePercentileBoundaries } from "@/lib/calendar-helpers";
 
 // ---------------------------------------------------------------------------
 // getYearWeeks
@@ -71,44 +71,107 @@ describe("getYearWeeks", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getColorIndex
+// computePercentileBoundaries
+// ---------------------------------------------------------------------------
+
+describe("computePercentileBoundaries", () => {
+  it("returns empty array for empty input", () => {
+    expect(computePercentileBoundaries([], 4)).toEqual([]);
+  });
+
+  it("returns empty array for zero levels", () => {
+    expect(computePercentileBoundaries([1, 2, 3], 0)).toEqual([]);
+  });
+
+  it("splits 8 values into 4 equal buckets", () => {
+    const sorted = [1, 2, 3, 4, 5, 6, 7, 8];
+    const boundaries = computePercentileBoundaries(sorted, 4);
+    expect(boundaries).toEqual([2, 4, 6, 8]);
+  });
+
+  it("handles single value", () => {
+    const boundaries = computePercentileBoundaries([42], 4);
+    // All boundaries point to the same single value
+    expect(boundaries).toEqual([42, 42, 42, 42]);
+  });
+
+  it("handles fewer values than levels", () => {
+    const boundaries = computePercentileBoundaries([10, 20], 4);
+    expect(boundaries).toHaveLength(4);
+    // Each boundary is one of the two values
+    for (const b of boundaries) {
+      expect([10, 20]).toContain(b);
+    }
+  });
+
+  it("handles uneven distribution", () => {
+    // 100 values: 90 are "1", 10 are "1000"
+    const sorted = [...Array(90).fill(1), ...Array(10).fill(1000)] as number[];
+    const boundaries = computePercentileBoundaries(sorted, 4);
+    // Most boundaries should be 1 since 90% of values are 1
+    expect(boundaries[0]).toBe(1);
+    expect(boundaries[1]).toBe(1);
+    expect(boundaries[2]).toBe(1);
+    expect(boundaries[3]).toBe(1000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getColorIndex (percentile-based)
 // ---------------------------------------------------------------------------
 
 describe("getColorIndex", () => {
   const scale = ["#empty", "#low", "#med", "#high", "#max"]; // 5 levels
 
   it("returns 0 for value 0", () => {
-    expect(getColorIndex(0, 100, scale)).toBe(0);
+    expect(getColorIndex(0, [25, 50, 75, 100], scale)).toBe(0);
   });
 
-  it("returns max index for value equal to maxValue", () => {
-    expect(getColorIndex(100, 100, scale)).toBe(4);
+  it("returns 0 for value 0 with empty boundaries", () => {
+    expect(getColorIndex(0, [], scale)).toBe(0);
   });
 
-  it("clamps values exceeding maxValue", () => {
-    expect(getColorIndex(200, 100, scale)).toBe(4);
+  it("returns 1 for non-zero value with empty boundaries", () => {
+    expect(getColorIndex(42, [], scale)).toBe(1);
   });
 
-  it("distributes intermediate values linearly", () => {
-    // With 5 levels (0-4), levels = 4
-    // value/max = 0.25 → ceil(0.25 * 4) = 1
-    expect(getColorIndex(25, 100, scale)).toBe(1);
-    // value/max = 0.5 → ceil(0.5 * 4) = 2
-    expect(getColorIndex(50, 100, scale)).toBe(2);
-    // value/max = 0.75 → ceil(0.75 * 4) = 3
-    expect(getColorIndex(75, 100, scale)).toBe(3);
+  it("maps values to correct buckets based on boundaries", () => {
+    const boundaries = [25, 50, 75, 100];
+    // value <= 25 → index 1
+    expect(getColorIndex(10, boundaries, scale)).toBe(1);
+    expect(getColorIndex(25, boundaries, scale)).toBe(1);
+    // value <= 50 → index 2
+    expect(getColorIndex(30, boundaries, scale)).toBe(2);
+    expect(getColorIndex(50, boundaries, scale)).toBe(2);
+    // value <= 75 → index 3
+    expect(getColorIndex(60, boundaries, scale)).toBe(3);
+    expect(getColorIndex(75, boundaries, scale)).toBe(3);
+    // value <= 100 → index 4
+    expect(getColorIndex(80, boundaries, scale)).toBe(4);
+    expect(getColorIndex(100, boundaries, scale)).toBe(4);
   });
 
-  it("returns 1 for very small non-zero values", () => {
-    // value/max = 0.01 → ceil(0.01 * 4) = 1
-    expect(getColorIndex(1, 100, scale)).toBe(1);
+  it("clamps values exceeding all boundaries to top bucket", () => {
+    const boundaries = [25, 50, 75, 100];
+    expect(getColorIndex(200, boundaries, scale)).toBe(4);
   });
 
   it("handles a two-color scale", () => {
     const twoScale = ["#off", "#on"];
-    expect(getColorIndex(0, 100, twoScale)).toBe(0);
-    expect(getColorIndex(1, 100, twoScale)).toBe(1);
-    expect(getColorIndex(100, 100, twoScale)).toBe(1);
+    const boundaries = [100];
+    expect(getColorIndex(0, boundaries, twoScale)).toBe(0);
+    expect(getColorIndex(50, boundaries, twoScale)).toBe(1);
+    expect(getColorIndex(100, boundaries, twoScale)).toBe(1);
+  });
+
+  it("distributes evenly with percentile boundaries", () => {
+    // Simulate: sorted values [1,2,3,4,5,6,7,8], 4 levels
+    // boundaries = [2, 4, 6, 8]
+    const boundaries = computePercentileBoundaries([1, 2, 3, 4, 5, 6, 7, 8], 4);
+    expect(getColorIndex(1, boundaries, scale)).toBe(1); // <= 2
+    expect(getColorIndex(3, boundaries, scale)).toBe(2); // <= 4
+    expect(getColorIndex(5, boundaries, scale)).toBe(3); // <= 6
+    expect(getColorIndex(7, boundaries, scale)).toBe(4); // <= 8
   });
 });
 
