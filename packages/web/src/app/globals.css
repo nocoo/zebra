@@ -72,6 +72,11 @@
   --color-heatmap-green-3: hsl(var(--heatmap-green-3));
   --color-heatmap-green-4: hsl(var(--heatmap-green-4));
 
+  /* Rank badge colors (leaderboard podium) */
+  --color-rank-gold: hsl(var(--rank-gold));
+  --color-rank-silver: hsl(var(--rank-silver));
+  --color-rank-bronze: hsl(var(--rank-bronze));
+
   /* Radius tokens */
   --radius-card: 14px;
   --radius-widget: 10px;
@@ -167,6 +172,11 @@
   --heatmap-green-2: 142 55% 65%;
   --heatmap-green-3: 142 60% 45%;
   --heatmap-green-4: 142 65% 30%;
+
+  /* Rank badge colors (leaderboard podium) */
+  --rank-gold: 45 90% 48%;
+  --rank-silver: 220 10% 55%;
+  --rank-bronze: 25 70% 45%;
 }
 
 .dark {
@@ -235,6 +245,11 @@
   --heatmap-green-2: 142 50% 35%;
   --heatmap-green-3: 142 55% 45%;
   --heatmap-green-4: 142 60% 58%;
+
+  /* Rank badge colors — boosted for dark bg */
+  --rank-gold: 45 85% 55%;
+  --rank-silver: 220 10% 65%;
+  --rank-bronze: 25 65% 55%;
 }
 
 /*
