@@ -271,6 +271,113 @@ export function formatDuration(seconds: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// fillDateRange — fill gaps + extend to today
+// ---------------------------------------------------------------------------
+
+/** Advance a "YYYY-MM-DD" string by one calendar day. */
+function nextDay(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Fill date gaps and extend a sorted array of date-keyed objects up to
+ * `today` (inclusive).
+ *
+ * - Iterates from the first date in `data` to `max(lastDate, today)`.
+ * - For each missing date, inserts a zero-value placeholder produced by
+ *   `makeZero(dateString)`.
+ * - Original objects are kept by reference (no cloning).
+ * - Returns `[]` when `data` is empty and no `today` is provided.
+ *
+ * @param data     — sorted ascending by `dateKey`
+ * @param dateKey  — the property name holding "YYYY-MM-DD"
+ * @param makeZero — factory that creates a zero-value placeholder for a given date
+ * @param today    — "YYYY-MM-DD" to extend to (default: not extended)
+ */
+export function fillDateRange<T>(
+  data: T[],
+  dateKey: keyof T & string,
+  makeZero: (date: string) => T,
+  today?: string,
+): T[] {
+  if (data.length === 0 && !today) return [];
+  if (data.length === 0) return [];
+
+  const byDate = new Map<string, T>();
+  for (const item of data) {
+    byDate.set(item[dateKey] as string, item);
+  }
+
+  const firstDate = data[0]![dateKey] as string;
+  const lastDataDate = data[data.length - 1]![dateKey] as string;
+  const endDate = today && today > lastDataDate ? today : lastDataDate;
+
+  const result: T[] = [];
+  let cursor = firstDate;
+  while (cursor <= endDate) {
+    result.push(byDate.get(cursor) ?? makeZero(cursor));
+    cursor = nextDay(cursor);
+  }
+
+  return result;
+}
+
+/**
+ * Fill date gaps in a multi-row-per-date timeline.
+ *
+ * Similar to `fillDateRange` but for arrays where each date may have
+ * multiple rows (e.g. one per device/entity). Groups rows by `dateKey`,
+ * and for each missing date between the first date and `today`, inserts
+ * placeholder rows from `makeZeroRows(date)`.
+ *
+ * @param data        — sorted ascending by date (rows for the same date are adjacent)
+ * @param dateKey     — property holding "YYYY-MM-DD"
+ * @param makeZeroRows — factory producing zero-value rows for a missing date
+ * @param today       — "YYYY-MM-DD" to extend to
+ */
+export function fillTimelineGaps<T>(
+  data: T[],
+  dateKey: keyof T & string,
+  makeZeroRows: (date: string) => T[],
+  today?: string,
+): T[] {
+  if (data.length === 0) return [];
+
+  // Group existing rows by date, preserving order within each date
+  const dateGroups = new Map<string, T[]>();
+  for (const item of data) {
+    const d = item[dateKey] as string;
+    let group = dateGroups.get(d);
+    if (!group) {
+      group = [];
+      dateGroups.set(d, group);
+    }
+    group.push(item);
+  }
+
+  const firstDate = data[0]![dateKey] as string;
+  const dates = Array.from(dateGroups.keys()).sort();
+  const lastDataDate = dates[dates.length - 1]!;
+  const endDate = today && today > lastDataDate ? today : lastDataDate;
+
+  const result: T[] = [];
+  let cursor = firstDate;
+  while (cursor <= endDate) {
+    const group = dateGroups.get(cursor);
+    if (group) {
+      result.push(...group);
+    } else {
+      result.push(...makeZeroRows(cursor));
+    }
+    cursor = nextDay(cursor);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // UTC ↔ local datetime-local input conversion
 // ---------------------------------------------------------------------------
 

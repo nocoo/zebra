@@ -16,6 +16,8 @@ import {
   periodToDateRange,
   periodLabel,
   formatDuration,
+  getLocalToday,
+  fillDateRange,
 } from "@/lib/date-helpers";
 import type { Period } from "@/lib/date-helpers";
 import { sourceLabel } from "@/hooks/use-usage-data";
@@ -429,9 +431,11 @@ function SummaryTable({
 export default function ProjectsPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [tagFilter, setTagFilter] = useState("");
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const today = useMemo(() => getLocalToday(tzOffset), [tzOffset]);
   const { from, to } = periodToDateRange(
     period,
-    new Date().getTimezoneOffset(),
+    tzOffset,
   );
 
   const { data, loading, error, allTags, updateProject } = useProjects({
@@ -509,6 +513,12 @@ export default function ProjectsPage() {
       })
       .filter((point) => Object.keys(point.projects).length > 0);
   }, [timeline, tagFilter, filteredProjects]);
+
+  // Fill date gaps so charts extend to today
+  const filledTimeline = useMemo(() => {
+    if (filteredTimeline.length === 0) return filteredTimeline;
+    return fillDateRange(filteredTimeline, "date", (d) => ({ date: d, projects: {} }), today);
+  }, [filteredTimeline, today]);
 
   // -------------------------------------------------------------------------
   // Tag mutations
@@ -627,8 +637,8 @@ export default function ProjectsPage() {
 
               {/* Charts row */}
               <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                <ProjectTrendChart timeline={filteredTimeline} />
-                <ProjectShareChart timeline={filteredTimeline} />
+                <ProjectTrendChart timeline={filledTimeline} />
+                <ProjectShareChart timeline={filledTimeline} />
               </div>
 
               {/* Breakdown chart */}

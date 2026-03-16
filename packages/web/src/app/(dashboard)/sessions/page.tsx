@@ -18,7 +18,7 @@ import {
 import type { Period } from "@/components/dashboard/period-selector";
 import { computeTokensPerHour } from "@/lib/session-helpers";
 import { computeReasoningRatio } from "@/lib/cost-helpers";
-import { detectPeakHours } from "@/lib/date-helpers";
+import { detectPeakHours, getLocalToday, fillDateRange } from "@/lib/date-helpers";
 import { formatTokens } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -63,10 +63,17 @@ export default function SessionsPage() {
   );
 
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const today = useMemo(() => getLocalToday(tzOffset), [tzOffset]);
 
   const peakSlots = useMemo(
     () => (halfHourUsage ? detectPeakHours(halfHourUsage.records, 5, tzOffset) : []),
     [halfHourUsage, tzOffset],
+  );
+
+  // Fill date gaps in message stats so chart extends to today
+  const filledDailyMessages = useMemo(
+    () => fillDateRange(sessionData.dailyMessages, "date", (d) => ({ date: d, user: 0, assistant: 0 }), today),
+    [sessionData.dailyMessages, today],
   );
 
   return (
@@ -129,7 +136,7 @@ export default function SessionsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:gap-4">
-            <MessageStatsChart data={sessionData.dailyMessages} />
+            <MessageStatsChart data={filledDailyMessages} />
           </div>
         </>
       )}

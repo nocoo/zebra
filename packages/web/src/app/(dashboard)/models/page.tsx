@@ -12,7 +12,7 @@ import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-char
 import { SourceTrendChart } from "@/components/dashboard/source-trend-chart";
 import { ModelEvolutionChart } from "@/components/dashboard/model-evolution-chart";
 import { PeriodSelector } from "@/components/dashboard/period-selector";
-import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
+import { periodToDateRange, periodLabel, getLocalToday, fillDateRange } from "@/lib/date-helpers";
 import type { Period } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
@@ -55,6 +55,7 @@ export default function ModelsPage() {
   const { pricingMap } = usePricingMap();
 
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const today = useMemo(() => getLocalToday(tzOffset), [tzOffset]);
 
   const modelGroups = useMemo(
     () => (data ? groupByModel(data.records, pricingMap) : []),
@@ -66,15 +67,26 @@ export default function ModelsPage() {
     [modelGroups],
   );
 
-  const sourceTrendData = useMemo(
-    () => (data ? toSourceTrendPoints(data.records, tzOffset) : []),
-    [data, tzOffset],
-  );
+  const sourceTrendData = useMemo(() => {
+    if (!data) return [];
+    const sparse = toSourceTrendPoints(data.records, tzOffset);
+    if (sparse.length === 0) return sparse;
+    // Collect all source keys for zero-fill factory
+    const allSources = Object.keys(sparse[0]!.sources);
+    const zeroSources: Record<string, number> = {};
+    for (const s of allSources) zeroSources[s] = 0;
+    return fillDateRange(sparse, "date", (d) => ({ date: d, sources: { ...zeroSources } }), today);
+  }, [data, tzOffset, today]);
 
-  const modelEvolutionData = useMemo(
-    () => (data ? toModelEvolutionPoints(data.records, undefined, tzOffset) : []),
-    [data, tzOffset],
-  );
+  const modelEvolutionData = useMemo(() => {
+    if (!data) return [];
+    const sparse = toModelEvolutionPoints(data.records, undefined, tzOffset);
+    if (sparse.length === 0) return sparse;
+    const allModels = Object.keys(sparse[0]!.models);
+    const zeroModels: Record<string, number> = {};
+    for (const m of allModels) zeroModels[m] = 0;
+    return fillDateRange(sparse, "date", (d) => ({ date: d, models: { ...zeroModels } }), today);
+  }, [data, tzOffset, today]);
 
   const subtitle = periodLabel(period);
 

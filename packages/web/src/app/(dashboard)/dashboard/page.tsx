@@ -33,8 +33,10 @@ import { BudgetDialog } from "@/components/dashboard/budget-dialog";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { DashboardSegment } from "@/components/dashboard/dashboard-segment";
 import { PeriodSelector } from "@/components/dashboard/period-selector";
-import { periodToDateRange, periodLabel, getLocalToday } from "@/lib/date-helpers";
+import { periodToDateRange, periodLabel, getLocalToday, fillDateRange } from "@/lib/date-helpers";
 import type { Period } from "@/lib/date-helpers";
+import type { DailyCostPoint, DailyCacheRate } from "@/lib/cost-helpers";
+import type { DailyPoint } from "@/hooks/use-usage-data";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // ---------------------------------------------------------------------------
@@ -70,6 +72,15 @@ export default function DashboardPage() {
 
   // Timezone offset for UTC→local date conversion (used by multiple helpers)
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const today = useMemo(() => getLocalToday(tzOffset), [tzOffset]);
+
+  // Fill date gaps + extend to today so charts always show up to the current day
+  const filledDaily = useMemo<DailyPoint[]>(
+    () => fillDateRange(daily, "date", (d) => ({
+      date: d, input: 0, output: 0, cached: 0, reasoning: 0, total: 0,
+    }), today),
+    [daily, today],
+  );
 
   // Budget tracking — always fetch current month
   const currentMonth = useMemo(() => {
@@ -81,8 +92,14 @@ export default function DashboardPage() {
   const estimatedCost = useMemo(() => computeTotalCost(models, pricingMap), [models, pricingMap]);
 
   const dailyCostPoints = useMemo(
-    () => (data ? toDailyCostPoints(data.records, pricingMap, tzOffset) : []),
-    [data, pricingMap, tzOffset],
+    () => {
+      if (!data) return [];
+      const sparse = toDailyCostPoints(data.records, pricingMap, tzOffset);
+      return fillDateRange<DailyCostPoint>(sparse, "date", (d) => ({
+        date: d, inputCost: 0, outputCost: 0, cachedCost: 0, totalCost: 0,
+      }), today);
+    },
+    [data, pricingMap, tzOffset, today],
   );
 
   const cacheSavings = useMemo(
@@ -113,8 +130,14 @@ export default function DashboardPage() {
   }, [budget, costForecast, currentMonthTokens]);
 
   const dailyCacheRates = useMemo(
-    () => (data ? toDailyCacheRates(data.records, tzOffset) : []),
-    [data, tzOffset],
+    () => {
+      if (!data) return [];
+      const sparse = toDailyCacheRates(data.records, tzOffset);
+      return fillDateRange<DailyCacheRate>(sparse, "date", (d) => ({
+        date: d, cacheRate: 0, cachedTokens: 0, inputTokens: 0,
+      }), today);
+    },
+    [data, tzOffset, today],
   );
 
   // MoM growth (needs 2 months of data — use half-hour records)
@@ -290,7 +313,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                   {chartTab === "tokens" ? (
-                    <UsageTrendChart data={daily} />
+                    <UsageTrendChart data={filledDaily} />
                   ) : (
                     <CostTrendChart data={dailyCostPoints} />
                   )}

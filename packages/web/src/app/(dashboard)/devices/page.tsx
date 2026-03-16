@@ -12,7 +12,7 @@ import { DeviceTrendChart } from "@/components/dashboard/device-trend-chart";
 import { DeviceShareChart } from "@/components/dashboard/device-share-chart";
 import { DeviceBreakdownChart } from "@/components/dashboard/device-breakdown-chart";
 import { PeriodSelector } from "@/components/dashboard/period-selector";
-import { periodToDateRange, periodLabel } from "@/lib/date-helpers";
+import { periodToDateRange, periodLabel, getLocalToday, fillTimelineGaps } from "@/lib/date-helpers";
 import type { Period } from "@/lib/date-helpers";
 import type { DeviceAggregate } from "@pew/core";
 
@@ -91,7 +91,27 @@ export default function ByDevicePage() {
   });
 
   const devices = useMemo(() => data?.devices ?? [], [data]);
-  const timeline = useMemo(() => data?.timeline ?? [], [data]);
+
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const today = useMemo(() => getLocalToday(tzOffset), [tzOffset]);
+
+  // Fill date gaps in device timeline so charts extend to today
+  const timeline = useMemo(() => {
+    const raw = data?.timeline ?? [];
+    if (raw.length === 0) return raw;
+    const deviceIds = [...new Set(raw.map((r) => r.device_id))];
+    return fillTimelineGaps(raw, "date", (d) =>
+      deviceIds.map((id) => ({
+        date: d,
+        device_id: id,
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_input_tokens: 0,
+      })),
+      today,
+    );
+  }, [data, today]);
 
   const grandTotal = useMemo(
     () => devices.reduce((sum, d) => sum + d.total_tokens, 0),

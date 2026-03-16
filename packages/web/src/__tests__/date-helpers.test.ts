@@ -10,6 +10,8 @@ import {
   detectPeakHours,
   getLocalToday,
   formatDuration,
+  fillDateRange,
+  fillTimelineGaps,
 } from "@/lib/date-helpers";
 import type { UsageRow } from "@/hooks/use-usage-data";
 
@@ -417,5 +419,157 @@ describe("formatDuration", () => {
     expect(formatDuration(3700)).toBe("1h 1m");
     expect(formatDuration(5400)).toBe("1h 30m");
     expect(formatDuration(90061)).toBe("25h 1m");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fillDateRange — fills gaps + extends to today
+// ---------------------------------------------------------------------------
+
+describe("fillDateRange", () => {
+  it("returns empty array when input is empty and no today is given", () => {
+    const result = fillDateRange([], "date", () => ({ date: "", val: 0 }));
+    expect(result).toEqual([]);
+  });
+
+  it("fills gap between two non-adjacent dates", () => {
+    const data = [
+      { date: "2026-03-10", val: 100 },
+      { date: "2026-03-13", val: 200 },
+    ];
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }));
+    expect(result).toEqual([
+      { date: "2026-03-10", val: 100 },
+      { date: "2026-03-11", val: 0 },
+      { date: "2026-03-12", val: 0 },
+      { date: "2026-03-13", val: 200 },
+    ]);
+  });
+
+  it("extends to today when last data date is before today", () => {
+    const data = [
+      { date: "2026-03-14", val: 50 },
+      { date: "2026-03-15", val: 60 },
+    ];
+    const today = "2026-03-18";
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }), today);
+    expect(result).toEqual([
+      { date: "2026-03-14", val: 50 },
+      { date: "2026-03-15", val: 60 },
+      { date: "2026-03-16", val: 0 },
+      { date: "2026-03-17", val: 0 },
+      { date: "2026-03-18", val: 0 },
+    ]);
+  });
+
+  it("does not trim when last data date is after today", () => {
+    // Edge case: data extends beyond "today" — keep it all
+    const data = [
+      { date: "2026-03-16", val: 10 },
+      { date: "2026-03-18", val: 20 },
+    ];
+    const today = "2026-03-17";
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }), today);
+    expect(result).toEqual([
+      { date: "2026-03-16", val: 10 },
+      { date: "2026-03-17", val: 0 },
+      { date: "2026-03-18", val: 20 },
+    ]);
+  });
+
+  it("handles single-element input with today", () => {
+    const data = [{ date: "2026-03-14", val: 99 }];
+    const today = "2026-03-16";
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }), today);
+    expect(result).toEqual([
+      { date: "2026-03-14", val: 99 },
+      { date: "2026-03-15", val: 0 },
+      { date: "2026-03-16", val: 0 },
+    ]);
+  });
+
+  it("returns data as-is when already contiguous up to today", () => {
+    const data = [
+      { date: "2026-03-15", val: 10 },
+      { date: "2026-03-16", val: 20 },
+    ];
+    const today = "2026-03-16";
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }), today);
+    expect(result).toEqual(data);
+  });
+
+  it("preserves original objects (no cloning)", () => {
+    const original = { date: "2026-03-15", val: 42 };
+    const data = [original];
+    const result = fillDateRange(data, "date", (d) => ({ date: d, val: 0 }), "2026-03-15");
+    expect(result[0]).toBe(original);
+  });
+
+  it("works with a custom date key name", () => {
+    const data = [
+      { day: "2026-03-10", count: 5 },
+      { day: "2026-03-12", count: 8 },
+    ];
+    const result = fillDateRange(data, "day", (d) => ({ day: d, count: 0 }));
+    expect(result).toEqual([
+      { day: "2026-03-10", count: 5 },
+      { day: "2026-03-11", count: 0 },
+      { day: "2026-03-12", count: 8 },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fillTimelineGaps — fills gaps in multi-row-per-date timelines
+// ---------------------------------------------------------------------------
+
+describe("fillTimelineGaps", () => {
+  type Row = { date: string; device_id: string; tokens: number };
+
+  const makeZeroRows = (d: string): Row[] => [
+    { date: d, device_id: "a", tokens: 0 },
+    { date: d, device_id: "b", tokens: 0 },
+  ];
+
+  it("returns empty array when input is empty", () => {
+    const result = fillTimelineGaps<Row>([], "date", makeZeroRows);
+    expect(result).toEqual([]);
+  });
+
+  it("fills gap between two non-adjacent dates with zero rows for all entities", () => {
+    const data: Row[] = [
+      { date: "2026-03-10", device_id: "a", tokens: 100 },
+      { date: "2026-03-10", device_id: "b", tokens: 50 },
+      { date: "2026-03-12", device_id: "a", tokens: 200 },
+    ];
+    const result = fillTimelineGaps(data, "date", makeZeroRows);
+    expect(result).toEqual([
+      { date: "2026-03-10", device_id: "a", tokens: 100 },
+      { date: "2026-03-10", device_id: "b", tokens: 50 },
+      { date: "2026-03-11", device_id: "a", tokens: 0 },
+      { date: "2026-03-11", device_id: "b", tokens: 0 },
+      { date: "2026-03-12", device_id: "a", tokens: 200 },
+    ]);
+  });
+
+  it("extends to today with zero rows", () => {
+    const data: Row[] = [
+      { date: "2026-03-14", device_id: "a", tokens: 10 },
+    ];
+    const result = fillTimelineGaps(data, "date", makeZeroRows, "2026-03-16");
+    expect(result).toEqual([
+      { date: "2026-03-14", device_id: "a", tokens: 10 },
+      { date: "2026-03-15", device_id: "a", tokens: 0 },
+      { date: "2026-03-15", device_id: "b", tokens: 0 },
+      { date: "2026-03-16", device_id: "a", tokens: 0 },
+      { date: "2026-03-16", device_id: "b", tokens: 0 },
+    ]);
+  });
+
+  it("preserves original objects by reference", () => {
+    const original: Row = { date: "2026-03-15", device_id: "a", tokens: 42 };
+    const data = [original];
+    const result = fillTimelineGaps(data, "date", makeZeroRows, "2026-03-15");
+    expect(result[0]).toBe(original);
   });
 });
