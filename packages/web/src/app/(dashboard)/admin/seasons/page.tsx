@@ -10,6 +10,7 @@ import {
   X,
   Check,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAdmin } from "@/hooks/use-admin";
@@ -498,6 +499,9 @@ export default function AdminSeasonsPage() {
   // Snapshot generating
   const [snapshotting, setSnapshotting] = useState<string | null>(null);
 
+  // Roster syncing
+  const [syncing, setSyncing] = useState<string | null>(null);
+
   // ---------------------------------------------------------------------------
   // Redirect non-admins
   // ---------------------------------------------------------------------------
@@ -618,6 +622,40 @@ export default function AdminSeasonsPage() {
       });
     } finally {
       setSnapshotting(null);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Sync rosters
+  // ---------------------------------------------------------------------------
+
+  const handleSyncRosters = async (season: SeasonRow) => {
+    setSyncing(season.id);
+    setMessage(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/seasons/${season.id}/sync-rosters`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as { synced_teams: number };
+      setMessage({
+        type: "success",
+        text: `Rosters synced for ${json.synced_teams} team${json.synced_teams === 1 ? "" : "s"}.`,
+      });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to sync rosters.",
+      });
+    } finally {
+      setSyncing(null);
     }
   };
 
@@ -755,12 +793,14 @@ export default function AdminSeasonsPage() {
                         expandedTeams={expandedTeams}
                         expandedLoading={expandedLoading}
                         snapshotting={snapshotting}
+                        syncing={syncing}
                         onEdit={() => {
                           setEditingId(row.id);
                           setShowCreate(false);
                         }}
                         onToggleTeams={() => fetchTeams(row.id)}
                         onSnapshot={() => handleSnapshot(row)}
+                        onSyncRosters={() => handleSyncRosters(row)}
                       />
                     )
                   ))}
@@ -784,18 +824,22 @@ function SeasonTableRow({
   expandedTeams,
   expandedLoading,
   snapshotting,
+  syncing,
   onEdit,
   onToggleTeams,
   onSnapshot,
+  onSyncRosters,
 }: {
   row: SeasonRow;
   expandedId: string | null;
   expandedTeams: { team_id: string; team_name: string; registered_at: string }[];
   expandedLoading: boolean;
   snapshotting: string | null;
+  syncing: string | null;
   onEdit: () => void;
   onToggleTeams: () => void;
   onSnapshot: () => void;
+  onSyncRosters: () => void;
 }) {
   const isExpanded = expandedId === row.id;
 
@@ -869,6 +913,27 @@ function SeasonTableRow({
                 ) : (
                   <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
                 )}
+              </button>
+            )}
+
+            {/* Sync rosters */}
+            {row.status === "active" && row.allow_roster_changes && (
+              <button
+                onClick={onSyncRosters}
+                disabled={syncing === row.id}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
+                  syncing === row.id && "opacity-50 cursor-not-allowed",
+                )}
+                title="Sync rosters"
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    syncing === row.id && "animate-spin",
+                  )}
+                  strokeWidth={1.5}
+                />
               </button>
             )}
 
