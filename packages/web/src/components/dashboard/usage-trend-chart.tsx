@@ -156,11 +156,11 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
             margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
           >
             <defs>
-              <linearGradient id="gradInput" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="gradUsageInput" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={chart.teal} stopOpacity={0.3} />
                 <stop offset="100%" stopColor={chart.teal} stopOpacity={0} />
               </linearGradient>
-              <linearGradient id="gradOutput" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="gradUsageOutput" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="0%"
                   stopColor={colorOutput}
@@ -172,7 +172,7 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
                   stopOpacity={0}
                 />
               </linearGradient>
-              <linearGradient id="gradCached" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="gradUsageCached" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="0%"
                   stopColor={chartMuted}
@@ -212,7 +212,7 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
               stackId="1"
               stroke={chart.teal}
               strokeWidth={2}
-              fill="url(#gradInput)"
+              fill="url(#gradUsageInput)"
             />
             <Area
               type="monotone"
@@ -220,7 +220,7 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
               stackId="1"
               stroke={colorOutput}
               strokeWidth={2}
-              fill="url(#gradOutput)"
+              fill="url(#gradUsageOutput)"
             />
             <Area
               type="monotone"
@@ -228,7 +228,7 @@ export function UsageTrendChart({ data, className }: UsageTrendChartProps) {
               stackId="1"
               stroke={chartMuted}
               strokeWidth={2}
-              fill="url(#gradCached)"
+              fill="url(#gradUsageCached)"
             />
           </AreaChart>
         </DashboardResponsiveContainer>
