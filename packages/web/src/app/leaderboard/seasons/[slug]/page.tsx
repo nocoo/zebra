@@ -183,26 +183,49 @@ function TeamRow({
             return (
               <div
                 key={member.user_id}
-                className="flex items-center gap-3 py-1.5 px-10"
+                className="flex items-center gap-3 py-1.5"
               >
-                <Avatar className="h-6 w-6 shrink-0">
-                  {member.image && (
-                    <AvatarImage src={member.image} alt={displayName} />
-                  )}
-                  <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
-                    {initial}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-sm text-foreground truncate flex-1 min-w-0">
-                  {displayName}
-                </span>
-                <div className="hidden sm:flex items-center gap-4 text-xs">
-                  <span className="tabular-nums text-chart-2">{member.session_count.toLocaleString("en-US")}</span>
-                  <span className="tabular-nums text-chart-7">{formatDuration(member.total_duration_seconds)}</span>
+                {/* Rank spacer — matches team row w-8 rank column */}
+                <div className="w-8 shrink-0" />
+
+                {/* Avatar + name — aligned with team icon + name */}
+                <div className="flex flex-1 items-center gap-3 min-w-0">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    {member.image && (
+                      <AvatarImage src={member.image} alt={displayName} />
+                    )}
+                    <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm text-muted-foreground truncate min-w-0">
+                    {displayName}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                  {formatTokensFull(member.total_tokens)}
-                </span>
+
+                {/* Session count — same width as team row */}
+                <div className="hidden sm:block w-24 shrink-0 text-right">
+                  <span className="text-xs tabular-nums text-chart-2">
+                    {member.session_count.toLocaleString("en-US")}
+                  </span>
+                </div>
+
+                {/* Duration — same width as team row */}
+                <div className="hidden sm:block w-24 shrink-0 text-right">
+                  <span className="text-xs tabular-nums text-chart-7">
+                    {formatDuration(member.total_duration_seconds)}
+                  </span>
+                </div>
+
+                {/* Tokens — same width and font size as team row */}
+                <div className="relative z-10 w-[140px] sm:w-[220px] shrink-0 text-right flex items-center justify-end">
+                  <span className="font-handwriting text-[32px] sm:text-[39px] leading-none tracking-tight text-muted-foreground whitespace-nowrap">
+                    {formatTokensFull(member.total_tokens)}
+                  </span>
+                </div>
+
+                {/* Chevron spacer — matches team row expand indicator */}
+                <div className="w-4 shrink-0" />
               </div>
             );
           })}
