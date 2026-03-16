@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
 import { getD1Client } from "@/lib/d1";
 import { deriveSeasonStatus } from "@/lib/seasons";
+import { syncAllRostersForSeason } from "@/lib/season-roster";
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -54,7 +55,8 @@ export async function PATCH(
       slug: string;
       start_date: string;
       end_date: string;
-    }>("SELECT id, name, slug, start_date, end_date FROM seasons WHERE id = ?", [
+      allow_roster_changes: number;
+    }>("SELECT id, name, slug, start_date, end_date, allow_roster_changes FROM seasons WHERE id = ?", [
       seasonId,
     ]);
 
@@ -158,6 +160,13 @@ export async function PATCH(
       `UPDATE seasons SET ${updates.join(", ")} WHERE id = ?`,
       values
     );
+
+    // Auto-backfill rosters when allow_roster_changes flips 0→1 on an active season
+    const wasRosterOff = season.allow_roster_changes === 0;
+    const isRosterOn = body.allow_roster_changes === true;
+    if (wasRosterOff && isRosterOn && status === "active") {
+      await syncAllRostersForSeason(client, seasonId);
+    }
 
     // Return updated season
     const updated = await client.firstOrNull<{

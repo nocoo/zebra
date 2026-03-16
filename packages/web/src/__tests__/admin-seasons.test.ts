@@ -12,6 +12,10 @@ vi.mock("@/lib/admin", () => ({
   resolveAdmin: vi.fn(),
 }));
 
+vi.mock("@/lib/season-roster", () => ({
+  syncAllRostersForSeason: vi.fn(),
+}));
+
 vi.mock("@/auth", () => ({
   shouldUseSecureCookies: vi.fn(() => false),
 }));
@@ -22,6 +26,12 @@ import * as d1Module from "@/lib/d1";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
+};
+
+const { syncAllRostersForSeason } = (await import(
+  "@/lib/season-roster"
+)) as unknown as {
+  syncAllRostersForSeason: ReturnType<typeof vi.fn>;
 };
 
 // ---------------------------------------------------------------------------
@@ -347,5 +357,108 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toBe("Season not found");
+  });
+
+  it("should trigger roster backfill when allow_roster_changes flips 0→1 on active season", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Active Season",
+        slug: "s-active",
+        start_date: "2020-01-01T00:00:00Z",
+        end_date: "2099-12-31T23:59:00Z",
+        allow_roster_changes: 0,
+      })
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Active Season",
+        slug: "s-active",
+        start_date: "2020-01-01T00:00:00Z",
+        end_date: "2099-12-31T23:59:00Z",
+        created_at: "2020-01-01T00:00:00Z",
+        updated_at: "2026-03-16T00:00:00Z",
+        allow_late_registration: 0,
+        allow_roster_changes: 1,
+        allow_late_withdrawal: 0,
+      });
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+    syncAllRostersForSeason.mockResolvedValueOnce(2);
+
+    const res = await PATCH(
+      makeRequest("PATCH", undefined, { allow_roster_changes: true }),
+      { params: patchParams }
+    );
+    expect(res.status).toBe(200);
+    expect(syncAllRostersForSeason).toHaveBeenCalledWith(mockClient, "season-1");
+  });
+
+  it("should NOT trigger roster backfill when toggle stays on (1→1)", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Active Season",
+        slug: "s-active",
+        start_date: "2020-01-01T00:00:00Z",
+        end_date: "2099-12-31T23:59:00Z",
+        allow_roster_changes: 1,
+      })
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Active Season",
+        slug: "s-active",
+        start_date: "2020-01-01T00:00:00Z",
+        end_date: "2099-12-31T23:59:00Z",
+        created_at: "2020-01-01T00:00:00Z",
+        updated_at: "2026-03-16T00:00:00Z",
+        allow_late_registration: 0,
+        allow_roster_changes: 1,
+        allow_late_withdrawal: 0,
+      });
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const res = await PATCH(
+      makeRequest("PATCH", undefined, { allow_roster_changes: true }),
+      { params: patchParams }
+    );
+    expect(res.status).toBe(200);
+    expect(syncAllRostersForSeason).not.toHaveBeenCalled();
+  });
+
+  it("should NOT trigger roster backfill on upcoming season even with 0→1 toggle", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+
+    mockClient.firstOrNull
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Future Season",
+        slug: "s-future",
+        start_date: "2099-06-01T00:00:00Z",
+        end_date: "2099-06-30T23:59:00Z",
+        allow_roster_changes: 0,
+      })
+      .mockResolvedValueOnce({
+        id: "season-1",
+        name: "Future Season",
+        slug: "s-future",
+        start_date: "2099-06-01T00:00:00Z",
+        end_date: "2099-06-30T23:59:00Z",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-03-16T00:00:00Z",
+        allow_late_registration: 0,
+        allow_roster_changes: 1,
+        allow_late_withdrawal: 0,
+      });
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const res = await PATCH(
+      makeRequest("PATCH", undefined, { allow_roster_changes: true }),
+      { params: patchParams }
+    );
+    expect(res.status).toBe(200);
+    expect(syncAllRostersForSeason).not.toHaveBeenCalled();
   });
 });
