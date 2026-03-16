@@ -18,39 +18,49 @@ import type { PricingMap } from "@/hooks/use-pricing";
 import { formatDate } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
-// Transform UsageRow[] → HalfHourPoint[]
+// Transform UsageRow[] → HalfHourPoint[] (zero-filled 144 slots)
 // ---------------------------------------------------------------------------
 
+/** Format a local-adjusted Date into the slot label "Mar 12 09:00". */
+function formatSlotLabel(d: Date): string {
+  const mon = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = d.getUTCDate();
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${mon} ${day} ${hh}:${mm}`;
+}
+
+/**
+ * Build a complete 144-slot (72 h × 2 slots/h) timeline, zero-filling gaps.
+ *
+ * `fromISO` / `toISO` define the exact UTC window the page requested.
+ * Each slot is snapped to the 30-min boundary (floor).
+ */
 function toHalfHourPoints(
   records: UsageRow[],
   tzOffset: number,
+  fromISO: string,
+  toISO: string,
 ): HalfHourPoint[] {
-  const bySlot = new Map<
-    string,
-    { hourStart: string; input: number; output: number; total: number }
+  const SLOT_MS = 30 * 60_000;
+
+  // --- 1. aggregate records by their UTC 30-min key -------------------------
+  const byUtcKey = new Map<
+    number,
+    { input: number; output: number; total: number }
   >();
-
   for (const r of records) {
-    // Shift UTC to local time
-    const utcMs = new Date(r.hour_start).getTime();
-    const localMs = utcMs - tzOffset * 60_000;
-    const local = new Date(localMs);
+    // Floor to 30-min boundary in UTC
+    const ms = new Date(r.hour_start).getTime();
+    const key = ms - (ms % SLOT_MS);
 
-    // Format slot label: "Mar 12 09:00"
-    const mon = local.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-    const day = local.getUTCDate();
-    const hh = String(local.getUTCHours()).padStart(2, "0");
-    const mm = String(local.getUTCMinutes()).padStart(2, "0");
-    const slot = `${mon} ${day} ${hh}:${mm}`;
-
-    const existing = bySlot.get(slot);
+    const existing = byUtcKey.get(key);
     if (existing) {
       existing.input += r.input_tokens;
       existing.output += r.output_tokens;
       existing.total += r.total_tokens;
     } else {
-      bySlot.set(slot, {
-        hourStart: r.hour_start,
+      byUtcKey.set(key, {
         input: r.input_tokens,
         output: r.output_tokens,
         total: r.total_tokens,
@@ -58,15 +68,31 @@ function toHalfHourPoints(
     }
   }
 
-  return Array.from(bySlot.entries())
-    .map(([slot, data]) => ({
+  // --- 2. generate every 30-min slot in the window --------------------------
+  const startMs = new Date(fromISO).getTime();
+  const endMs = new Date(toISO).getTime();
+  // Snap start down, end up so we cover the full range
+  let cursor = startMs - (startMs % SLOT_MS);
+  const result: HalfHourPoint[] = [];
+
+  while (cursor <= endMs) {
+    const localDate = new Date(cursor - tzOffset * 60_000);
+    const slot = formatSlotLabel(localDate);
+    const hourStart = new Date(cursor).toISOString();
+    const vals = byUtcKey.get(cursor);
+
+    result.push({
       slot,
-      hourStart: data.hourStart,
-      input: data.input,
-      output: data.output,
-      total: data.total,
-    }))
-    .sort((a, b) => a.hourStart.localeCompare(b.hourStart));
+      hourStart,
+      input: vals?.input ?? 0,
+      output: vals?.output ?? 0,
+      total: vals?.total ?? 0,
+    });
+
+    cursor += SLOT_MS;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,8 +317,10 @@ export default function RecentPage() {
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
 
   const halfHourPoints = useMemo(() => {
-    return data ? toHalfHourPoints(data.records, tzOffset) : [];
-  }, [data, tzOffset]);
+    return data
+      ? toHalfHourPoints(data.records, tzOffset, recentFrom, recentTo)
+      : [];
+  }, [data, tzOffset, recentFrom, recentTo]);
 
   const dailyGroups = useMemo(
     () => (data ? groupByDate(data.records, pricingMap, tzOffset) : []),

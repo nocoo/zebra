@@ -42,11 +42,14 @@ const colorOutput = CHART_COLORS[1]!;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Format slot label for X axis: show time only, or date+time at day boundaries */
+/** Format slot label for X axis: show time only, include date at midnight */
 function fmtSlot(slot: string): string {
   // slot is "Mar 12 09:00" — extract time part
   const parts = slot.split(" ");
-  return parts[2] ?? slot;
+  const time = parts[2] ?? slot;
+  // Show "Mar 12" alongside midnight ticks for day orientation
+  if (time === "00:00") return `${parts[0]} ${parts[1]}`;
+  return time;
 }
 
 /** Format slot for tooltip: full "Mar 12, 09:00-09:30" */
