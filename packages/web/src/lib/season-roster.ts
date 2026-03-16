@@ -4,6 +4,9 @@
  *
  * Called after team membership changes (join, kick, leave) to keep
  * frozen season rosters in sync when the admin has opted in.
+ *
+ * Also provides `syncAllRostersForSeason()` for admin-triggered bulk
+ * backfill (e.g. when `allow_roster_changes` is toggled on).
  */
 
 import type { D1Client } from "@/lib/d1";
@@ -76,4 +79,70 @@ export async function syncSeasonRosters(
       }
     }
   }
+}
+
+/**
+ * Sync rosters for ALL registered teams in a given season.
+ *
+ * Unlike `syncSeasonRosters` (which is event-driven per-team), this
+ * function is intended for admin-triggered bulk backfill — e.g. when
+ * `allow_roster_changes` is toggled on and members who joined while
+ * the toggle was off need to be added retroactively.
+ *
+ * No `allow_roster_changes` guard — the caller decides when it's appropriate.
+ *
+ * Returns the number of teams that were synced.
+ */
+export async function syncAllRostersForSeason(
+  client: D1Client,
+  seasonId: string,
+): Promise<number> {
+  // Get all teams registered for this season
+  const { results: teams } = await client.query<{
+    team_id: string;
+  }>("SELECT team_id FROM season_teams WHERE season_id = ?", [seasonId]);
+
+  if (teams.length === 0) return 0;
+
+  for (const { team_id } of teams) {
+    // Get current team members
+    const { results: currentMembers } = await client.query<{
+      user_id: string;
+    }>("SELECT user_id FROM team_members WHERE team_id = ?", [team_id]);
+
+    const currentUserIds = new Set(currentMembers.map((m) => m.user_id));
+
+    // Get existing season roster for this team
+    const { results: seasonMembers } = await client.query<{
+      user_id: string;
+    }>(
+      "SELECT user_id FROM season_team_members WHERE season_id = ? AND team_id = ?",
+      [seasonId, team_id],
+    );
+
+    const seasonUserIds = new Set(seasonMembers.map((m) => m.user_id));
+
+    // Add missing members
+    for (const userId of currentUserIds) {
+      if (!seasonUserIds.has(userId)) {
+        await client.execute(
+          `INSERT OR IGNORE INTO season_team_members (id, season_id, team_id, user_id)
+           VALUES (?, ?, ?, ?)`,
+          [crypto.randomUUID(), seasonId, team_id, userId],
+        );
+      }
+    }
+
+    // Remove departed members
+    for (const userId of seasonUserIds) {
+      if (!currentUserIds.has(userId)) {
+        await client.execute(
+          "DELETE FROM season_team_members WHERE season_id = ? AND team_id = ? AND user_id = ?",
+          [seasonId, team_id, userId],
+        );
+      }
+    }
+  }
+
+  return teams.length;
 }

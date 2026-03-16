@@ -8,7 +8,7 @@ vi.mock("@/lib/d1", () => ({
   getD1Client: vi.fn(),
 }));
 
-import { syncSeasonRosters } from "@/lib/season-roster";
+import { syncSeasonRosters, syncAllRostersForSeason } from "@/lib/season-roster";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -143,5 +143,116 @@ describe("syncSeasonRosters", () => {
       (c: unknown[]) => (c[0] as string).includes("INSERT OR IGNORE"),
     );
     expect(insertCalls).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// syncAllRostersForSeason
+// ---------------------------------------------------------------------------
+
+describe("syncAllRostersForSeason", () => {
+  let mockClient: ReturnType<typeof createMockClient>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = createMockClient();
+  });
+
+  it("should return 0 when no teams are registered", async () => {
+    mockClient.query.mockResolvedValueOnce({ results: [] });
+
+    const count = await syncAllRostersForSeason(mockClient as never, "season-1");
+
+    expect(count).toBe(0);
+    expect(mockClient.query).toHaveBeenCalledTimes(1);
+    expect(mockClient.execute).not.toHaveBeenCalled();
+  });
+
+  it("should add missing members for a single team", async () => {
+    mockClient.query
+      // season_teams
+      .mockResolvedValueOnce({ results: [{ team_id: "team-1" }] })
+      // current team_members for team-1
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }, { user_id: "user-2" }] })
+      // existing season_team_members for team-1
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }] });
+
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const count = await syncAllRostersForSeason(mockClient as never, "season-1");
+
+    expect(count).toBe(1);
+
+    // Should INSERT user-2 only
+    const insertCalls = mockClient.execute.mock.calls.filter(
+      (c: unknown[]) => (c[0] as string).includes("INSERT OR IGNORE"),
+    );
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]![1]).toContain("user-2");
+  });
+
+  it("should remove departed members", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ results: [{ team_id: "team-1" }] })
+      // current team has only user-1
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }] })
+      // season roster has user-1 and user-2
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }, { user_id: "user-2" }] });
+
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const count = await syncAllRostersForSeason(mockClient as never, "season-1");
+
+    expect(count).toBe(1);
+
+    const deleteCalls = mockClient.execute.mock.calls.filter(
+      (c: unknown[]) => (c[0] as string).includes("DELETE"),
+    );
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0]![1]).toContain("user-2");
+  });
+
+  it("should handle multiple teams", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({
+        results: [{ team_id: "team-1" }, { team_id: "team-2" }],
+      })
+      // team-1 members
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }] })
+      // team-1 season roster (empty → needs add)
+      .mockResolvedValueOnce({ results: [] })
+      // team-2 members
+      .mockResolvedValueOnce({ results: [{ user_id: "user-3" }, { user_id: "user-4" }] })
+      // team-2 season roster (has user-3 already)
+      .mockResolvedValueOnce({ results: [{ user_id: "user-3" }] });
+
+    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const count = await syncAllRostersForSeason(mockClient as never, "season-1");
+
+    expect(count).toBe(2);
+
+    // 1 (season_teams) + 2 (team members) + 2 (season rosters) = 5
+    expect(mockClient.query).toHaveBeenCalledTimes(5);
+
+    // 2 INSERTs: user-1 into team-1, user-4 into team-2
+    const insertCalls = mockClient.execute.mock.calls.filter(
+      (c: unknown[]) => (c[0] as string).includes("INSERT OR IGNORE"),
+    );
+    expect(insertCalls).toHaveLength(2);
+    expect(insertCalls[0]![1]).toContain("user-1");
+    expect(insertCalls[1]![1]).toContain("user-4");
+  });
+
+  it("should no-op when rosters are already in sync", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ results: [{ team_id: "team-1" }] })
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }] })
+      .mockResolvedValueOnce({ results: [{ user_id: "user-1" }] });
+
+    const count = await syncAllRostersForSeason(mockClient as never, "season-1");
+
+    expect(count).toBe(1);
+    expect(mockClient.execute).not.toHaveBeenCalled();
   });
 });
