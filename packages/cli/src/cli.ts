@@ -182,6 +182,7 @@ const syncCommand = defineCommand({
       openMessageDb,
       openclawDir: paths.openclawDir,
       vscodeCopilotDirs: paths.vscodeCopilotDirs,
+      copilotCliLogsDir: paths.copilotCliLogsDir,
       onCorruptLine: handleCorruptLine,
       onProgress(event) {
         logSyncProgress(event);
@@ -302,6 +303,7 @@ const statusCommand = defineCommand({
         openCodeMessageDir: paths.openCodeMessageDir,
         openclawDir: paths.openclawDir,
         vscodeCopilotDirs: paths.vscodeCopilotDirs,
+        copilotCliLogsDir: paths.copilotCliLogsDir,
       },
       notifierStatuses,
       onCorruptLine: handleCorruptLine,
@@ -463,6 +465,7 @@ const notifyCommand = defineCommand({
       openSessionDb: openSessionDb2,
       openclawDir: paths.openclawDir,
       vscodeCopilotDirs: paths.vscodeCopilotDirs,
+      copilotCliLogsDir: paths.copilotCliLogsDir,
       version: CLI_VERSION,
     });
 
