@@ -46,6 +46,7 @@ function isSource(value: string): value is Source {
     "opencode",
     "openclaw",
     "vscode-copilot",
+    "copilot-cli",
   ].includes(value);
 }
 
@@ -205,6 +206,7 @@ const syncCommand = defineCommand({
       if (result.sources.opencode > 0) deltaParts.push(`OpenCode: ${result.sources.opencode}`);
       if (result.sources.openclaw > 0) deltaParts.push(`OpenClaw: ${result.sources.openclaw}`);
       if (result.sources.vscodeCopilot > 0) deltaParts.push(`VSCode Copilot: ${result.sources.vscodeCopilot}`);
+      if (result.sources.copilotCli > 0) deltaParts.push(`Copilot CLI: ${result.sources.copilotCli}`);
       if (deltaParts.length > 0) {
         consola.info(`  ${pc.dim(deltaParts.join("  |  "))}`);
       }
@@ -219,6 +221,7 @@ const syncCommand = defineCommand({
     if (fs.opencode > 0) scanParts.push(`OpenCode: ${fs.opencode}`);
     if (fs.openclaw > 0) scanParts.push(`OpenClaw: ${fs.openclaw}`);
     if (fs.vscodeCopilot > 0) scanParts.push(`VSCode Copilot: ${fs.vscodeCopilot}`);
+    if (fs.copilotCli > 0) scanParts.push(`Copilot CLI: ${fs.copilotCli}`);
     if (scanParts.length > 0) {
       consola.info(`  Files scanned: ${pc.dim(scanParts.join("  |  "))}`);
     }
@@ -257,6 +260,7 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.opencode > 0) sessParts.push(`OpenCode: ${sessionResult.sources.opencode}`);
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
       if (sessionResult.sources.vscodeCopilot > 0) sessParts.push(`VSCode Copilot: ${sessionResult.sources.vscodeCopilot}`);
+      if (sessionResult.sources.copilotCli > 0) sessParts.push(`Copilot CLI: ${sessionResult.sources.copilotCli}`);
       if (sessParts.length > 0) {
         consola.info(`  ${pc.dim(sessParts.join("  |  "))}`);
       }
@@ -271,6 +275,7 @@ const syncCommand = defineCommand({
     if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
     if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
     if (sfs.vscodeCopilot > 0) sessScanParts.push(`VSCode Copilot: ${sfs.vscodeCopilot}`);
+    if (sfs.copilotCli > 0) sessScanParts.push(`Copilot CLI: ${sfs.copilotCli}`);
     if (sessScanParts.length > 0) {
       consola.info(`  Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
     }
