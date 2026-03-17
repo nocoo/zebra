@@ -267,4 +267,157 @@ describe("parseCopilotCliFile", () => {
     expect(result.deltas[0]!.tokens.inputTokens).toBe(5000);
     expect(result.deltas[0]!.tokens.outputTokens).toBe(500);
   });
+
+  it("falls back to 'unknown' model when properties.model is missing", async () => {
+    const filePath = join(tempDir, "process-nomodel.log");
+    const content = [
+      `2026-03-16T10:40:00.959Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+      `    "event_id": "abc-123"`,
+      `  },`,
+      `  "metrics": {`,
+      `    "input_tokens": 3000,`,
+      `    "input_tokens_uncached": 3000,`,
+      `    "output_tokens": 200,`,
+      `    "cache_read_tokens": 0,`,
+      `    "cache_write_tokens": 0`,
+      `  },`,
+      `  "created_at": "2026-03-16T10:40:00.959Z"`,
+      `}`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Done`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0]!.model).toBe("unknown");
+  });
+
+  it("falls back to 'unknown' model when properties.model is empty string", async () => {
+    const filePath = join(tempDir, "process-emptymodel.log");
+    const content = [
+      `2026-03-16T10:40:00.959Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+      `    "event_id": "abc-123",`,
+      `    "model": ""`,
+      `  },`,
+      `  "metrics": {`,
+      `    "input_tokens": 1500,`,
+      `    "input_tokens_uncached": 1500,`,
+      `    "output_tokens": 100,`,
+      `    "cache_read_tokens": 0,`,
+      `    "cache_write_tokens": 0`,
+      `  },`,
+      `  "created_at": "2026-03-16T10:40:00.959Z"`,
+      `}`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Done`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0]!.model).toBe("unknown");
+  });
+
+  it("uses current time fallback when created_at is missing", async () => {
+    const filePath = join(tempDir, "process-notime.log");
+    const before = new Date();
+    const content = [
+      `2026-03-16T10:40:00.959Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+      `    "event_id": "abc-123",`,
+      `    "model": "claude-opus-4.6"`,
+      `  },`,
+      `  "metrics": {`,
+      `    "input_tokens": 2000,`,
+      `    "input_tokens_uncached": 2000,`,
+      `    "output_tokens": 150,`,
+      `    "cache_read_tokens": 0,`,
+      `    "cache_write_tokens": 0`,
+      `  }`,
+      `}`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Done`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    expect(result.deltas).toHaveLength(1);
+    // Timestamp should be a valid ISO date close to now
+    const ts = new Date(result.deltas[0]!.timestamp);
+    expect(ts.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(ts.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("recovers from malformed JSON and parses subsequent valid blocks", async () => {
+    const filePath = join(tempDir, "process-corrupt.log");
+    const corruptBlock = [
+      `2026-03-16T10:39:00.000Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  THIS IS NOT VALID JSON!!!`,
+      `}`,
+    ].join("\n") + "\n";
+    const validBlock = buildLogWithUsage({
+      model: "gpt-5-mini",
+      input_tokens: 4000,
+      output_tokens: 300,
+      created_at: "2026-03-16T10:41:00.000Z",
+    });
+    await writeFile(filePath, corruptBlock + validBlock);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    // Corrupt block is skipped, valid block is parsed
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0]!.model).toBe("gpt-5-mini");
+    expect(result.deltas[0]!.tokens.inputTokens).toBe(4000);
+  });
+
+  it("handles file with log lines but no telemetry blocks", async () => {
+    const filePath = join(tempDir, "process-notelem.log");
+    const content = [
+      `2026-03-16T10:40:00.000Z [INFO] Starting process`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Loading configuration`,
+      `2026-03-16T10:40:02.000Z [INFO] Process ready`,
+      `2026-03-16T10:40:03.000Z [INFO] Shutting down`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    expect(result.deltas).toHaveLength(0);
+    expect(result.endOffset).toBe(content.length);
+  });
+
+  it("handles metrics with negative or non-numeric token values gracefully", async () => {
+    const filePath = join(tempDir, "process-badmetrics.log");
+    const content = [
+      `2026-03-16T10:40:00.959Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+      `    "event_id": "abc-123",`,
+      `    "model": "claude-opus-4.6"`,
+      `  },`,
+      `  "metrics": {`,
+      `    "input_tokens": -100,`,
+      `    "input_tokens_uncached": "not a number",`,
+      `    "output_tokens": null,`,
+      `    "cache_read_tokens": 0,`,
+      `    "cache_write_tokens": 0`,
+      `  },`,
+      `  "created_at": "2026-03-16T10:40:00.959Z"`,
+      `}`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Done`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+    // toNonNegInt clamps negative/invalid to 0 → all zeros → filtered out
+    expect(result.deltas).toHaveLength(0);
+  });
 });

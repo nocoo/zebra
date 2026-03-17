@@ -8,6 +8,7 @@ import {
   discoverOpenCodeFiles,
   discoverOpenClawFiles,
   discoverVscodeCopilotFiles,
+  discoverCopilotCliFiles,
 } from "../discovery/sources.js";
 
 describe("discoverClaudeFiles", () => {
@@ -234,5 +235,54 @@ describe("discoverVscodeCopilotFiles", () => {
 
     const files = await discoverVscodeCopilotFiles([join(tempDir, "Code", "User")]);
     expect(files).toHaveLength(2);
+  });
+});
+
+describe("discoverCopilotCliFiles", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "pew-discover-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should find process-*.log files in logs directory", async () => {
+    const logsDir = join(tempDir, "logs");
+    await mkdir(logsDir, { recursive: true });
+    await writeFile(join(logsDir, "process-12345.log"), "log content");
+    await writeFile(join(logsDir, "process-67890.log"), "log content");
+    await writeFile(join(logsDir, "other.txt"), "not a log");
+
+    const files = await discoverCopilotCliFiles(logsDir);
+    expect(files).toHaveLength(2);
+    expect(files.every((f) => f.endsWith(".log"))).toBe(true);
+    expect(files.every((f) => f.includes("process-"))).toBe(true);
+  });
+
+  it("should return empty array if directory does not exist", async () => {
+    const files = await discoverCopilotCliFiles(join(tempDir, "nonexistent"));
+    expect(files).toEqual([]);
+  });
+
+  it("should ignore non-process log files", async () => {
+    const logsDir = join(tempDir, "logs");
+    await mkdir(logsDir, { recursive: true });
+    await writeFile(join(logsDir, "debug.log"), "debug");
+    await writeFile(join(logsDir, "error.log"), "error");
+    await writeFile(join(logsDir, "process.log"), "no dash suffix");
+
+    const files = await discoverCopilotCliFiles(logsDir);
+    expect(files).toEqual([]);
+  });
+
+  it("should handle empty logs directory", async () => {
+    const logsDir = join(tempDir, "logs");
+    await mkdir(logsDir, { recursive: true });
+
+    const files = await discoverCopilotCliFiles(logsDir);
+    expect(files).toEqual([]);
   });
 });

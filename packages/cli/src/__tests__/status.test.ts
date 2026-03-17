@@ -18,6 +18,8 @@ const defaultDirs: SourceDirs = {
   geminiDir: "/home/.gemini",
   openCodeMessageDir: "/home/.local/share/opencode/storage/message",
   openclawDir: "/home/.openclaw",
+  vscodeCopilotDirs: ["/home/.config/Code/User"],
+  copilotCliLogsDir: "/home/.copilot/logs",
 };
 
 describe("executeStatus", () => {
@@ -129,6 +131,20 @@ describe("executeStatus", () => {
           lastTotals: null,
           lastModel: null,
         },
+        "/home/.config/Code/User/workspaceStorage/ws1/chatSessions/s.jsonl": {
+          type: "byte-offset",
+          offset: 80,
+          inode: 7,
+          size: 80,
+          mtimeMs: 6000,
+        },
+        "/home/.copilot/logs/process-999.log": {
+          type: "byte-offset",
+          offset: 90,
+          inode: 8,
+          size: 90,
+          mtimeMs: 7000,
+        },
       },
       updatedAt: "2026-03-07T12:00:00.000Z",
     });
@@ -137,12 +153,14 @@ describe("executeStatus", () => {
       stateDir,
       sourceDirs: defaultDirs,
     });
-    expect(result.trackedFiles).toBe(6);
+    expect(result.trackedFiles).toBe(8);
     expect(result.sources["claude-code"]).toBe(2);
     expect(result.sources["gemini-cli"]).toBe(1);
     expect(result.sources["opencode"]).toBe(1);
     expect(result.sources["openclaw"]).toBe(1);
     expect(result.sources["codex"]).toBe(1);
+    expect(result.sources["vscode-copilot"]).toBe(1);
+    expect(result.sources["copilot-cli"]).toBe(1);
   });
 
   it("should classify codex files under custom CODEX_HOME", async () => {
@@ -169,6 +187,61 @@ describe("executeStatus", () => {
     });
     expect(result.trackedFiles).toBe(1);
     expect(result.sources["codex"]).toBe(1);
+    expect(result.sources["unknown"]).toBeUndefined();
+  });
+
+  it("should classify copilot-cli files correctly", async () => {
+    const cursorStore = new CursorStore(stateDir);
+    await cursorStore.save({
+      files: {
+        "/home/.copilot/logs/process-12345.log": {
+          type: "byte-offset",
+          offset: 500,
+          inode: 20,
+          size: 500,
+          mtimeMs: 7000,
+        },
+        "/home/.copilot/logs/process-67890.log": {
+          type: "byte-offset",
+          offset: 200,
+          inode: 21,
+          size: 200,
+          mtimeMs: 7001,
+        },
+      },
+      updatedAt: "2026-03-09T10:00:00.000Z",
+    });
+
+    const result = await executeStatus({
+      stateDir,
+      sourceDirs: defaultDirs,
+    });
+    expect(result.trackedFiles).toBe(2);
+    expect(result.sources["copilot-cli"]).toBe(2);
+    expect(result.sources["unknown"]).toBeUndefined();
+  });
+
+  it("should classify vscode-copilot files correctly", async () => {
+    const cursorStore = new CursorStore(stateDir);
+    await cursorStore.save({
+      files: {
+        "/home/.config/Code/User/workspaceStorage/abc/chatSessions/s1.jsonl": {
+          type: "byte-offset",
+          offset: 100,
+          inode: 30,
+          size: 100,
+          mtimeMs: 8000,
+        },
+      },
+      updatedAt: "2026-03-09T11:00:00.000Z",
+    });
+
+    const result = await executeStatus({
+      stateDir,
+      sourceDirs: defaultDirs,
+    });
+    expect(result.trackedFiles).toBe(1);
+    expect(result.sources["vscode-copilot"]).toBe(1);
     expect(result.sources["unknown"]).toBeUndefined();
   });
 
