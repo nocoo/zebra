@@ -33,8 +33,8 @@ export async function parseCopilotCliFile(opts: {
   const st = await stat(filePath).catch(() => null);
   if (!st || !st.isFile()) return { deltas, endOffset: startOffset };
 
-  const endOffset = st.size;
-  if (startOffset >= endOffset) return { deltas, endOffset };
+  const fileSize = st.size;
+  if (startOffset >= fileSize) return { deltas, endOffset: startOffset };
 
   const stream = createReadStream(filePath, {
     start: startOffset,
@@ -49,31 +49,50 @@ export async function parseCopilotCliFile(opts: {
 
   let collectingJson = false;
   let jsonLines: string[] = [];
-  let braceDepth = 0;
 
-  function flushJson(): void {
-    if (jsonLines.length === 0) return;
+  // Track byte position relative to startOffset for safe endOffset.
+  // If the file ends mid-JSON-block, we rewind to the last fully
+  // parsed position so the incomplete block gets re-parsed next sync.
+  let bytesConsumed = 0;
+  let lastCompletedOffset = startOffset;
+
+  /**
+   * Try to parse the accumulated JSON lines.
+   * Returns true if parse succeeded (or lines were empty), false if
+   * the buffer looks incomplete (JSON.parse threw SyntaxError).
+   */
+  function tryFlushJson(): boolean {
+    if (jsonLines.length === 0) return true;
+    const raw = jsonLines.join("\n");
     try {
-      const raw = jsonLines.join("\n");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (parsed.kind === "assistant_usage") {
         const delta = extractUsageDelta(parsed);
         if (delta) deltas.push(delta);
       }
+      jsonLines = [];
+      return true;
     } catch {
-      // Malformed JSON block — skip
+      // Could be incomplete JSON (still accumulating) or truly malformed
+      return false;
     }
-    jsonLines = [];
-    braceDepth = 0;
   }
 
   for await (const line of rl) {
+    // +1 for the newline character that readline strips
+    bytesConsumed += Buffer.byteLength(line, "utf8") + 1;
+
     if (LOG_LINE_RE.test(line)) {
       // New log line — flush any in-progress JSON block first
       if (collectingJson) {
-        flushJson();
+        // Force-flush: a new log line means the JSON block ended (or was malformed)
+        tryFlushJson();
+        jsonLines = [];
         collectingJson = false;
       }
+
+      // Advance safe offset — we've fully processed up to this log line
+      lastCompletedOffset = startOffset + bytesConsumed;
 
       if (line.includes(TELEMETRY_MARKER)) {
         collectingJson = true;
@@ -85,23 +104,26 @@ export async function parseCopilotCliFile(opts: {
     if (collectingJson) {
       jsonLines.push(line);
 
-      // Track brace depth to detect end of top-level JSON object
-      for (const ch of line) {
-        if (ch === "{") braceDepth++;
-        else if (ch === "}") braceDepth--;
-      }
-
-      if (braceDepth === 0 && jsonLines.length > 0) {
-        flushJson();
-        collectingJson = false;
+      // Attempt JSON.parse after each line containing "}" — this is
+      // more robust than brace-depth counting which breaks on braces
+      // inside JSON string values.
+      if (line.includes("}")) {
+        const parsed = tryFlushJson();
+        if (parsed) {
+          collectingJson = false;
+          lastCompletedOffset = startOffset + bytesConsumed;
+        }
+        // If parse failed, keep accumulating — might be nested object
       }
     }
   }
 
-  // Flush any trailing block (file ends mid-telemetry)
-  if (collectingJson && jsonLines.length > 0) {
-    flushJson();
-  }
+  // Do NOT flush trailing incomplete blocks — leave them for next sync.
+  // If the file was fully consumed and no block is pending, endOffset
+  // equals fileSize. Otherwise endOffset rewinds to the safe point.
+  const endOffset = collectingJson && jsonLines.length > 0
+    ? lastCompletedOffset
+    : startOffset + bytesConsumed;
 
   return { deltas, endOffset };
 }

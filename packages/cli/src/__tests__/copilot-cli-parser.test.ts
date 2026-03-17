@@ -206,4 +206,65 @@ describe("parseCopilotCliFile", () => {
     const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
     expect(result.endOffset).toBe(content.length);
   });
+
+  it("rewinds endOffset when file ends with incomplete JSON block", async () => {
+    const filePath = join(tempDir, "process-incomplete.log");
+    const completeBlock = buildLogWithUsage({
+      input_tokens: 1000,
+      output_tokens: 100,
+      created_at: "2026-03-16T10:40:00.000Z",
+    });
+    // Simulate a telemetry header followed by a truncated JSON block
+    const incompleteBlock = [
+      `2026-03-16T10:41:00.000Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, completeBlock + incompleteBlock);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+
+    // Should parse the complete block but rewind past the incomplete one
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0]!.tokens.inputTokens).toBe(1000);
+    // endOffset should point to the start of the incomplete block's
+    // telemetry marker line, NOT to the end of the file
+    expect(result.endOffset).toBe(completeBlock.length + Buffer.byteLength(
+      `2026-03-16T10:41:00.000Z [INFO] [Telemetry] cli.telemetry:\n`, "utf8",
+    ));
+    expect(result.endOffset).toBeLessThan(completeBlock.length + incompleteBlock.length);
+  });
+
+  it("handles braces inside JSON string values correctly", async () => {
+    const filePath = join(tempDir, "process-braces.log");
+    // Build a telemetry block where a string value contains braces
+    const content = [
+      `2026-03-16T10:40:00.959Z [INFO] [Telemetry] cli.telemetry:`,
+      `{`,
+      `  "kind": "assistant_usage",`,
+      `  "properties": {`,
+      `    "event_id": "abc-123",`,
+      `    "model": "claude-opus-4.6",`,
+      `    "prompt_snippet": "write a function { foo }"`,
+      `  },`,
+      `  "metrics": {`,
+      `    "input_tokens": 5000,`,
+      `    "input_tokens_uncached": 5000,`,
+      `    "output_tokens": 500,`,
+      `    "cache_read_tokens": 0,`,
+      `    "cache_write_tokens": 0`,
+      `  },`,
+      `  "created_at": "2026-03-16T10:40:00.959Z"`,
+      `}`,
+      `2026-03-16T10:40:01.000Z [DEBUG] Done`,
+    ].join("\n") + "\n";
+    await writeFile(filePath, content);
+
+    const result = await parseCopilotCliFile({ filePath, startOffset: 0 });
+
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0]!.tokens.inputTokens).toBe(5000);
+    expect(result.deltas[0]!.tokens.outputTokens).toBe(500);
+  });
 });
