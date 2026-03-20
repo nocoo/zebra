@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.12.1
+
+### Features
+
+- **Admin snapshot alert dialog** — Dashboard now shows a dismissible dialog to admin users when ended seasons haven't been snapshotted. Prevents forgotten snapshots from leaving leaderboard results in live aggregation mode indefinitely. Self-contained component with conditional data fetching (no API calls for non-admin users).
+
 ## v1.12.0
 
 ### Features
