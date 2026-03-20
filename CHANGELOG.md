@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.12.0
+
+### Features
+
+- **O_EXCL lockfile for notify coordination (Phase 1)** — Replaced the non-functional `FileHandle.lock()` with a portable `O_EXCL` lockfile (`sync.lock`) with PID-based stale detection. 100% of `pew notify` runs now achieve mutual exclusion instead of silently degrading to `runUnlocked()`. Fail-closed: if the lock cannot be acquired, sync is skipped — never runs unlocked.
+- **5-minute cooldown for notify (Phase 3)** — After a successful sync, subsequent `pew notify` calls within 5 minutes are skipped (returning in ~5ms). Reduces ~130 redundant sync cycles per 4-hour window to ~48 sequential runs. Configurable via `CoordinatorOptions.cooldownMs`.
+- **Trailing-edge sync guarantee** — When cooldown fires, a single background process sleeps until cooldown expires and runs a final sync to ensure no data is lost if no further hooks arrive. Uses a separate `trailing.lock` with PID-based stale detection to ensure only one trailer sleeps at a time.
+- **`cooldownRemainingMs` in coordinator result** — `CoordinatorRunResult` and `RunLogEntry.coordination` now include `skippedReason` and `cooldownRemainingMs` for observability.
+
+### Fixes
+
+- **Cooldown reads `last-success.json` instead of `last-run.json`** — The original design used `last-run.json` which is written on every run (including cooldown-skipped runs). A skipped run would overwrite the success timestamp, causing subsequent runs to bypass cooldown. Now uses a dedicated `last-success.json` written only on `status === "success"`.
+- **Trailing lock PID stale detection** — A crashed trailing sync process no longer permanently blocks future trailing syncs. Dead PIDs are detected via `process.kill(pid, 0)` and stale locks are removed.
+- **Node.js engine requirement** — Lowered from >=20 to >=18.0.0 for broader compatibility.
+- **Token tier badge digit cap** — Removed artificial cap and rotated colors through 24 hues.
+- **Season register/withdraw buttons** — Show buttons for active seasons with late registration flags.
+
+### Docs
+
+- **Doc 28: Notify concurrency dirty-key loss** — Full investigation, root cause analysis, and three-phase fix design. Phase 1 (lock) and Phase 3 (cooldown + trailing-edge) are complete; Phase 2 (idempotent queue) is deferred.
+
+### Tests
+
+- **O_EXCL lockfile** — 17 unit tests covering acquire, release, stale PID detection, and concurrent contention.
+- **Coordinator cooldown** — 10 unit tests + 4 integration tests covering skip, expiry, disabled, corrupted state, and `last-success.json` write semantics.
+- **Trailing-edge** — 6 tests covering schedule/no-schedule, single-waiter, stale recovery, and live-PID respect.
+
 ## v1.11.1
 
 ### Features
