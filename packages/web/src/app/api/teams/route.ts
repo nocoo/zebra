@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,8 +33,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const client = getD1Client();
-    const result = await client.query<TeamRow>(
+    const dbRead = await getDbRead();
+    const result = await dbRead.query<TeamRow>(
       `SELECT t.id, t.name, t.slug, t.invite_code, t.created_by, t.created_at, t.logo_url,
          (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) AS member_count
        FROM teams t
@@ -96,10 +96,11 @@ export async function POST(request: Request) {
   const slug = baseSlug || "team";
 
   try {
-    const client = getD1Client();
+    const dbRead = await getDbRead();
+    const dbWrite = await getDbWrite();
 
     // Ensure unique slug
-    const existing = await client.firstOrNull<{ id: string }>(
+    const existing = await dbRead.firstOrNull<{ id: string }>(
       "SELECT id FROM teams WHERE slug = ?",
       [slug],
     );
@@ -113,14 +114,14 @@ export async function POST(request: Request) {
 
     const teamId = crypto.randomUUID();
 
-    await client.execute(
+    await dbWrite.execute(
       `INSERT INTO teams (id, name, slug, invite_code, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, datetime('now'))`,
       [teamId, name, finalSlug, inviteCode, authResult.userId],
     );
 
     // Add creator as member (role: owner)
-    await client.execute(
+    await dbWrite.execute(
       `INSERT INTO team_members (id, team_id, user_id, role, joined_at)
        VALUES (?, ?, ?, 'owner', datetime('now'))`,
       [crypto.randomUUID(), teamId, authResult.userId],

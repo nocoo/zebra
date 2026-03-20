@@ -6,7 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,12 +33,12 @@ export async function GET(request: Request) {
   }
   const userId = authResult.userId;
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
 
   try {
     // Use a UNION to include devices that only exist in device_aliases
     // (i.e. user set an alias but device has no usage records yet/anymore).
-    const result = await client.query<DeviceRow>(
+    const result = await dbRead.query<DeviceRow>(
       `SELECT
         d.device_id,
         da.alias,
@@ -140,11 +140,12 @@ export async function PUT(request: Request) {
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // 1. Verify device exists in user's usage_records OR device_aliases
-    const deviceExists = await client.firstOrNull<{ device_id: string }>(
+    const deviceExists = await dbRead.firstOrNull<{ device_id: string }>(
       `SELECT device_id FROM (
         SELECT DISTINCT device_id FROM usage_records
         WHERE user_id = ? AND device_id = ?
@@ -163,7 +164,7 @@ export async function PUT(request: Request) {
     }
 
     // 2. Check for duplicate alias (case-insensitive, different device)
-    const duplicate = await client.firstOrNull<{ device_id: string }>(
+    const duplicate = await dbRead.firstOrNull<{ device_id: string }>(
       `SELECT device_id FROM device_aliases
        WHERE user_id = ? AND LOWER(TRIM(alias)) = LOWER(TRIM(?)) AND device_id != ?
        LIMIT 1`,
@@ -178,7 +179,7 @@ export async function PUT(request: Request) {
     }
 
     // 3. Upsert alias
-    await client.execute(
+    await dbWrite.execute(
       `INSERT INTO device_aliases (user_id, device_id, alias, updated_at)
        VALUES (?, ?, ?, datetime('now'))
        ON CONFLICT (user_id, device_id) DO UPDATE
@@ -222,11 +223,12 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // 1. Ensure device has zero usage records — refuse to delete otherwise
-    const hasRecords = await client.firstOrNull<{ cnt: number }>(
+    const hasRecords = await dbRead.firstOrNull<{ cnt: number }>(
       `SELECT COUNT(*) AS cnt FROM usage_records
        WHERE user_id = ? AND device_id = ?`,
       [userId, deviceId]
@@ -240,7 +242,7 @@ export async function DELETE(request: Request) {
     }
 
     // 2. Delete the alias row
-    await client.execute(
+    await dbWrite.execute(
       `DELETE FROM device_aliases WHERE user_id = ? AND device_id = ?`,
       [userId, deviceId]
     );

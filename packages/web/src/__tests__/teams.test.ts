@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/d1", async (importOriginal) => {
-  const original = await importOriginal<typeof d1Module>();
-  return { ...original, getD1Client: vi.fn() };
+vi.mock("@/lib/db", async (importOriginal) => {
+  const original = await importOriginal<typeof dbModule>();
+  return { ...original, getDbRead: vi.fn(), getDbWrite: vi.fn() };
 });
 
 vi.mock("@/lib/auth-helpers", () => ({
@@ -18,12 +18,17 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -42,13 +47,13 @@ function makeJson(method: string, body?: unknown): Request {
 
 describe("GET /api/teams", () => {
   let GET: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead,
     );
     const mod = await import("@/app/api/teams/route");
     GET = mod.GET;
@@ -64,7 +69,7 @@ describe("GET /api/teams", () => {
 
   it("should return teams list", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           id: "t1",
@@ -88,7 +93,7 @@ describe("GET /api/teams", () => {
 
   it("should return empty array when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.query.mockRejectedValueOnce(new Error("no such table: teams"));
+    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: teams"));
 
     const res = await GET(makeJson("GET"));
     const body = await res.json();
@@ -99,7 +104,7 @@ describe("GET /api/teams", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeJson("GET"));
 
@@ -113,13 +118,18 @@ describe("GET /api/teams", () => {
 
 describe("POST /api/teams", () => {
   let POST: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead,
+    );
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite,
     );
     // Deterministic UUIDs for testing
     let callIdx = 0;
@@ -175,8 +185,8 @@ describe("POST /api/teams", () => {
 
   it("should create a team with auto-generated slug (201)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null); // slug not taken
-    mockClient.execute.mockResolvedValue({ changes: 1 });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // slug not taken
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "My Cool Team!" }));
     const body = await res.json();
@@ -187,13 +197,13 @@ describe("POST /api/teams", () => {
     expect(body.member_count).toBe(1);
     expect(body.invite_code).toBeTruthy();
     // Should have 2 execute calls: INSERT teams + INSERT team_members
-    expect(mockClient.execute).toHaveBeenCalledTimes(2);
+    expect(mockDbWrite.execute).toHaveBeenCalledTimes(2);
   });
 
   it("should append random suffix when slug is taken", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce({ id: "existing" }); // slug taken
-    mockClient.execute.mockResolvedValue({ changes: 1 });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing" }); // slug taken
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "Taken" }));
     const body = await res.json();
@@ -205,8 +215,8 @@ describe("POST /api/teams", () => {
 
   it("should use 'team' as fallback slug for non-alphanumeric names", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
-    mockClient.execute.mockResolvedValue({ changes: 1 });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "---" }));
     const body = await res.json();
@@ -217,8 +227,8 @@ describe("POST /api/teams", () => {
 
   it("should return 503 when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
-    mockClient.execute.mockRejectedValueOnce(new Error("no such table: teams"));
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("no such table: teams"));
 
     const res = await POST(makeJson("POST", { name: "Test" }));
 

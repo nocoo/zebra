@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/d1", async (importOriginal) => {
-  const original = await importOriginal<typeof d1Module>();
-  return { ...original, getD1Client: vi.fn() };
+vi.mock("@/lib/db", async (importOriginal) => {
+  const original = await importOriginal<typeof dbModule>();
+  return { ...original, getDbRead: vi.fn(), getDbWrite: vi.fn() };
 });
 
 vi.mock("@/lib/auth-helpers", () => ({
@@ -18,12 +18,17 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -48,13 +53,13 @@ function makePutRequest(body: unknown): Request {
 
 describe("GET /api/budgets", () => {
   let GET: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead,
     );
     const mod = await import("@/app/api/budgets/route");
     GET = mod.GET;
@@ -85,14 +90,14 @@ describe("GET /api/budgets", () => {
 
   it("should return null when no budget exists", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await GET(makeGetRequest("2026-03"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body).toBeNull();
-    expect(mockClient.firstOrNull).toHaveBeenCalledWith(
+    expect(mockDbRead.firstOrNull).toHaveBeenCalledWith(
       expect.stringContaining("user_budgets"),
       ["u1", "2026-03"],
     );
@@ -100,7 +105,7 @@ describe("GET /api/budgets", () => {
 
   it("should return existing budget", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       budget_usd: 100,
       budget_tokens: 5_000_000,
       month: "2026-03",
@@ -119,7 +124,7 @@ describe("GET /api/budgets", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeGetRequest("2026-03"));
     expect(res.status).toBe(500);
@@ -132,13 +137,13 @@ describe("GET /api/budgets", () => {
 
 describe("PUT /api/budgets", () => {
   let PUT: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite,
     );
     const mod = await import("@/app/api/budgets/route");
     PUT = mod.PUT;
@@ -200,14 +205,14 @@ describe("PUT /api/budgets", () => {
 
   it("should upsert budget with only budget_usd", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PUT(makePutRequest({ month: "2026-03", budget_usd: 100 }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ ok: true });
-    expect(mockClient.execute).toHaveBeenCalledWith(
+    expect(mockDbWrite.execute).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO user_budgets"),
       expect.arrayContaining(["u1", "2026-03", 100]),
     );
@@ -215,7 +220,7 @@ describe("PUT /api/budgets", () => {
 
   it("should upsert budget with only budget_tokens", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PUT(makePutRequest({ month: "2026-03", budget_tokens: 5_000_000 }));
     const body = await res.json();
@@ -226,14 +231,14 @@ describe("PUT /api/budgets", () => {
 
   it("should upsert budget with both fields", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PUT(
       makePutRequest({ month: "2026-03", budget_usd: 100, budget_tokens: 5_000_000 }),
     );
 
     expect(res.status).toBe(200);
-    expect(mockClient.execute).toHaveBeenCalledWith(
+    expect(mockDbWrite.execute).toHaveBeenCalledWith(
       expect.stringContaining("ON CONFLICT"),
       expect.arrayContaining(["u1", "2026-03", 100, 5_000_000]),
     );
@@ -241,7 +246,7 @@ describe("PUT /api/budgets", () => {
 
   it("should accept zero budgets", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PUT(
       makePutRequest({ month: "2026-03", budget_usd: 0, budget_tokens: 0 }),
@@ -252,7 +257,7 @@ describe("PUT /api/budgets", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockRejectedValueOnce(new Error("D1 boom"));
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 boom"));
 
     const res = await PUT(makePutRequest({ month: "2026-03", budget_usd: 100 }));
     expect(res.status).toBe(500);
@@ -265,13 +270,13 @@ describe("PUT /api/budgets", () => {
 
 describe("DELETE /api/budgets", () => {
   let DELETE: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite,
     );
     const mod = await import("@/app/api/budgets/route");
     DELETE = mod.DELETE;
@@ -308,7 +313,7 @@ describe("DELETE /api/budgets", () => {
 
   it("should delete budget and return ok", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await DELETE(
       new Request("http://localhost:7030/api/budgets?month=2026-03", { method: "DELETE" }),
@@ -317,7 +322,7 @@ describe("DELETE /api/budgets", () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ ok: true });
-    expect(mockClient.execute).toHaveBeenCalledWith(
+    expect(mockDbWrite.execute).toHaveBeenCalledWith(
       expect.stringContaining("DELETE FROM user_budgets"),
       ["u1", "2026-03"],
     );
@@ -325,7 +330,7 @@ describe("DELETE /api/budgets", () => {
 
   it("should return ok even if no budget existed (idempotent)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockResolvedValueOnce({ changes: 0 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 0 });
 
     const res = await DELETE(
       new Request("http://localhost:7030/api/budgets?month=2026-03", { method: "DELETE" }),
@@ -335,7 +340,7 @@ describe("DELETE /api/budgets", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockClient.execute.mockRejectedValueOnce(new Error("D1 boom"));
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 boom"));
 
     const res = await DELETE(
       new Request("http://localhost:7030/api/budgets?month=2026-03", { method: "DELETE" }),

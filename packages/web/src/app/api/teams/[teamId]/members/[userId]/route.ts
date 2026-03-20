@@ -4,7 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { syncSeasonRosters } from "@/lib/season-roster";
 
 export async function DELETE(
@@ -27,10 +27,11 @@ export async function DELETE(
   }
 
   try {
-    const client = getD1Client();
+    const dbRead = await getDbRead();
+    const dbWrite = await getDbWrite();
 
     // Only the owner can kick members
-    const membership = await client.firstOrNull<{ role: string }>(
+    const membership = await dbRead.firstOrNull<{ role: string }>(
       "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
       [teamId, authResult.userId],
     );
@@ -46,7 +47,7 @@ export async function DELETE(
     }
 
     // Verify the target is actually a member
-    const target = await client.firstOrNull<{ role: string }>(
+    const target = await dbRead.firstOrNull<{ role: string }>(
       "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
       [teamId, targetUserId],
     );
@@ -56,14 +57,14 @@ export async function DELETE(
     }
 
     // Remove the member
-    await client.execute(
+    await dbWrite.execute(
       "DELETE FROM team_members WHERE team_id = ? AND user_id = ?",
       [teamId, targetUserId],
     );
 
     // Sync season rosters if any active season allows roster changes
     try {
-      await syncSeasonRosters(client, teamId);
+      await syncSeasonRosters(dbRead, dbWrite, teamId);
     } catch (err) {
       console.error("Failed to sync season rosters after kick:", err);
     }

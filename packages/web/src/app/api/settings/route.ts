@@ -4,7 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,10 +34,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
 
   try {
-    const row = await client.firstOrNull<UserSettingsRow>(
+    const row = await dbRead.firstOrNull<UserSettingsRow>(
       "SELECT nickname, slug, is_public FROM users WHERE id = ?",
       [authResult.userId],
     );
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
 
     // Level 1: is_public missing but nickname exists
     try {
-      const row = await client.firstOrNull<{ nickname: string | null; slug: string | null }>(
+      const row = await dbRead.firstOrNull<{ nickname: string | null; slug: string | null }>(
         "SELECT nickname, slug FROM users WHERE id = ?",
         [authResult.userId],
       );
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     }
 
     // Level 2: both nickname and is_public missing
-    const row = await client.firstOrNull<{ slug: string | null }>(
+    const row = await dbRead.firstOrNull<{ slug: string | null }>(
       "SELECT slug FROM users WHERE id = ?",
       [authResult.userId],
     );
@@ -106,6 +106,9 @@ export async function PATCH(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -151,8 +154,7 @@ export async function PATCH(request: Request) {
       }
 
       // Check uniqueness
-      const client = getD1Client();
-      const existing = await client.firstOrNull<{ id: string }>(
+      const existing = await dbRead.firstOrNull<{ id: string }>(
         "SELECT id FROM users WHERE slug = ? AND id != ?",
         [slug, authResult.userId],
       );
@@ -186,16 +188,14 @@ export async function PATCH(request: Request) {
   sets.push("updated_at = datetime('now')");
   params.push(authResult.userId);
 
-  const client = getD1Client();
-
   try {
-    await client.execute(
+    await dbWrite.execute(
       `UPDATE users SET ${sets.join(", ")} WHERE id = ?`,
       params,
     );
 
     // Return updated settings
-    const row = await client.firstOrNull<UserSettingsRow>(
+    const row = await dbRead.firstOrNull<UserSettingsRow>(
       "SELECT nickname, slug, is_public FROM users WHERE id = ?",
       [authResult.userId],
     );

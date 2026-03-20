@@ -4,7 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { syncSeasonRosters } from "@/lib/season-roster";
 
 export async function POST(request: Request) {
@@ -29,10 +29,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = getD1Client();
+    const dbRead = await getDbRead();
+    const dbWrite = await getDbWrite();
 
     // Find team by invite code
-    const team = await client.firstOrNull<{ id: string; name: string; slug: string }>(
+    const team = await dbRead.firstOrNull<{ id: string; name: string; slug: string }>(
       "SELECT id, name, slug FROM teams WHERE invite_code = ?",
       [inviteCode],
     );
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     // Check if already a member
-    const existing = await client.firstOrNull<{ id: string }>(
+    const existing = await dbRead.firstOrNull<{ id: string }>(
       "SELECT id FROM team_members WHERE team_id = ? AND user_id = ?",
       [team.id, authResult.userId],
     );
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     const DEFAULT_MAX_TEAM_MEMBERS = 5;
     let maxMembers = DEFAULT_MAX_TEAM_MEMBERS;
     try {
-      const setting = await client.firstOrNull<{ value: string }>(
+      const setting = await dbRead.firstOrNull<{ value: string }>(
         "SELECT value FROM app_settings WHERE key = 'max_team_members'",
         [],
       );
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     // Atomic check+insert: INSERT only if team is under the member limit.
     // This prevents race conditions where concurrent joins both pass a
     // separate COUNT check and both INSERT, exceeding the limit.
-    const result = await client.execute(
+    const result = await dbWrite.execute(
       `INSERT INTO team_members (id, team_id, user_id, role, joined_at)
        SELECT ?, ?, ?, 'member', datetime('now')
        WHERE (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < ?`,
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
 
     // Sync season rosters if any active season allows roster changes
     try {
-      await syncSeasonRosters(client, team.id);
+      await syncSeasonRosters(dbRead, dbWrite, team.id);
     } catch (err) {
       console.error("Failed to sync season rosters after join:", err);
     }

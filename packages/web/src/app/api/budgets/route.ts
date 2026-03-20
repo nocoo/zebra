@@ -4,7 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -36,10 +36,10 @@ export async function GET(request: Request) {
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
 
   try {
-    const row = await client.firstOrNull<{
+    const row = await dbRead.firstOrNull<{
       budget_usd: number | null;
       budget_tokens: number | null;
       month: string;
@@ -120,10 +120,10 @@ export async function PUT(request: Request) {
   const budgetUsd = hasBudgetUsd ? (body.budget_usd as number) : null;
   const budgetTokens = hasBudgetTokens ? (body.budget_tokens as number) : null;
 
-  const client = getD1Client();
+  const dbWrite = await getDbWrite();
 
   try {
-    await client.execute(
+    await dbWrite.execute(
       `INSERT INTO user_budgets (user_id, month, budget_usd, budget_tokens)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id, month) DO UPDATE SET
@@ -163,10 +163,10 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const client = getD1Client();
+  const dbWrite = await getDbWrite();
 
   try {
-    await client.execute(
+    await dbWrite.execute(
       "DELETE FROM user_budgets WHERE user_id = ? AND month = ?",
       [authResult.userId, month],
     );

@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET, getPublicOrigin } from "@/app/api/auth/cli/route";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
-// Mock getD1Client
-vi.mock("@/lib/d1", async (importOriginal) => {
-  const original = await importOriginal<typeof d1Module>();
+// Mock db
+vi.mock("@/lib/db", async (importOriginal) => {
+  const original = await importOriginal<typeof dbModule>();
   return {
     ...original,
-    getD1Client: vi.fn(),
+    getDbRead: vi.fn(),
+    getDbWrite: vi.fn(),
   };
 });
 
@@ -22,12 +23,17 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -42,13 +48,18 @@ function makeRequest(callback?: string, state?: string): Request {
 }
 
 describe("GET /api/auth/cli", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead
+    );
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite
     );
   });
 
@@ -162,7 +173,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should accept localhost callback URLs", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "existing-key-123",
       });
 
@@ -177,7 +188,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should accept 127.0.0.1 callback URLs", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "existing-key-456",
       });
 
@@ -200,7 +211,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should reuse existing api_key if user already has one", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "existing-key-abc",
       });
 
@@ -212,12 +223,12 @@ describe("GET /api/auth/cli", () => {
       const location = res.headers.get("Location")!;
       expect(location).toContain("api_key=existing-key-abc");
       // Should NOT have called execute to generate a new key
-      expect(mockClient.execute).not.toHaveBeenCalled();
+      expect(mockDbWrite.execute).not.toHaveBeenCalled();
     });
 
     it("should generate new api_key if user has none", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({ api_key: null });
-      mockClient.execute.mockResolvedValueOnce(undefined);
+      mockDbRead.firstOrNull.mockResolvedValueOnce({ api_key: null });
+      mockDbWrite.execute.mockResolvedValueOnce(undefined);
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")
@@ -227,8 +238,8 @@ describe("GET /api/auth/cli", () => {
       const location = res.headers.get("Location")!;
       expect(location).toContain("api_key=");
       // Should have called execute to save new key
-      expect(mockClient.execute).toHaveBeenCalledOnce();
-      expect(mockClient.execute.mock.calls[0]![0]).toContain(
+      expect(mockDbWrite.execute).toHaveBeenCalledOnce();
+      expect(mockDbWrite.execute.mock.calls[0]![0]).toContain(
         "UPDATE users SET api_key"
       );
     });
@@ -238,7 +249,7 @@ describe("GET /api/auth/cli", () => {
         userId: "u1",
         email: "test@example.com",
       });
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "key-xyz",
       });
 
@@ -251,7 +262,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should forward state parameter in callback redirect", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "key-xyz",
       });
 
@@ -266,7 +277,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should omit state from redirect when not provided", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
         api_key: "key-xyz",
       });
 
@@ -280,7 +291,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should return 500 on D1 failure", async () => {
-      mockClient.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+      mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")

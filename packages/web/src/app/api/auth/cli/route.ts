@@ -12,7 +12,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 
 /**
  * Resolve the public-facing origin from the request.
@@ -81,12 +81,13 @@ export async function GET(request: Request) {
   }
 
   // 3. Get or generate api_key
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
   const userId = authResult.userId;
   const email = authResult.email ?? "";
 
   try {
-    const row = await client.firstOrNull<{ api_key: string | null }>(
+    const row = await dbRead.firstOrNull<{ api_key: string | null }>(
       "SELECT api_key FROM users WHERE id = ?",
       [userId]
     );
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
     if (!apiKey) {
       // Generate a new api_key
       apiKey = generateApiKey();
-      await client.execute(
+      await dbWrite.execute(
         "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
         [apiKey, userId]
       );

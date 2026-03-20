@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET, PUT } from "@/app/api/devices/route";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
-// Mock D1
-vi.mock("@/lib/d1", async (importOriginal) => {
-  const original = await importOriginal<typeof d1Module>();
+// Mock db
+vi.mock("@/lib/db", async (importOriginal) => {
+  const original = await importOriginal<typeof dbModule>();
   return {
     ...original,
-    getD1Client: vi.fn(),
+    getDbRead: vi.fn(),
+    getDbWrite: vi.fn(),
   };
 });
 
@@ -20,12 +21,17 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -42,13 +48,13 @@ function makePutRequest(body: unknown): Request {
 }
 
 describe("GET /api/devices", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead
     );
   });
 
@@ -68,7 +74,7 @@ describe("GET /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           device_id: "aaaa-1111",
@@ -112,7 +118,7 @@ describe("GET /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           device_id: "default",
@@ -139,7 +145,7 @@ describe("GET /api/devices", () => {
       userId: "u1",
       email: "test@example.com",
     });
-    mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeGetRequest());
 
@@ -148,13 +154,18 @@ describe("GET /api/devices", () => {
 });
 
 describe("PUT /api/devices", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead
+    );
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite
     );
   });
 
@@ -173,11 +184,11 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists check
-    mockClient.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
     // Duplicate alias check
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
     // Upsert
-    mockClient.execute.mockResolvedValueOnce({ meta: {} });
+    mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
       makePutRequest({ device_id: "aaaa-1111", alias: "MacBook Pro" })
@@ -194,9 +205,9 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockClient.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
-    mockClient.execute.mockResolvedValueOnce({ meta: {} });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
       makePutRequest({ device_id: "aaaa-1111", alias: "New Name" })
@@ -243,9 +254,9 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists
-    mockClient.firstOrNull.mockResolvedValueOnce({ device_id: "bbbb-2222" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "bbbb-2222" });
     // Duplicate check — another device has this alias
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       device_id: "aaaa-1111",
     });
 
@@ -265,11 +276,11 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists
-    mockClient.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
     // Duplicate check — returns same device (self)
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
     // Upsert
-    mockClient.execute.mockResolvedValueOnce({ meta: {} });
+    mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
       makePutRequest({ device_id: "aaaa-1111", alias: "MacBook" })
@@ -285,7 +296,7 @@ describe("PUT /api/devices", () => {
     });
 
     // Device NOT found in usage_records
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await PUT(
       makePutRequest({ device_id: "phantom-9999", alias: "Ghost" })
@@ -302,9 +313,9 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockClient.firstOrNull.mockResolvedValueOnce({ device_id: "default" });
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
-    mockClient.execute.mockResolvedValueOnce({ meta: {} });
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "default" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
       makePutRequest({ device_id: "default", alias: "Old Machine" })
@@ -332,7 +343,7 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockClient.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await PUT(
       makePutRequest({ device_id: "aaaa-1111", alias: "Name" })
