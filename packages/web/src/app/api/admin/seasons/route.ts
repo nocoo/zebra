@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
 
 // ---------------------------------------------------------------------------
@@ -33,10 +33,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
 
   try {
-    const { results } = await client.query<{
+    const { results } = await dbRead.query<{
       id: string;
       name: string;
       slug: string;
@@ -154,11 +154,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // Check slug uniqueness
-    const existing = await client.firstOrNull<{ id: string }>(
+    const existing = await dbRead.firstOrNull<{ id: string }>(
       "SELECT id FROM seasons WHERE slug = ?",
       [slug]
     );
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
     }
 
     const id = crypto.randomUUID();
-    await client.execute(
+    await dbWrite.execute(
       `INSERT INTO seasons (id, name, slug, start_date, end_date, created_by, allow_late_registration, allow_roster_changes, allow_late_withdrawal)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, name, slug, start_date, end_date, admin.userId, allow_late_registration ? 1 : 0, allow_roster_changes ? 1 : 0, allow_late_withdrawal ? 1 : 0]

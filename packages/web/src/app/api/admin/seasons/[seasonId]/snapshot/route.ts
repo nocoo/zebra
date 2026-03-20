@@ -27,7 +27,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
 
 // ---------------------------------------------------------------------------
@@ -90,11 +90,12 @@ export async function POST(
   }
 
   const { seasonId } = await params;
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // 1. Fetch season
-    const season = await client.firstOrNull<SeasonRow>(
+    const season = await dbRead.firstOrNull<SeasonRow>(
       "SELECT id, start_date, end_date FROM seasons WHERE id = ?",
       [seasonId]
     );
@@ -119,7 +120,7 @@ export async function POST(
     const toDate = endDateExclusive(season.end_date);
 
     // 3. Aggregate team-level tokens
-    const teamRows = await client.query<TeamAggRow>(
+    const teamRows = await dbRead.query<TeamAggRow>(
       `SELECT
         st.team_id,
         COALESCE(SUM(ur.total_tokens), 0) AS total_tokens,
@@ -142,7 +143,7 @@ export async function POST(
     if (teamRows.results.length > 0) {
       const teamIds = teamRows.results.map((r) => r.team_id);
       const placeholders = teamIds.map(() => "?").join(",");
-      const result = await client.query<MemberAggRow>(
+      const result = await dbRead.query<MemberAggRow>(
         `SELECT
           tm.team_id,
           tm.user_id,
@@ -165,7 +166,7 @@ export async function POST(
 
     // 5. Mark snapshot as not-ready before writing data.
     //    Readers (leaderboard route) will serve live data while snapshot_ready=0.
-    await client.execute(
+    await dbWrite.execute(
       "UPDATE seasons SET snapshot_ready = ? WHERE id = ?",
       [0, seasonId]
     );
@@ -220,7 +221,7 @@ export async function POST(
     }));
 
     // Execute all upserts in a batch (sequential HTTP calls, not transactional)
-    await client.batch([...teamStatements, ...memberStatements]);
+    await dbWrite.batch([...teamStatements, ...memberStatements]);
 
     // 7. Clean up stale rows (teams/members removed since last snapshot).
     //    If this fails after upserts succeeded, stale rows remain but
@@ -228,7 +229,7 @@ export async function POST(
     const activeTeamIds = teamRows.results.map((r) => r.team_id);
     if (activeTeamIds.length > 0) {
       const ph = activeTeamIds.map(() => "?").join(",");
-      await client.batch([
+      await dbWrite.batch([
         {
           sql: `DELETE FROM season_member_snapshots WHERE season_id = ? AND team_id NOT IN (${ph})`,
           params: [seasonId, ...activeTeamIds],
@@ -240,7 +241,7 @@ export async function POST(
       ]);
     } else {
       // No teams — clear all snapshots for this season
-      await client.batch([
+      await dbWrite.batch([
         {
           sql: "DELETE FROM season_member_snapshots WHERE season_id = ?",
           params: [seasonId],
@@ -270,13 +271,13 @@ export async function POST(
         });
       }
       if (cleanupStatements.length > 0) {
-        await client.batch(cleanupStatements);
+        await dbWrite.batch(cleanupStatements);
       }
     }
 
     // 8. All writes succeeded — mark snapshot as ready.
     //    Readers will now serve frozen snapshot data instead of live data.
-    await client.execute(
+    await dbWrite.execute(
       "UPDATE seasons SET snapshot_ready = ? WHERE id = ?",
       [1, seasonId]
     );

@@ -9,7 +9,7 @@
  * backfill (e.g. when `allow_roster_changes` is toggled on).
  */
 
-import type { D1Client } from "@/lib/d1";
+import type { DbRead, DbWrite } from "@/lib/db";
 
 /**
  * Sync season rosters for a given team.
@@ -20,11 +20,12 @@ import type { D1Client } from "@/lib/d1";
  *   - DELETE members who left the team
  */
 export async function syncSeasonRosters(
-  client: D1Client,
+  dbRead: DbRead,
+  dbWrite: DbWrite,
   teamId: string,
 ): Promise<void> {
   // Find active seasons this team is registered for with roster changes enabled
-  const { results: seasons } = await client.query<{
+  const { results: seasons } = await dbRead.query<{
     season_id: string;
   }>(
     `SELECT st.season_id
@@ -40,7 +41,7 @@ export async function syncSeasonRosters(
   if (seasons.length === 0) return;
 
   // Get current team members
-  const { results: currentMembers } = await client.query<{
+  const { results: currentMembers } = await dbRead.query<{
     user_id: string;
   }>("SELECT user_id FROM team_members WHERE team_id = ?", [teamId]);
 
@@ -48,7 +49,7 @@ export async function syncSeasonRosters(
 
   for (const { season_id } of seasons) {
     // Get existing season roster for this team
-    const { results: seasonMembers } = await client.query<{
+    const { results: seasonMembers } = await dbRead.query<{
       user_id: string;
     }>(
       "SELECT user_id FROM season_team_members WHERE season_id = ? AND team_id = ?",
@@ -61,7 +62,7 @@ export async function syncSeasonRosters(
     // where a user is already registered on another team)
     for (const userId of currentUserIds) {
       if (!seasonUserIds.has(userId)) {
-        await client.execute(
+        await dbWrite.execute(
           `INSERT OR IGNORE INTO season_team_members (id, season_id, team_id, user_id)
            VALUES (?, ?, ?, ?)`,
           [crypto.randomUUID(), season_id, teamId, userId],
@@ -72,7 +73,7 @@ export async function syncSeasonRosters(
     // Remove departed members
     for (const userId of seasonUserIds) {
       if (!currentUserIds.has(userId)) {
-        await client.execute(
+        await dbWrite.execute(
           "DELETE FROM season_team_members WHERE season_id = ? AND team_id = ? AND user_id = ?",
           [season_id, teamId, userId],
         );
@@ -94,11 +95,12 @@ export async function syncSeasonRosters(
  * Returns the number of teams that were synced.
  */
 export async function syncAllRostersForSeason(
-  client: D1Client,
+  dbRead: DbRead,
+  dbWrite: DbWrite,
   seasonId: string,
 ): Promise<number> {
   // Get all teams registered for this season
-  const { results: teams } = await client.query<{
+  const { results: teams } = await dbRead.query<{
     team_id: string;
   }>("SELECT team_id FROM season_teams WHERE season_id = ?", [seasonId]);
 
@@ -106,14 +108,14 @@ export async function syncAllRostersForSeason(
 
   for (const { team_id } of teams) {
     // Get current team members
-    const { results: currentMembers } = await client.query<{
+    const { results: currentMembers } = await dbRead.query<{
       user_id: string;
     }>("SELECT user_id FROM team_members WHERE team_id = ?", [team_id]);
 
     const currentUserIds = new Set(currentMembers.map((m) => m.user_id));
 
     // Get existing season roster for this team
-    const { results: seasonMembers } = await client.query<{
+    const { results: seasonMembers } = await dbRead.query<{
       user_id: string;
     }>(
       "SELECT user_id FROM season_team_members WHERE season_id = ? AND team_id = ?",
@@ -125,7 +127,7 @@ export async function syncAllRostersForSeason(
     // Add missing members
     for (const userId of currentUserIds) {
       if (!seasonUserIds.has(userId)) {
-        await client.execute(
+        await dbWrite.execute(
           `INSERT OR IGNORE INTO season_team_members (id, season_id, team_id, user_id)
            VALUES (?, ?, ?, ?)`,
           [crypto.randomUUID(), seasonId, team_id, userId],
@@ -136,7 +138,7 @@ export async function syncAllRostersForSeason(
     // Remove departed members
     for (const userId of seasonUserIds) {
       if (!currentUserIds.has(userId)) {
-        await client.execute(
+        await dbWrite.execute(
           "DELETE FROM season_team_members WHERE season_id = ? AND team_id = ? AND user_id = ?",
           [seasonId, team_id, userId],
         );

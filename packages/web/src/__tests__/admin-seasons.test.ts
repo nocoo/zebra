@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mocks — must be before imports that trigger the module chain
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/d1", () => ({
-  getD1Client: vi.fn(),
+vi.mock("@/lib/db", () => ({
+  getDbRead: vi.fn(),
+  getDbWrite: vi.fn(),
 }));
 
 vi.mock("@/lib/admin", () => ({
@@ -22,7 +23,7 @@ vi.mock("@/auth", () => ({
 
 import { GET, POST } from "@/app/api/admin/seasons/route";
 import { PATCH } from "@/app/api/admin/seasons/[seasonId]/route";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
@@ -38,12 +39,17 @@ const { syncAllRostersForSeason } = (await import(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -67,21 +73,19 @@ const ADMIN = { userId: "admin-1", email: "admin@test.com" };
 // ---------------------------------------------------------------------------
 
 describe("GET /api/admin/seasons", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
-    );
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as never);
   });
 
   it("should return all seasons with computed status", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
     // A season in the future → upcoming
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           id: "s1",
@@ -113,7 +117,7 @@ describe("GET /api/admin/seasons", () => {
 
   it("should handle no-such-table gracefully", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.query.mockRejectedValueOnce(new Error("no such table: seasons"));
+    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: seasons"));
 
     const res = await GET(makeRequest("GET"));
     expect(res.status).toBe(503);
@@ -127,20 +131,21 @@ describe("GET /api/admin/seasons", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/admin/seasons", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
-    );
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as never);
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(mockDbWrite as never);
   });
 
   it("should create season with valid data", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(null); // no slug collision
-    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await POST(
       makeRequest("POST", undefined, {
@@ -159,7 +164,7 @@ describe("POST /api/admin/seasons", () => {
 
   it("should reject duplicate slug", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce({ id: "existing-id" }); // slug exists
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing-id" }); // slug exists
 
     const res = await POST(
       makeRequest("POST", undefined, {
@@ -225,14 +230,15 @@ describe("POST /api/admin/seasons", () => {
 // ---------------------------------------------------------------------------
 
 describe("PATCH /api/admin/seasons/[seasonId]", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
-    );
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as never);
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(mockDbWrite as never);
   });
 
   const patchParams = Promise.resolve({ seasonId: "season-1" });
@@ -240,9 +246,8 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should allow name change on active season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    // Active season: today is between start and end
     const today = new Date().toISOString().slice(0, 10);
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Old Name",
@@ -259,7 +264,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         created_at: "2020-01-01T00:00:00Z",
         updated_at: today,
       });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
       makeRequest("PATCH", undefined, { name: "New Name" }),
@@ -274,7 +279,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should allow date change on upcoming season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Future Season",
@@ -291,7 +296,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         created_at: "2026-01-01T00:00:00Z",
         updated_at: "2026-03-11T00:00:00Z",
       });
-    mockClient.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
       makeRequest("PATCH", undefined, {
@@ -309,7 +314,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should reject date change on active season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       id: "season-1",
       name: "Active Season",
       slug: "s-active",
@@ -329,7 +334,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should reject date change on ended season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       id: "season-1",
       name: "Ended Season",
       slug: "s-ended",
@@ -348,7 +353,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await PATCH(
       makeRequest("PATCH", undefined, { name: "Ghost" }),
@@ -362,7 +367,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should trigger roster backfill when allow_roster_changes flips 0→1 on active season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Active Season",
@@ -383,7 +388,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         allow_roster_changes: 1,
         allow_late_withdrawal: 0,
       });
-    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
     syncAllRostersForSeason.mockResolvedValueOnce(2);
 
     const res = await PATCH(
@@ -391,13 +396,13 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
       { params: patchParams }
     );
     expect(res.status).toBe(200);
-    expect(syncAllRostersForSeason).toHaveBeenCalledWith(mockClient, "season-1");
+    expect(syncAllRostersForSeason).toHaveBeenCalledWith(mockDbRead, mockDbWrite, "season-1");
   });
 
   it("should NOT trigger roster backfill when toggle stays on (1→1)", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Active Season",
@@ -418,7 +423,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         allow_roster_changes: 1,
         allow_late_withdrawal: 0,
       });
-    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
       makeRequest("PATCH", undefined, { allow_roster_changes: true }),
@@ -431,7 +436,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should NOT trigger roster backfill on upcoming season even with 0→1 toggle", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Future Season",
@@ -452,7 +457,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         allow_roster_changes: 1,
         allow_late_withdrawal: 0,
       });
-    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
       makeRequest("PATCH", undefined, { allow_roster_changes: true }),
@@ -466,7 +471,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
     // Season is upcoming before the PATCH (dates in the future)
-    mockClient.firstOrNull
+    mockDbRead.firstOrNull
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Transition Season",
@@ -487,7 +492,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
         allow_roster_changes: 1,
         allow_late_withdrawal: 0,
       });
-    mockClient.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
     syncAllRostersForSeason.mockResolvedValueOnce(1);
 
     // PATCH changes dates to make it active AND enables roster changes
@@ -500,6 +505,6 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
       { params: patchParams }
     );
     expect(res.status).toBe(200);
-    expect(syncAllRostersForSeason).toHaveBeenCalledWith(mockClient, "season-1");
+    expect(syncAllRostersForSeason).toHaveBeenCalledWith(mockDbRead, mockDbWrite, "season-1");
   });
 });

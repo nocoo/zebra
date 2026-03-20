@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mocks — must be before imports that trigger the module chain
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/d1", () => ({
-  getD1Client: vi.fn(),
+vi.mock("@/lib/db", () => ({
+  getDbRead: vi.fn(),
+  getDbWrite: vi.fn(),
 }));
 
 vi.mock("@/lib/admin", () => ({
@@ -17,7 +18,7 @@ vi.mock("@/auth", () => ({
 }));
 
 import { POST } from "@/app/api/admin/seasons/[seasonId]/snapshot/route";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
@@ -27,12 +28,17 @@ const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -64,22 +70,23 @@ const ACTIVE_SEASON = {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client
-    );
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as never);
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(mockDbWrite as never);
   });
 
   it("should create snapshots for all registered teams", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Season lookup
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
     // Team aggregation: two teams
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -98,7 +105,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       ],
     });
     // Member aggregation
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -127,7 +134,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       ],
     });
     // batch calls (upsert + cleanup)
-    mockClient.batch.mockResolvedValue([]);
+    mockDbWrite.batch.mockResolvedValue([]);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -139,8 +146,8 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
     expect(data.created_at).toBeDefined();
 
     // Verify batch was called for upserts (first call: team + member upserts)
-    expect(mockClient.batch).toHaveBeenCalled();
-    const firstBatchCall = mockClient.batch.mock.calls[0]![0] as {
+    expect(mockDbWrite.batch).toHaveBeenCalled();
+    const firstBatchCall = mockDbWrite.batch.mock.calls[0]![0] as {
       sql: string;
     }[];
     // 2 team upserts + 3 member upserts = 5 statements
@@ -153,9 +160,9 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should create member snapshots for all team members", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
     // Team aggregation: one team
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -167,7 +174,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       ],
     });
     // Member aggregation: two members
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -187,7 +194,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.batch.mockResolvedValue([]);
+    mockDbWrite.batch.mockResolvedValue([]);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -196,7 +203,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
     expect(data.member_count).toBe(2);
 
     // Verify upsert batch: 1 team + 2 members = 3 statements
-    const upsertBatch = mockClient.batch.mock.calls[0]![0] as {
+    const upsertBatch = mockDbWrite.batch.mock.calls[0]![0] as {
       sql: string;
     }[];
     const memberUpserts = upsertBatch.filter((s) =>
@@ -207,9 +214,9 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should compute correct ranks by total_tokens DESC", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
     // Teams ordered by total_tokens DESC (the route's SQL has ORDER BY total_tokens DESC)
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -235,13 +242,13 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       ],
     });
     // No members
-    mockClient.query.mockResolvedValueOnce({ results: [] });
-    mockClient.batch.mockResolvedValue([]);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
+    mockDbWrite.batch.mockResolvedValue([]);
 
     await POST(makeRequest(), { params: routeParams });
 
     // Verify upsert batch has 3 team statements with correct ranks
-    const upsertBatch = mockClient.batch.mock.calls[0]![0] as {
+    const upsertBatch = mockDbWrite.batch.mock.calls[0]![0] as {
       sql: string;
       params: unknown[];
     }[];
@@ -259,8 +266,8 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should be idempotent (upsert overwrites existing data)", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -271,7 +278,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -283,7 +290,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.batch.mockResolvedValue([]);
+    mockDbWrite.batch.mockResolvedValue([]);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -291,7 +298,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
     expect(res.status).toBe(201);
 
     // Uses INSERT OR REPLACE (upsert) so re-running is safe
-    const upsertBatch = mockClient.batch.mock.calls[0]![0] as {
+    const upsertBatch = mockDbWrite.batch.mock.calls[0]![0] as {
       sql: string;
     }[];
     expect(upsertBatch[0]!.sql).toContain("INSERT OR REPLACE");
@@ -301,9 +308,9 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should clean up stale team and member rows after upsert", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
     // Only one team left (team-b was removed)
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -314,7 +321,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -326,12 +333,12 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.batch.mockResolvedValue([]);
+    mockDbWrite.batch.mockResolvedValue([]);
 
     await POST(makeRequest(), { params: routeParams });
 
     // Second batch call should clean up stale teams
-    const cleanupBatch = mockClient.batch.mock.calls[1]![0] as {
+    const cleanupBatch = mockDbWrite.batch.mock.calls[1]![0] as {
       sql: string;
       params: unknown[];
     }[];
@@ -344,7 +351,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should reject non-ended season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -365,7 +372,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -380,8 +387,8 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should set snapshot_ready=0 before writes and snapshot_ready=1 after all writes succeed", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -392,7 +399,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -404,26 +411,26 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.execute.mockResolvedValue(undefined);
-    mockClient.batch.mockResolvedValue([]);
+    mockDbWrite.execute.mockResolvedValue(undefined);
+    mockDbWrite.batch.mockResolvedValue([]);
 
     const res = await POST(makeRequest(), { params: routeParams });
     expect(res.status).toBe(201);
 
     // execute called exactly twice: snapshot_ready=0 then snapshot_ready=1
-    expect(mockClient.execute).toHaveBeenCalledTimes(2);
+    expect(mockDbWrite.execute).toHaveBeenCalledTimes(2);
 
     const [sql0, params0] = [
-      mockClient.execute.mock.calls[0]![0],
-      mockClient.execute.mock.calls[0]![1],
+      mockDbWrite.execute.mock.calls[0]![0],
+      mockDbWrite.execute.mock.calls[0]![1],
     ];
     expect(sql0).toContain("snapshot_ready");
     expect(sql0).toContain("UPDATE seasons");
     expect(params0).toEqual([0, "season-1"]);
 
     const [sql1, params1] = [
-      mockClient.execute.mock.calls[1]![0],
-      mockClient.execute.mock.calls[1]![1],
+      mockDbWrite.execute.mock.calls[1]![0],
+      mockDbWrite.execute.mock.calls[1]![1],
     ];
     expect(sql1).toContain("snapshot_ready");
     expect(sql1).toContain("UPDATE seasons");
@@ -436,8 +443,8 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should NOT set snapshot_ready=1 if upsert batch fails", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -448,24 +455,24 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
     // snapshot_ready=0 succeeds
-    mockClient.execute.mockResolvedValueOnce(undefined);
+    mockDbWrite.execute.mockResolvedValueOnce(undefined);
     // upsert batch fails
-    mockClient.batch.mockRejectedValueOnce(new Error("D1 write error"));
+    mockDbWrite.batch.mockRejectedValueOnce(new Error("D1 write error"));
 
     const res = await POST(makeRequest(), { params: routeParams });
     expect(res.status).toBe(500);
 
     // execute called only once (snapshot_ready=0), never set to 1
-    expect(mockClient.execute).toHaveBeenCalledTimes(1);
-    expect(mockClient.execute.mock.calls[0]![1]).toEqual([0, "season-1"]);
+    expect(mockDbWrite.execute).toHaveBeenCalledTimes(1);
+    expect(mockDbWrite.execute.mock.calls[0]![1]).toEqual([0, "season-1"]);
   });
 
   it("should NOT set snapshot_ready=1 if cleanup batch fails", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -476,7 +483,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
         },
       ],
     });
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -489,23 +496,23 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       ],
     });
     // snapshot_ready=0 succeeds
-    mockClient.execute.mockResolvedValueOnce(undefined);
+    mockDbWrite.execute.mockResolvedValueOnce(undefined);
     // upsert batch succeeds
-    mockClient.batch.mockResolvedValueOnce([]);
+    mockDbWrite.batch.mockResolvedValueOnce([]);
     // cleanup batch fails
-    mockClient.batch.mockRejectedValueOnce(new Error("D1 cleanup error"));
+    mockDbWrite.batch.mockRejectedValueOnce(new Error("D1 cleanup error"));
 
     const res = await POST(makeRequest(), { params: routeParams });
     expect(res.status).toBe(500);
 
     // execute called only once (snapshot_ready=0), never set to 1
-    expect(mockClient.execute).toHaveBeenCalledTimes(1);
-    expect(mockClient.execute.mock.calls[0]![1]).toEqual([0, "season-1"]);
+    expect(mockDbWrite.execute).toHaveBeenCalledTimes(1);
+    expect(mockDbWrite.execute.mock.calls[0]![1]).toEqual([0, "season-1"]);
   });
 
   it("should handle no-such-table gracefully", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockRejectedValueOnce(
+    mockDbRead.firstOrNull.mockRejectedValueOnce(
       new Error("no such table: seasons")
     );
 

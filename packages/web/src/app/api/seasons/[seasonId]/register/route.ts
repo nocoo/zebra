@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
 
 // ---------------------------------------------------------------------------
@@ -40,11 +40,12 @@ export async function POST(
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // Verify season exists
-    const season = await client.firstOrNull<{
+    const season = await dbRead.firstOrNull<{
       id: string;
       start_date: string;
       end_date: string;
@@ -73,7 +74,7 @@ export async function POST(
     }
 
     // Verify user is team owner
-    const membership = await client.firstOrNull<{ role: string }>(
+    const membership = await dbRead.firstOrNull<{ role: string }>(
       "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
       [team_id, user.userId]
     );
@@ -86,7 +87,7 @@ export async function POST(
     }
 
     // Check duplicate registration
-    const existing = await client.firstOrNull<{ id: string }>(
+    const existing = await dbRead.firstOrNull<{ id: string }>(
       "SELECT id FROM season_teams WHERE season_id = ? AND team_id = ?",
       [seasonId, team_id]
     );
@@ -99,7 +100,7 @@ export async function POST(
     }
 
     // Fetch current team members to freeze into season roster
-    const members = await client.query<{ user_id: string }>(
+    const members = await dbRead.query<{ user_id: string }>(
       "SELECT user_id FROM team_members WHERE team_id = ?",
       [team_id]
     );
@@ -110,7 +111,7 @@ export async function POST(
     if (members.results.length > 0) {
       const placeholders = members.results.map(() => "?").join(",");
       const userIds = members.results.map((m) => m.user_id);
-      const conflict = await client.firstOrNull<{ user_id: string }>(
+      const conflict = await dbRead.firstOrNull<{ user_id: string }>(
         `SELECT user_id FROM season_team_members
          WHERE season_id = ? AND user_id IN (${placeholders})
          LIMIT 1`,
@@ -146,7 +147,7 @@ export async function POST(
     ];
 
     try {
-      await client.batch(statements);
+      await dbWrite.batch(statements);
     } catch (batchErr) {
       // Compensate: delete only rows created by THIS request (by UUID).
       // This is safe even under concurrent registrations because we never
@@ -154,12 +155,12 @@ export async function POST(
       try {
         if (memberIds.length > 0) {
           const ph = memberIds.map(() => "?").join(",");
-          await client.execute(
+          await dbWrite.execute(
             `DELETE FROM season_team_members WHERE id IN (${ph})`,
             memberIds
           );
         }
-        await client.execute(
+        await dbWrite.execute(
           "DELETE FROM season_teams WHERE id = ?",
           [id]
         );
@@ -224,11 +225,12 @@ export async function DELETE(
     );
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // Verify season exists
-    const season = await client.firstOrNull<{
+    const season = await dbRead.firstOrNull<{
       id: string;
       start_date: string;
       end_date: string;
@@ -257,7 +259,7 @@ export async function DELETE(
     }
 
     // Verify user is team owner
-    const membership = await client.firstOrNull<{ role: string }>(
+    const membership = await dbRead.firstOrNull<{ role: string }>(
       "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
       [team_id, user.userId]
     );
@@ -270,7 +272,7 @@ export async function DELETE(
     }
 
     // Verify registration exists
-    const registration = await client.firstOrNull<{ id: string }>(
+    const registration = await dbRead.firstOrNull<{ id: string }>(
       "SELECT id FROM season_teams WHERE season_id = ? AND team_id = ?",
       [seasonId, team_id]
     );
@@ -282,12 +284,12 @@ export async function DELETE(
       );
     }
 
-    await client.execute(
+    await dbWrite.execute(
       "DELETE FROM season_team_members WHERE season_id = ? AND team_id = ?",
       [seasonId, team_id]
     );
 
-    await client.execute(
+    await dbWrite.execute(
       "DELETE FROM season_teams WHERE season_id = ? AND team_id = ?",
       [seasonId, team_id]
     );

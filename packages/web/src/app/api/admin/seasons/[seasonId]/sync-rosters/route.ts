@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
 import { syncAllRostersForSeason } from "@/lib/season-roster";
 
@@ -24,10 +24,11 @@ export async function POST(
   }
 
   const { seasonId } = await params;
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
-    const season = await client.firstOrNull<{
+    const season = await dbRead.firstOrNull<{
       id: string;
       start_date: string;
       end_date: string;
@@ -59,7 +60,7 @@ export async function POST(
       );
     }
 
-    const syncedTeams = await syncAllRostersForSeason(client, seasonId);
+    const syncedTeams = await syncAllRostersForSeason(dbRead, dbWrite, seasonId);
 
     return NextResponse.json({ synced_teams: syncedTeams });
   } catch (err) {

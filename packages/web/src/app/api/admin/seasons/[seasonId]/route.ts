@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
-import { getD1Client } from "@/lib/d1";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
 import { syncAllRostersForSeason } from "@/lib/season-roster";
 
@@ -45,11 +45,12 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const client = getD1Client();
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
 
   try {
     // Fetch existing season
-    const season = await client.firstOrNull<{
+    const season = await dbRead.firstOrNull<{
       id: string;
       name: string;
       slug: string;
@@ -156,7 +157,7 @@ export async function PATCH(
     updates.push("updated_at = datetime('now')");
     values.push(seasonId);
 
-    await client.execute(
+    await dbWrite.execute(
       `UPDATE seasons SET ${updates.join(", ")} WHERE id = ?`,
       values
     );
@@ -169,12 +170,12 @@ export async function PATCH(
     if (wasRosterOff && isRosterOn) {
       const finalStatus = deriveSeasonStatus(finalStartDate, finalEndDate);
       if (finalStatus === "active") {
-        await syncAllRostersForSeason(client, seasonId);
+        await syncAllRostersForSeason(dbRead, dbWrite, seasonId);
       }
     }
 
     // Return updated season
-    const updated = await client.firstOrNull<{
+    const updated = await dbRead.firstOrNull<{
       id: string;
       name: string;
       slug: string;

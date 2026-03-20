@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/d1", () => ({
-  getD1Client: vi.fn(),
+vi.mock("@/lib/db", () => ({
+  getDbRead: vi.fn(),
+  getDbWrite: vi.fn(),
 }));
 
 vi.mock("@/lib/admin", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/auth", () => ({
 }));
 
 import { POST } from "@/app/api/admin/seasons/[seasonId]/sync-rosters/route";
-import * as d1Module from "@/lib/d1";
+import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
@@ -37,12 +38,17 @@ const { syncAllRostersForSeason } = (await import(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockClient() {
+function createMockDbRead() {
   return {
     query: vi.fn(),
+    firstOrNull: vi.fn(),
+  };
+}
+
+function createMockDbWrite() {
+  return {
     execute: vi.fn(),
     batch: vi.fn(),
-    firstOrNull: vi.fn(),
   };
 }
 
@@ -60,15 +66,16 @@ const ADMIN = { userId: "admin-1", email: "admin@test.com" };
 // ---------------------------------------------------------------------------
 
 describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
   const seasonParams = Promise.resolve({ seasonId: "season-1" });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(d1Module.getD1Client).mockReturnValue(
-      mockClient as unknown as d1Module.D1Client,
-    );
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as never);
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(mockDbWrite as never);
   });
 
   it("should reject non-admin requests", async () => {
@@ -80,7 +87,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest(), { params: seasonParams });
     expect(res.status).toBe(404);
@@ -89,7 +96,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
   it("should reject non-active seasons", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Future season → upcoming
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2099-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",
@@ -105,7 +112,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
   it("should reject when allow_roster_changes is disabled", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Active season, but roster changes off
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",
@@ -120,7 +127,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
 
   it("should sync rosters and return team count", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockClient.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",
@@ -134,7 +141,8 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
     expect(body.synced_teams).toBe(3);
 
     expect(syncAllRostersForSeason).toHaveBeenCalledWith(
-      mockClient,
+      mockDbRead,
+      mockDbWrite,
       "season-1",
     );
   });
