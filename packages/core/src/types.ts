@@ -429,6 +429,8 @@ export interface RunLogEntry {
   coordination: {
     waitedForLock: boolean;
     skippedSync: boolean;
+    /** Reason for skipping sync (e.g. "cooldown", "waiter-dedup") */
+    skippedReason?: string;
     hadFollowUp: boolean;
     followUpCount: number;
     degradedToUnlocked: boolean;
@@ -464,6 +466,8 @@ export interface CoordinatorRunResult {
   waitedForLock: boolean;
   /** Whether sync was skipped because a previous follow-up already consumed the signal */
   skippedSync: boolean;
+  /** Reason for skipping sync (e.g. "cooldown", "waiter-dedup") */
+  skippedReason?: string;
   /** Whether the coordinator degraded to unlocked mode (lock API unavailable) */
   degradedToUnlocked: boolean;
   /** Sync cycle results (one per execution, multiple if follow-ups occurred) */

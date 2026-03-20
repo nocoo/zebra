@@ -311,6 +311,9 @@ async function writeRunLog(
       coordination: {
         waitedForLock: result.waitedForLock,
         skippedSync: result.skippedSync,
+        ...(result.skippedReason != null
+          ? { skippedReason: result.skippedReason }
+          : {}),
         hadFollowUp: result.hadFollowUp,
         followUpCount: result.followUpCount,
         degradedToUnlocked: result.degradedToUnlocked,
