@@ -535,10 +535,19 @@ sequential runs per 4-hour window.
 
 **Prerequisite:** Phase 1 (lock works correctly). ✅
 
-**Mechanism:** After acquiring the lock, the coordinator reads `last-run.json`.
-If the last **successful** run completed less than 5 minutes ago, skip sync
-and release the lock. The signal file is NOT consumed (no `truncateSignal`),
-so accumulated signals persist for the next run after cooldown expires.
+**Mechanism:** After acquiring the lock, the coordinator reads `last-success.json`
+(a plain ISO timestamp written only after a successful sync). If the last
+successful run completed less than 5 minutes ago, skip sync and release the
+lock. The signal file is NOT consumed (no `truncateSignal`), so accumulated
+signals persist for the next run after cooldown expires.
+
+> **Why `last-success.json` instead of `last-run.json`?** `last-run.json` is
+> written on every run — including cooldown-skipped and error runs. If cooldown
+> read from `last-run.json`, the first cooldown skip would overwrite the
+> success timestamp, and every subsequent run would see `status: "skipped"`
+> → bypass cooldown → run sync → defeating the entire cooldown mechanism.
+> `last-success.json` is only written when `entry.status === "success"`,
+> ensuring the cooldown timer is anchored to the last real sync.
 
 | Trigger | Cooldown check | Rationale |
 |---|---|---|
@@ -554,11 +563,13 @@ capture all deltas while dramatically reducing the number of sync cycles.
 - Cooldown check happens **inside the lock**, after acquisition, before `runLockedCycles()`
 - `checkCooldown()` returns **remaining cooldown time in ms** (0 = no cooldown), not a boolean
 - Only **successful** runs count — error/skipped/partial runs do NOT reset the cooldown timer
+- Cooldown reads `last-success.json` (plain ISO timestamp, e.g. `2026-03-20T06:37:53.377Z`)
+- `last-success.json` is only written when `entry.status === "success"` in `writeRunLog()`
 - Result: `{ skippedSync: true, skippedReason: "cooldown", cooldownRemainingMs: <number> }`
 - `skippedReason` and `cooldownRemainingMs` are added to both `CoordinatorRunResult` and `RunLogEntry.coordination`
 - Default cooldown: 5 minutes (300,000 ms), configurable via `CoordinatorOptions.cooldownMs`
 - `cooldownMs: 0` disables cooldown (always runs)
-- Missing/corrupted `last-run.json` → no cooldown (treat as first run ever)
+- Missing/corrupted `last-success.json` → no cooldown (treat as first run ever)
 
 **Trailing-edge guarantee:**
 
@@ -653,7 +664,7 @@ from `runLockedCycles()` where sync already started.
 | 11 | 3 | `docs: defer Phase 2, detail Phase 3 cooldown steps` | Update doc 28 status | done |
 | 12 | 3 | `feat: add skippedReason to CoordinatorRunResult and RunLogEntry` | Core type change | done |
 | 13 | 3 | `test: add cooldown coordinator unit tests` | TDD: write tests first | done |
-| 14 | 3 | `feat: implement cooldown check in coordinator` | Read last-run.json, skip if < cooldownMs since last success | done |
+| 14 | 3 | `feat: implement cooldown check in coordinator` | Read last-success.json, skip if < cooldownMs since last success | done |
 | 15 | 3 | `test: add cooldown integration test` | Real filesystem cooldown behavior | done |
 | 16 | 3 | `docs: mark Phase 3 as done in doc 28` | Update status | done |
 | 17 | 3 | `feat: wire 5-minute cooldown to pew notify` | `cooldownMs: 300_000` in coordinator options | done |
@@ -661,3 +672,5 @@ from `runLockedCycles()` where sync already started.
 | 19 | 3 | `feat: return cooldownRemainingMs from coordinator` | checkCooldown returns remaining ms; type fields | done |
 | 20 | 3 | `feat: add trailing-edge sync guarantee for cooldown` | scheduleTrailingSync with O_EXCL trailing.lock | done |
 | 21 | 3 | `fix: add PID-based stale detection to trailing.lock` | Dead PID → remove stale lock, prevent permanent lockout | done |
+| 22 | 3 | `fix: use dedicated last-success.json for cooldown instead of last-run.json` | Cooldown reads success-only timestamp; prevents skipped runs from breaking cooldown | done |
+| 23 | 3 | `docs: align doc 28 with last-success.json implementation` | Update doc to reflect actual cooldown storage mechanism | done |
