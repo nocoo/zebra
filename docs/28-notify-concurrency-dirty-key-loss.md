@@ -529,12 +529,12 @@ lost. The cooldown reduces redundant work but is not required for correctness.
 | # | Phase | Commit | Description | Status |
 |---|-------|--------|-------------|--------|
 | 1 | — | `docs: add notify concurrency dirty-key loss investigation` | This document | done |
-| 2 | 1 | `test: add O_EXCL lockfile acquire/release/stale tests` | L1 tests for new lock module | pending |
-| 3 | 1 | `feat: implement O_EXCL lockfile with PID-based stale detection` | New `lockfile.ts` module | pending |
-| 4 | 1 | `test: update coordinator tests for O_EXCL lock` | Replace FileHandle.lock mock with lockfile mock | pending |
-| 5 | 1 | `feat: replace FileHandle.lock with O_EXCL lockfile in coordinator` | Core fix — working mutual exclusion | pending |
-| 6 | 1 | `test: integration test for concurrent notify serialization` | Simulate concurrent notify; verify dirty keys intact | pending |
-| 7 | 1 | `chore: remove FileHandle.lock and runUnlocked code paths` | Clean up dead code; no unlocked fallback remains | pending |
+| 2 | 1 | `test: add O_EXCL lockfile acquire/release/stale tests` | L1 tests for new lock module | done |
+| 3 | 1 | `feat: implement O_EXCL lockfile with PID-based stale detection` | New `lockfile.ts` module | done |
+| 4 | 1 | `test: update coordinator tests for O_EXCL lock` | Replace FileHandle.lock mock with lockfile mock | done |
+| 5 | 1 | `feat: replace FileHandle.lock with O_EXCL lockfile in coordinator` | Core fix — working mutual exclusion | done |
+| 6 | 1 | `test: integration test for concurrent notify serialization` | Simulate concurrent notify; verify dirty keys intact | done |
+| 7 | 1 | `chore: remove FileHandle.lock and runUnlocked code paths` | Clean up dead code; no unlocked fallback remains | done (no dead code found in src/) |
 | 8 | 2 | — | Design decision: snapshot vs staged delta | future |
 | 9 | 2 | — | Implement idempotent token queue | future |
 | 10 | 2 | — | Cursor-after-upload (safe after idempotent queue) | future |
