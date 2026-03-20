@@ -334,7 +334,7 @@ semantic:
 | Blocking waiter | `fd.lock('exclusive')` blocking call | Poll lockfile with backoff (see below) |
 | Follow-up cycle | ✓ truncate → sync → check size | ✓ Unchanged |
 | Waiter dedup | ✓ check signal size after lock acquired | ✓ Unchanged |
-| Degraded unlocked fallback | On any lock error | Only on O_EXCL API error (should never happen) |
+| Fail-closed on lock error | No — degrades to `runUnlocked()` | Yes — `skippedSync: true` + error, **never** run unlocked |
 
 **Lockfile details:**
 
@@ -390,9 +390,11 @@ BEFORE: fd.lock('exclusive', { nonBlocking: true }) → catch EAGAIN → fd.lock
 AFTER:  writeFile(lockPath, pid, O_EXCL) → catch EEXIST → poll loop with stale check
 ```
 
-Everything after lock acquisition (`runLockedCycles`, `runUnlocked`,
+Everything after lock acquisition (`runLockedCycles`,
 `appendSignal`, `truncateSignal`, `readSignalSize`, `writeRunLog`) remains
-**unchanged**.
+**unchanged**. `runUnlocked()` is **removed** — there is no fallback to
+unlocked execution. If the lockfile cannot be acquired or created, the run
+returns `{ skippedSync: true, error: "..." }` and exits without executing sync.
 
 **Lock release:**
 
@@ -532,7 +534,7 @@ lost. The cooldown reduces redundant work but is not required for correctness.
 | 4 | 1 | `test: update coordinator tests for O_EXCL lock` | Replace FileHandle.lock mock with lockfile mock | pending |
 | 5 | 1 | `feat: replace FileHandle.lock with O_EXCL lockfile in coordinator` | Core fix — working mutual exclusion | pending |
 | 6 | 1 | `test: integration test for concurrent notify serialization` | Simulate concurrent notify; verify dirty keys intact | pending |
-| 7 | 1 | `chore: remove FileHandle.lock code path` | Clean up dead code | pending |
+| 7 | 1 | `chore: remove FileHandle.lock and runUnlocked code paths` | Clean up dead code; no unlocked fallback remains | pending |
 | 8 | 2 | — | Design decision: snapshot vs staged delta | future |
 | 9 | 2 | — | Implement idempotent token queue | future |
 | 10 | 2 | — | Cursor-after-upload (safe after idempotent queue) | future |
