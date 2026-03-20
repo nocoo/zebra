@@ -10,13 +10,13 @@
 |---|--------|-------------|--------|
 | 1 | `docs: add worker read migration plan` | This document | ✅ done |
 | 2 | `565db83` | Phase 1: define `DbRead` / `DbWrite` interfaces + `RestDbRead` adapter | ✅ done |
-| 3 | | Phase 1: migrate read-only files to `getDbRead()` | |
-| 4 | | Phase 1: migrate mixed read+write files to `getDbRead()` + `getDbWrite()` | |
-| 5 | | Phase 2: implement pew read Worker | |
-| 6 | | Phase 2: Worker tests (≥ 95% coverage) | |
-| 7 | | Phase 3: add `WorkerDbRead` adapter + dev switching | |
-| 8 | | Phase 3: E2E validation against dev Worker | |
-| 9 | | Phase 4: delete `RestDbRead` + REST-only env vars | |
+| 3 | `5c59bd0` | Phase 1: migrate read-only files to `getDbRead()` | ✅ done |
+| 4 | `4a2583c` | Phase 1: migrate mixed read+write files to `getDbRead()` + `getDbWrite()` | ✅ done |
+| 5 | `d64c962` | Phase 2: implement pew read Worker | ✅ done |
+| 6 | `d64c962` | Phase 2: Worker tests (≥ 95% coverage) | ✅ done |
+| 7 | `8007abc` | Phase 3: add `WorkerDbRead` adapter + dev switching | ✅ done |
+| 8 | | Phase 3: E2E validation against dev Worker | ⏳ pending deploy |
+| 9 | | Phase 4: delete `RestDbRead` + REST-only env vars | ⏳ pending E2E |
 | 10 | | docs: retrospective | |
 
 ## Problem

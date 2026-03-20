@@ -6,6 +6,7 @@ pew is a monorepo (Bun workspaces) for tracking token usage from local AI coding
 - `packages/cli` — CLI tool (`@nocoo/pew`, published to npm, citty + consola + picocolors)
 - `packages/web` — SaaS dashboard (`@pew/web`, private, Next.js 16 + App Router)
 - `packages/worker` — Cloudflare Worker for D1 ingest writes (`@pew/worker`, private)
+- `packages/worker-read` — Cloudflare Worker for D1 read queries (`@pew/worker-read`, private)
 
 ### Supported AI Tools
 
@@ -73,6 +74,7 @@ CLI package `@nocoo/pew` is published to npm. Steps:
 
 ## Retrospective
 
+- **DbRead/DbWrite abstraction requires test mock migration alongside production code**: Introducing `getDbRead()` (async singleton) to replace `getD1Client()` (sync singleton) broke 89 tests in the first attempt because: (1) the async singleton caches the `DbRead` instance, so `beforeEach` re-mocking of `getD1Client` doesn't propagate to an already-cached `_read`; (2) tests must mock `@/lib/db` directly (with `mockResolvedValue` for async) instead of `@/lib/d1`. Lesson: when refactoring a widely-used factory function, always migrate tests in the same commit as the production code, and ensure the mock target matches the new import path. The old mock-through-transitive-dependency pattern silently breaks when an abstraction layer is inserted.
 - **D1 REST API has no batch endpoint**: The `/query` endpoint only accepts a single `{ sql, params }` object. Sending an array (like the Workers Binding `db.batch()`) returns "Expected object, received array". Unit tests with mocked fetch won't catch this — only E2E tests against real D1 reveal it. Fix: send statements individually in a loop.
 - **Next.js dev server modifies `next-env.d.ts` and `tsconfig.json`**: Running `next dev` with `NEXT_DIST_DIR=.next-e2e` overwrites these files to reference `.next-e2e`. Always `git checkout` these after E2E runs to avoid committing noise.
 - **D1 SQLite param limit is 999, not 3400**: Multi-row INSERT with 300 rows × 9 cols = 2700 params triggers `SQLITE_ERROR: too many SQL variables`. The safe maximum is ~100 rows (900 params). We use CHUNK_SIZE=20 (180 params) for comfortable headroom. Only production D1 reveals this — L1 mocks and local SQLite may have different limits.
