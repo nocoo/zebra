@@ -43,7 +43,8 @@ Next.js (Railway) ──POST /query──→ api.cloudflare.com ──→ D1
 
 ### Current D1 Surface (Audited)
 
-**37 production files** with **58 `getD1Client()` call sites** (excluding tests and `d1.ts` itself):
+**37 production files** call `getD1Client()` directly (**58 call sites**,
+excluding tests and `d1.ts` itself):
 
 | Category | Files | Read-Only | Read+Write |
 |----------|-------|-----------|------------|
@@ -53,17 +54,24 @@ Next.js (Railway) ──POST /query──→ api.cloudflare.com ──→ D1
 | API routes — teams | 5 | 0 | 5 |
 | API routes — admin | 7 | 3 | 4 |
 | API routes — other (devices, budgets, projects) | 5 | 1 | 4 |
-| Lib modules (auth, auth-adapter, auth-helpers, invite, admin) | 5 | 2 | 3 |
+| Lib modules that call `getD1Client()` (auth, auth-helpers, invite, admin) | 4 | 2 | 2 |
 | SSR page (`/u/[slug]`) | 1 | 1 | 0 |
 | **Total** | **37** (excl. d1.ts, tests) | **17** | **20** |
 
-**Note**: `season-roster.ts` is excluded — it receives a `D1Client` parameter
-from callers, it does not call `getD1Client()` itself. It will be migrated
-separately when its callers (`admin/seasons/[id]/sync-rosters/route.ts`) are
-updated to pass `DbRead`/`DbWrite` instead.
+**Additionally, 2 lib modules receive `D1Client` as a parameter** (they never
+call `getD1Client()` themselves and are NOT counted in the 37 above):
 
-**Key insight**: 20 of 37 files do both reads AND writes (`query` + `execute`/`batch`).
-A single "DbReader" abstraction that throws on writes would break these at runtime.
+| File | Passed by | Read/Write |
+|------|-----------|------------|
+| `auth-adapter.ts` | `auth.ts` passes `getD1Client()` result | Mixed (createUser, linkAccount = write; getUser, getUserByEmail = read) |
+| `season-roster.ts` | `admin/seasons/[id]/sync-rosters/route.ts` passes `getD1Client()` result | Mixed (query = read; execute = write) |
+
+These require a **signature change** (`D1Client` → `DbRead`/`DbWrite`) and
+are migrated together with their callers — see "Special cases" in §1.4.
+
+**Key insight**: 20 of 37 direct-call files + 2 param-receiver files do both
+reads AND writes. A single "DbReader" abstraction that throws on writes would
+break them at runtime.
 
 ## Solution
 
@@ -324,16 +332,24 @@ export async function getDbWrite(): Promise<DbWrite> {
 | A (read-only) | Health | `live/route.ts` |
 | A (read-only) | Lib read-only | `auth-helpers.ts`, `admin.ts` |
 | A (read-only) | SSR | `u/[slug]/page.tsx` |
-| B (mixed) | Auth/settings | `auth.ts`, `auth-adapter.ts`, `invite.ts`, `settings/route.ts`, `auth/cli/route.ts` |
+| B (mixed) | Auth/settings | `auth.ts`, `invite.ts`, `settings/route.ts`, `auth/cli/route.ts` |
 | B (mixed) | Teams | all 5 team route files |
 | B (mixed) | Admin write | `admin/invites/route.ts`, `admin/pricing/route.ts`, `admin/seasons/route.ts`, `admin/seasons/[id]/route.ts`, `admin/seasons/[id]/snapshot/route.ts`, `admin/settings/route.ts` |
 | B (mixed) | Projects | `projects/route.ts`, `projects/[id]/route.ts` |
 | B (mixed) | Other | `devices/route.ts`, `budgets/route.ts`, `seasons/[id]/register/route.ts` |
 
-**Special case — `season-roster.ts`**: does not call `getD1Client()` directly;
-receives `D1Client` as a parameter. Migrate its callers to pass `DbRead`/`DbWrite`
-instead, then update the function signature. Handle in the same commit as its
-caller (`admin/seasons/[id]/sync-rosters/route.ts`).
+**Special cases — parameter-receiver files** (not in the 37 count):
+
+These files accept a `D1Client` parameter instead of calling `getD1Client()`.
+Migrate by changing the function signature from `client: D1Client` to
+`dbRead: DbRead, dbWrite: DbWrite`, then update callers to pass the singletons:
+
+| File | Caller (passes `getD1Client()`) | Migration |
+|------|--------------------------------|-----------|
+| `auth-adapter.ts` | `auth.ts` | `D1AuthAdapter(client)` → `D1AuthAdapter(dbRead, dbWrite)` |
+| `season-roster.ts` | `admin/seasons/[id]/sync-rosters/route.ts` | `syncSeasonRosters(client, ...)` → `syncSeasonRosters(dbRead, dbWrite, ...)` |
+
+Handle each in the same commit as its caller's migration.
 
 #### 1.5 Tests
 
