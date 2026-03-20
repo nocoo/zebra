@@ -10,6 +10,7 @@
 | # | Commit | Description | Status |
 |---|--------|-------------|--------|
 | 1 | `docs: add notify concurrency dirty-key loss investigation` | This document | done |
+| 2 | `docs: revise fix design based on code review` | Add review findings; phased approach | done |
 
 ## Symptom
 
@@ -234,47 +235,251 @@ A minor risk exists if `pew notify` fires concurrently during the reset+sync
 window, but in practice the full-scan branch uses `queue.overwrite()` (not
 merge), so the complete snapshot will be written regardless.
 
-## Fix Design
+## Code Review Findings
 
-Two architectural changes eliminate the root cause:
+The initial fix design (Change 1 + Change 2) was reviewed against the codebase
+and three critical risks were identified:
 
-### Change 1: Reliable Process Lock + 5-Minute Cooldown
+### Risk 1 — Cursor-After-Upload Assumes Idempotency (HIGH)
 
-**Problem:** `FileHandle.lock()` silently fails on the user's runtime, causing
-100% of notify processes to degrade to unlocked concurrent execution.
+The proposed "persist cursors only after upload" relies on the assumption that
+re-parsing the same file segment produces the same queue state. **This is
+false.** The current token merge uses `aggregateRecords()` which is SUM-based:
 
-**Solution:** Replace `FileHandle.lock()` with an `O_EXCL` lockfile mechanism
-that works on all Node.js versions. Combined with a **5-minute cooldown**
-between sync cycles:
+```typescript
+// upload.ts — aggregateRecords()
+if (existing) {
+  existing.input_tokens += r.input_tokens;
+  // ... all fields summed
+}
+```
+
+And `sync.ts:551-563` merges new deltas into old queue by SUM:
+
+```typescript
+const merged = aggregateRecords([...oldRecords, ...records]);
+```
+
+If a crash occurs after queue merge but before cursor write, the next run
+re-parses the same deltas and SUMs them again → **double-count**. The code
+comment at `sync.ts:568-573` acknowledges this:
+
+> "values ≥ true (minor over-count for one sync cycle, recoverable via pew reset)"
+
+This is tolerable for rare crash recovery, but cursor-after-upload would make
+it the **normal flow** on every upload failure or timeout. The server upsert
+(`ON CONFLICT DO UPDATE SET`) is an overwrite, so if the doubled values reach
+the server, the dashboard shows 2× the actual usage.
+
+**Conclusion:** Do not implement cursor-after-upload until the token queue
+model is made truly idempotent (see Phase 2 below).
+
+### Risk 2 — Simple Lockfile Drops Coordinator Semantics (HIGH)
+
+The original design proposed replacing `FileHandle.lock()` with a simple
+`O_EXCL` lockfile where losers just exit. This **drops** the existing
+coordinator's signal/dedup semantics designed in doc 10b:
+
+1. **`notify.signal` + O_APPEND**: Atomic dirty notification without
+   read-modify-write race
+2. **Blocking waiter**: Loser doesn't exit — it waits for the lock, ensuring
+   no notification is silently dropped (doc 10b: "失败方不能直接 exit，
+   否则会在最后一次 check/truncate/unlock 窗口吞掉 notify")
+3. **Follow-up cycle**: Lock holder checks signal size after sync; if > 0,
+   runs another cycle
+4. **Waiter dedup**: After acquiring lock, waiter checks signal size; if 0
+   (previous follow-up already consumed), skip sync
+
+These semantics exist for good reason — they guarantee zero lost notifications.
+A simple lockfile with "exit on contention" would regress notification
+reliability.
+
+**Conclusion:** Fix must preserve all four coordinator semantics. Only the
+lock *acquisition mechanism* changes (from `FileHandle.lock()` to `O_EXCL`
+lockfile), not the coordination protocol.
+
+### Risk 3 — Age-Based Stale Lock Detection Is Unsafe (MEDIUM)
+
+The initial design proposed stale lock detection via "PID dead OR age > 5 min".
+The age check is unsafe because `fetch()` in the upload engine has no timeout
+— a slow network request could still be running when another process steals
+the lock based on age alone, causing concurrent execution.
+
+**Conclusion:** Stale lock detection must use PID-only. If the PID is alive,
+the lock is valid regardless of age.
+
+## Fix Design (Revised)
+
+The fix is split into three phases. **Phase 1 alone fixes the bug.** Phases 2
+and 3 are follow-up improvements that require correctness guarantees from the
+phases before them.
+
+### Phase 1: Fix the Lock (Correctness Fix)
+
+**Goal:** Make `coordinator.ts` actually achieve mutual exclusion, so the
+existing signal/dedup protocol works as designed.
+
+**Problem:** `FileHandle.lock()` is Node.js 22+ experimental API. When
+unavailable, `coordinator.ts` falls through to `runUnlocked()` — 100% of
+notify runs on this user's machine.
+
+**Solution:** Replace `FileHandle.lock()` with an `O_EXCL` lockfile that works
+on all Node.js/Bun versions, while **preserving** every existing coordinator
+semantic:
+
+| Semantic | Current (broken) | Phase 1 (fixed) |
+|---|---|---|
+| Mutual exclusion | `FileHandle.lock()` — fails silently | `O_EXCL` lockfile — portable |
+| Signal file (`notify.signal`) | ✓ O_APPEND atomic append | ✓ Unchanged |
+| Blocking waiter | `fd.lock('exclusive')` blocking call | Poll lockfile with backoff (see below) |
+| Follow-up cycle | ✓ truncate → sync → check size | ✓ Unchanged |
+| Waiter dedup | ✓ check signal size after lock acquired | ✓ Unchanged |
+| Degraded unlocked fallback | On any lock error | Only on O_EXCL API error (should never happen) |
+
+**Lockfile details:**
+
+- Path: `~/.config/pew/sync.lock`
+- Content: `{ "pid": <number>, "startedAt": "<ISO>" }`
+- Created with `O_CREAT | O_EXCL | O_WRONLY` (atomic, fails if exists)
+- Removed in `finally` block (crash leaves stale file → next run detects it)
+
+**Stale detection (PID-only):**
 
 ```
-notify/sync trigger arrives
+Lockfile exists → read PID → process.kill(pid, 0)
+  ├── throws (ESRCH) → PID dead → remove lockfile, retry acquire
+  └── no throw → PID alive → lock is valid, enter wait loop
+```
+
+No age-based detection. A slow `fetch()` with no timeout is still a valid
+lock holder.
+
+**Blocking waiter (poll-based):**
+
+Since `O_EXCL` doesn't support blocking wait, losers poll with exponential
+backoff:
+
+```
+Acquire lockfile → EEXIST
   │
   ▼
-Try create lockfile (O_EXCL)
-  ├── FAIL (lockfile exists) → check if stale (PID dead / age > 5 min)
-  │     ├── stale → remove + retry
-  │     └── not stale → EXIT (another process is running)
+Append signal (O_APPEND) — ensure dirty follow-up
   │
-  ├── SUCCESS → hold lock
-  │     │
-  │     ▼
-  │   Check cooldown: was last successful sync < 5 min ago?
-  │     ├── YES and trigger is notify → release lock, EXIT
-  │     └── NO, or trigger is manual `pew sync` → proceed
-  │           │
-  │           ▼
-  │         Execute sync + upload (see Change 2)
-  │           │
-  │           ▼
-  │         Write last-sync timestamp
-  │           │
-  │           ▼
-  │         Release lock
-  └─────────────────────
+  ▼
+Poll loop (up to lockTimeoutMs):
+  1. Check stale (PID dead?) → if stale, remove + retry acquire
+  2. sleep(backoff) — start 100ms, double each iteration, cap at 2s
+  3. Try acquire lockfile (O_EXCL)
+     ├── SUCCESS → waiter dedup check (signal size == 0 → skip, > 0 → sync)
+     └── EEXIST → continue loop
+  │
+  ▼ (timeout)
+Return { error: "lock timeout", skippedSync: true }
 ```
 
-**Cooldown rules:**
+This preserves the blocking handoff semantic: losers don't exit, they wait for
+the lock and either run sync themselves or skip if the follow-up consumed
+their notification.
+
+**Key change in coordinator.ts:**
+
+The `runCoordinator()` function's lock acquisition is replaced:
+
+```
+BEFORE: fd.lock('exclusive', { nonBlocking: true }) → catch EAGAIN → fd.lock('exclusive')
+AFTER:  writeFile(lockPath, pid, O_EXCL) → catch EEXIST → poll loop with stale check
+```
+
+Everything after lock acquisition (`runLockedCycles`, `runUnlocked`,
+`appendSignal`, `truncateSignal`, `readSignalSize`, `writeRunLog`) remains
+**unchanged**.
+
+**Lock release:**
+
+```typescript
+// In finally block
+try {
+  const content = await readFile(lockPath, 'utf8');
+  const { pid } = JSON.parse(content);
+  if (pid === process.pid) {
+    await unlink(lockPath);
+  }
+  // If PID doesn't match, another process stole the lock (shouldn't happen
+  // but defensive). Don't remove someone else's lockfile.
+} catch { /* lockfile already removed or unreadable — fine */ }
+```
+
+**Failure mode analysis (Phase 1):**
+
+| Failure point | State after restart | Behavior |
+|---|---|---|
+| Crash after lock, before sync | Stale lockfile on disk | Next run detects dead PID → removes lockfile → proceeds |
+| Crash during sync | Stale lockfile; queue/cursors in unknown state | Next run removes stale lockfile; existing crash recovery applies |
+| Normal exit | Lockfile removed in `finally` | Clean |
+| PID recycled (rare) | Lockfile with live PID that's a different process | Poll loop waits until timeout; worst case = delayed sync (60s) |
+
+### Phase 2: Idempotent Token Queue (Prerequisite for Cursor-After-Upload)
+
+> **Status: design only — not implemented until Phase 1 is validated.**
+
+**Goal:** Make the token merge idempotent so that re-parsing the same deltas
+does not inflate values.
+
+**Problem:** `aggregateRecords([...oldRecords, ...records])` uses SUM. If the
+same deltas appear in both `oldRecords` (from a previous parse) and `records`
+(from re-parsing after cursor rollback), the values double.
+
+**Two candidate approaches:**
+
+#### Option A: Full-Snapshot Overwrite
+
+On each sync cycle, the queue stores a **complete snapshot** of all token data
+from source files — not a delta. `queue.overwrite(records)` replaces the
+entire queue with the current computed state.
+
+- **Pro:** Simplest mental model. Any re-parse produces the same snapshot.
+- **Con:** Every sync rewrites the entire queue file (currently ~900KB).
+  With 5-minute intervals this is tolerable. Must also change how cursor
+  rollback works (cursor must be rolled back far enough to reconstruct the
+  full snapshot, not just the new deltas).
+
+#### Option B: Staged Delta with Commit
+
+Deltas are written to a staging area (`queue.staging.jsonl`). On upload
+success, they are committed into the main queue. On failure, the staging
+area is discarded and the cursor is not advanced.
+
+- **Pro:** Only new deltas are written on each cycle. Cursor-after-upload
+  becomes safe because uncommitted deltas are discarded on failure.
+- **Con:** More moving parts. Must handle crash between commit and cursor
+  write.
+
+**Decision deferred** until Phase 1 is validated in production. Both options
+are compatible with the server's overwrite upsert.
+
+Once idempotency is guaranteed, cursor-after-upload becomes safe:
+
+```
+sync+upload: parse → merge queue → upload dirty → SUCCESS → write cursors
+                                                → FAILURE → skip cursor write
+```
+
+Re-parsing + re-merging with an idempotent model produces the same values,
+so no double-counting occurs.
+
+### Phase 3: Cooldown Optimization
+
+> **Status: design only — implement after Phase 1 is validated.**
+
+**Goal:** Reduce the number of sync cycles from ~130 concurrent to ~48
+sequential runs per 4-hour window.
+
+**Prerequisite:** Phase 1 (lock works correctly).
+
+**Mechanism:** After a successful sync cycle, the lock holder writes a
+`last-sync-at` timestamp. The next notify process, after acquiring the lock,
+checks if the last sync was less than 5 minutes ago. If so, it skips sync
+and releases the lock.
 
 | Trigger | Cooldown check | Rationale |
 |---|---|---|
@@ -283,155 +488,52 @@ Try create lockfile (O_EXCL)
 
 **Why 5 minutes:** Token data is bucketed into 30-minute windows. A 5-minute
 sync interval means at most 6 syncs per bucket window — more than enough to
-capture all deltas while dramatically reducing contention. The previous
-behavior was ~130 concurrent processes in 4 hours; this reduces it to ~48
-sequential runs with zero contention.
+capture all deltas while dramatically reducing the number of sync cycles.
 
-**Lockfile details:**
-
-- Path: `~/.config/pew/sync.lock`
-- Content: `{ "pid": <number>, "startedAt": "<ISO>" }`
-- Created with `O_CREAT | O_EXCL | O_WRONLY` (atomic, fails if exists)
-- Stale detection: PID no longer running OR age > 5 minutes
-- Removed in `finally` block (crash leaves stale file → next run detects it)
-
-### Change 2: Unified Sync+Upload with Cursor-After-Upload
-
-**Problem:** The current architecture separates sync (write queue + cursor)
-from upload (read queue + send to server). This creates a window where cursors
-advance past data that hasn't been uploaded yet. If dirty keys are lost in
-that window, the data is never uploaded.
-
-**Solution:** Merge sync and upload into a single atomic sequence. Cursors are
-only persisted **after** upload succeeds:
-
-```
-  Parse deltas from source files
-    │
-    ▼
-  Merge into queue (queue.jsonl)
-    │
-    ▼
-  Upload dirty records to server
-    │
-    ├── SUCCESS → persist cursors + clear dirty keys
-    │
-    └── FAILURE → DO NOT persist cursors
-                  (next run re-parses same deltas → re-uploads → idempotent)
-```
-
-**Current flow (broken):**
-
-```
-sync:   parse → merge queue → write dirty keys → write cursors → done
-upload: read dirty keys → filter queue → send batches → clear dirty keys
-```
-
-Cursor advances at step 4 regardless of whether upload succeeds. If dirty keys
-are lost between steps 3 and upload, the data is orphaned — cursor has moved
-past it, dirty keys don't reference it, upload never sends it.
-
-**New flow:**
-
-```
-sync+upload: parse → merge queue → upload dirty → SUCCESS → write cursors
-                                                → FAILURE → skip cursor write
-```
-
-**Worst-case failure mode:** Upload succeeds but cursor write fails (crash
-between steps). Next run re-parses the same file segment, re-produces the same
-deltas, re-uploads. Server upsert (`ON CONFLICT DO UPDATE SET`) overwrites with
-identical values. **Slight redundant work, zero data loss.**
-
-**Applies to both triggers:**
-
-| Trigger | Behavior |
-|---|---|
-| `pew notify` | sync+upload (within lock + cooldown) |
-| `pew sync` | sync+upload (within lock, ignores cooldown) |
-
-This eliminates the distinction between "notify = sync only" and
-"sync = sync + upload". Every sync cycle completes the full pipeline.
-
-### Combined Flow
-
-```
-┌──────────────────────────────────────────────────────┐
-│  pew notify / pew sync                               │
-│                                                      │
-│  1. Acquire lockfile (O_EXCL)                        │
-│     └── fail → exit (another process is running)     │
-│                                                      │
-│  2. Check cooldown (notify only)                     │
-│     └── < 5 min since last sync → release lock, exit │
-│                                                      │
-│  3. Parse deltas from source files                   │
-│  4. Merge deltas into queue.jsonl                    │
-│  5. Compute dirty bucket keys                        │
-│                                                      │
-│  6. Upload dirty records to server                   │
-│     ├── success                                      │
-│     │   7a. Persist cursors                          │
-│     │   7b. Clear dirty keys                         │
-│     │   7c. Write last-sync timestamp                │
-│     └── failure                                      │
-│         7x. DO NOT persist cursors                   │
-│         (next run will re-parse + re-upload)         │
-│                                                      │
-│  8. Release lockfile                                 │
-└──────────────────────────────────────────────────────┘
-```
-
-### Failure Mode Analysis
-
-| Failure point | State after restart | Behavior |
-|---|---|---|
-| Crash after lock, before parse | Stale lockfile on disk | Next run detects stale PID, removes lockfile, proceeds normally |
-| Crash after queue merge, before upload | Queue has merged data, cursors not advanced | Next run re-parses same deltas, re-merges (idempotent SUM), uploads. Safe. |
-| Crash after upload success, before cursor write | Server has data, cursors stale | Next run re-parses, re-uploads. Server upsert overwrites with same values. Redundant but safe. |
-| Upload returns 5xx | Cursors not advanced, dirty keys preserved | Next run re-parses same segment, retries upload. Self-healing. |
-| Network timeout | Same as 5xx | Same recovery path. |
-
-**In every failure mode, the worst outcome is redundant re-upload. No data loss
-is possible.**
-
-### What Gets Removed
-
-The dirty-key intermediate state (`dirtyKeys` in `queue.state.json`) becomes
-unnecessary if cursors are only persisted after upload. However, keeping it
-provides an optimization: when the cooldown causes a notify to skip, the next
-run knows exactly which keys to upload without re-parsing.
-
-**Decision: keep `dirtyKeys` as an optimization, but it is no longer the
-source of truth for upload correctness.** Correctness is guaranteed by the
-cursor-after-upload invariant. Dirty keys only reduce redundant work.
+**Why this is Phase 3, not Phase 1:** Cooldown is a performance optimization,
+not a correctness fix. With Phase 1's working lock, concurrent notify processes
+are already serialized — the signal/follow-up protocol ensures data is not
+lost. The cooldown reduces redundant work but is not required for correctness.
 
 ## Files to Modify
 
+### Phase 1 (Fix the Lock)
+
 | File | Change |
 |---|---|
-| `packages/cli/src/notifier/coordinator.ts` | Replace `FileHandle.lock()` with O_EXCL lockfile; add 5-min cooldown check; add stale lock detection |
-| `packages/cli/src/commands/sync.ts` | Move cursor persistence to after upload confirmation |
-| `packages/cli/src/commands/notify.ts` | Add upload step (call upload engine after sync) |
-| `packages/cli/src/cli.ts` | Route manual `pew sync` through the same lock path (bypass cooldown) |
-| `packages/cli/src/commands/upload-engine.ts` | No change (dirty-key filtering still works) |
-| `packages/cli/src/storage/base-queue.ts` | No change |
-| New: `packages/cli/src/notifier/lockfile.ts` | O_EXCL lockfile implementation + stale detection |
-| `packages/cli/src/__tests__/coordinator.test.ts` | Update tests for new lock mechanism + cooldown |
-| `~/.config/pew/runs/*.json` | Run log evidence (existing, read-only) |
+| `packages/cli/src/notifier/coordinator.ts` | Replace `FileHandle.lock()` with O_EXCL lockfile; preserve signal/dedup semantics; add PID-based stale detection |
+| New: `packages/cli/src/notifier/lockfile.ts` | O_EXCL lockfile module: acquire, release, stale detection |
+| `packages/cli/src/__tests__/coordinator.test.ts` | Update lock acquisition tests; add stale PID tests |
+| New: `packages/cli/src/__tests__/lockfile.test.ts` | L1 tests for lockfile module |
+
+### Phase 2 (Idempotent Queue) — future
+
+| File | Change |
+|---|---|
+| `packages/cli/src/commands/sync.ts` | Replace SUM-based merge with snapshot overwrite or staged delta |
+| `packages/cli/src/commands/upload.ts` | Update `aggregateRecords()` if snapshot model is chosen |
+| `packages/cli/src/storage/base-queue.ts` | Add staging area if staged delta model is chosen |
+
+### Phase 3 (Cooldown) — future
+
+| File | Change |
+|---|---|
+| `packages/cli/src/notifier/coordinator.ts` | Add cooldown check after lock acquisition |
+| `packages/cli/src/commands/notify.ts` | Pass trigger kind to coordinator for cooldown bypass |
+| `packages/cli/src/cli.ts` | Ensure manual `pew sync` bypasses cooldown |
 
 ## Implementation Steps
 
-| # | Commit | Description | Status |
-|---|--------|-------------|--------|
-| 1 | `docs: add notify concurrency dirty-key loss investigation` | This document | done |
-| 2 | `test: add lockfile acquisition and stale detection tests` | L1 tests for new lock module | pending |
-| 3 | `feat: implement O_EXCL lockfile with stale detection` | New `lockfile.ts` module | pending |
-| 4 | `test: add cooldown logic tests` | L1 tests for 5-min cooldown | pending |
-| 5 | `feat: add 5-min cooldown to coordinator` | Cooldown check before sync | pending |
-| 6 | `test: add cursor-after-upload tests` | L1 tests for unified flow | pending |
-| 7 | `feat: unify sync+upload, persist cursors after upload` | Core fix — cursor-after-upload | pending |
-| 8 | `feat: add upload to notify path` | notify triggers sync+upload | pending |
-| 9 | `feat: route manual sync through lock` | pew sync uses lockfile (no cooldown) | pending |
-| 10 | `test: integration test for concurrent notify` | Simulate concurrent notify processes | pending |
-| 11 | `chore: remove FileHandle.lock() code path` | Clean up dead code | pending |
+| # | Phase | Commit | Description | Status |
+|---|-------|--------|-------------|--------|
+| 1 | — | `docs: add notify concurrency dirty-key loss investigation` | This document | done |
+| 2 | 1 | `test: add O_EXCL lockfile acquire/release/stale tests` | L1 tests for new lock module | pending |
+| 3 | 1 | `feat: implement O_EXCL lockfile with PID-based stale detection` | New `lockfile.ts` module | pending |
+| 4 | 1 | `test: update coordinator tests for O_EXCL lock` | Replace FileHandle.lock mock with lockfile mock | pending |
+| 5 | 1 | `feat: replace FileHandle.lock with O_EXCL lockfile in coordinator` | Core fix — working mutual exclusion | pending |
+| 6 | 1 | `test: integration test for concurrent notify serialization` | Simulate concurrent notify; verify dirty keys intact | pending |
+| 7 | 1 | `chore: remove FileHandle.lock code path` | Clean up dead code | pending |
+| 8 | 2 | — | Design decision: snapshot vs staged delta | future |
+| 9 | 2 | — | Implement idempotent token queue | future |
+| 10 | 2 | — | Cursor-after-upload (safe after idempotent queue) | future |
+| 11 | 3 | — | 5-minute cooldown optimization | future |
