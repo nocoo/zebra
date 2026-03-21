@@ -217,8 +217,11 @@ describe("route labels", () => {
       devices: "By Device",
       "manage-devices": "Devices",
       leaderboard: "Leaderboard",
+      admin: "Admin",
       seasons: "Seasons",
       storage: "Storage",
+      pricing: "Token Pricing",
+      invites: "Invite Codes",
     });
   });
 });
@@ -244,12 +247,30 @@ describe("breadcrumbsFromPathname", () => {
     ]);
   });
 
-  it("should return breadcrumbs for nested routes", () => {
+  it("should return breadcrumbs for nested admin routes with non-clickable Admin", () => {
     const crumbs = breadcrumbsFromPathname("/admin/pricing");
     expect(crumbs).toEqual([
       { label: "Home", href: "/dashboard" },
-      { label: "admin", href: "/admin" },
-      { label: "pricing" },
+      { label: "Admin" },
+      { label: "Token Pricing" },
+    ]);
+  });
+
+  it("should return breadcrumbs for /admin/seasons", () => {
+    const crumbs = breadcrumbsFromPathname("/admin/seasons");
+    expect(crumbs).toEqual([
+      { label: "Home", href: "/dashboard" },
+      { label: "Admin" },
+      { label: "Seasons" },
+    ]);
+  });
+
+  it("should return breadcrumbs for /admin/invites", () => {
+    const crumbs = breadcrumbsFromPathname("/admin/invites");
+    expect(crumbs).toEqual([
+      { label: "Home", href: "/dashboard" },
+      { label: "Admin" },
+      { label: "Invite Codes" },
     ]);
   });
 

@@ -94,9 +94,19 @@ export const ROUTE_LABELS: Record<string, string> = {
   devices: "By Device",
   "manage-devices": "Devices",
   leaderboard: "Leaderboard",
+  admin: "Admin",
   seasons: "Seasons",
   storage: "Storage",
+  pricing: "Token Pricing",
+  invites: "Invite Codes",
 };
+
+/**
+ * Segments that act as non-navigable group prefixes.
+ * They appear in breadcrumbs as plain text (no link) even when
+ * they are not the last segment.
+ */
+const NON_NAVIGABLE_SEGMENTS = new Set(["admin"]);
 
 export function breadcrumbsFromPathname(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
@@ -108,7 +118,8 @@ export function breadcrumbsFromPathname(pathname: string) {
     href += `/${seg}`;
     const isLast = i === segments.length - 1;
     const label = ROUTE_LABELS[seg] ?? seg.slice(0, 8);
-    items.push(isLast ? { label } : { label, href });
+    const nonNavigable = NON_NAVIGABLE_SEGMENTS.has(seg);
+    items.push(isLast || nonNavigable ? { label } : { label, href });
   }
 
   return items;
