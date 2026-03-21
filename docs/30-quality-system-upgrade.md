@@ -33,11 +33,11 @@
 
 ## Gap Analysis
 
-Audit date: 2026-03-22. Test count: 2,178 (127 files). Coverage: 93.7%.
+Audit date: 2026-03-22. Test count: 2,170 (127 files). Coverage: 93.81%.
 
 | Requirement | Current State | Gap | Action |
 |------------|--------------|-----|--------|
-| L1 Unit ≥90%, pre-commit | ✅ 2,178 tests, 90% threshold enforced in `vitest.config.ts` | None | — |
+| L1 Unit ≥90%, pre-commit | ✅ 2,170 tests, 90% threshold enforced in `vitest.config.ts` | None | — |
 | L2 Integration/API, pre-push | ✅ `scripts/run-e2e.ts` launches real Next.js server on :17030 | None | — |
 | L3 System/E2E (Playwright) | ❌ Runner `scripts/run-e2e-ui.ts` exists, 0 actual specs, Playwright not installed | Full layer missing | Commits 4–5 |
 | G1 `--max-warnings=0` | ⚠️ ESLint strict preset but no `--max-warnings=0` flag | Warnings silently pass | Commit 2 |
@@ -116,6 +116,11 @@ Create this document. Update `docs/README.md` index.
 brew install osv-scanner gitleaks
 ```
 
+> **osv-scanner version note**: `bun.lock` (text format, v2+) is supported since osv-scanner v2.
+> The older v1 docs only listed `package-lock.json`/`pnpm-lock.yaml`/`yarn.lock`.
+> Verify: `osv-scanner --version` should be ≥2.0. The old binary `bun.lockb` is NOT supported.
+> Ref: https://google.github.io/osv-scanner/supported-languages-and-lockfiles/
+
 **`package.json`** — add script:
 ```json
 "test:security": "osv-scanner --lockfile=bun.lock && gitleaks protect --staged --no-banner"
@@ -160,24 +165,27 @@ bun add -d @playwright/test
 npx playwright install chromium
 ```
 
-**`playwright.config.ts`** (new, project root):
+**Why `packages/web/e2e/playwright.config.ts`**: The existing runner `scripts/run-e2e-ui.ts:74`
+hardcodes `--config packages/web/e2e/playwright.config.ts`. The config file **must** live there
+to avoid changing the runner or creating a path mismatch. The runner already handles server
+lifecycle (start on :27030, cleanup on exit), so the config **omits** `webServer` — no duplicate
+server management.
+
+**`packages/web/e2e/playwright.config.ts`** (new):
 ```ts
 import { defineConfig } from "@playwright/test";
 
+const E2E_UI_PORT = process.env.E2E_UI_PORT || "27030";
+
 export default defineConfig({
-  testDir: "packages/web/e2e",
+  testDir: ".",
   timeout: 30_000,
   retries: 0,
   use: {
-    baseURL: "http://localhost:27030",
+    baseURL: `http://localhost:${E2E_UI_PORT}`,
     headless: true,
   },
-  webServer: {
-    command: "E2E_SKIP_AUTH=1 NEXT_DIST_DIR=.next-e2e PORT=27030 bun run --cwd packages/web dev",
-    port: 27030,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  // No webServer — scripts/run-e2e-ui.ts manages the dev server lifecycle.
 });
 ```
 
@@ -191,12 +199,12 @@ test("app loads and shows page title", async ({ page }) => {
 });
 ```
 
-**Verify**: `bunx playwright test` → 1 spec passes.
+**Verify**: `bun run test:e2e:ui` → runner starts server, 1 spec passes, cleanup.
 
 **Files**:
 - `package.json` (dep added)
 - `bun.lock`
-- `playwright.config.ts` (new)
+- `packages/web/e2e/playwright.config.ts` (new)
 - `packages/web/e2e/smoke.spec.ts` (new)
 - Add to `.gitignore`: `playwright-report/`, `test-results/`
 
@@ -204,14 +212,16 @@ test("app loads and shows page title", async ({ page }) => {
 
 ### Commit 5: `test: add L3 playwright core flow specs`
 
-Core user journeys:
+Core user journeys. All specs run under `E2E_SKIP_AUTH=true` (set by the runner),
+so auth is bypassed — the proxy passes all requests through and API routes return the
+deterministic `e2e-test-user-id`.
 
-**`packages/web/e2e/auth.spec.ts`**:
-- Login page renders (`/login` accessible)
-- Unauthenticated redirect works (visiting `/` redirects to `/login`)
+**`packages/web/e2e/auth.spec.ts`** — auth bypass validation:
+- With skip-auth, visiting `/dashboard` does NOT redirect to `/login` (proxy passes through)
+- With skip-auth, API calls return data for the test user (200, not 401)
 
 **`packages/web/e2e/dashboard.spec.ts`**:
-- Dashboard loads after auth bypass
+- Dashboard loads at `/dashboard`
 - Token usage chart container is visible
 - At least one data card is rendered
 
@@ -296,7 +306,7 @@ Append a "Verification Record" section to this document with actual results:
 
 ```bash
 # L1 Unit/Component
-bun run test:coverage            # ≥2,178 tests pass, coverage ≥90%
+bun run test:coverage            # ≥2,170 tests pass, coverage ≥90%
 
 # G1 Static Analysis
 bun run lint                     # 0 errors + 0 warnings
