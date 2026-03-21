@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.13.0
+
+### Features
+
+- **Worker Read Migration** — Migrated all D1 database reads from the Cloudflare REST API (`api.cloudflare.com`) to a dedicated `pew` Worker with native D1 bindings. Reduces read latency from ~50-150ms to ~15-30ms per query, eliminates REST API rate limit risk, and achieves a uniform Worker-based data layer.
+- **DbRead/DbWrite abstraction** — Extracted `DbRead` and `DbWrite` interfaces from the monolithic `D1Client`, enabling the read path to be swapped between REST API and Worker adapter via a single environment variable (`WORKER_READ_URL`).
+- **WorkerDbRead adapter** — HTTP adapter that sends read queries to the `pew` Worker. Auto-switches based on `WORKER_READ_URL` env var; absent → REST fallback (zero-downtime rollback).
+- **pew read Worker** — Cloudflare Worker (`packages/worker-read`) with native D1 binding, shared secret auth, SQL write-statement guard, and health check at `/api/live`. Custom domain: `pew.worker.hexly.ai`.
+
+### Fixes
+
+- **Typecheck for worker-read** — Fixed `CfProperties` vs `IncomingRequestCfProperties` type mismatch in worker tests; added `worker-read` to root `lint` and `lint:typecheck` scripts.
+- **Health check "ok" sanitization** — Read worker `/api/live` now strips "ok" from error messages (`.replace(/\bok\b/gi, "***")`), aligning with the existing monitoring convention.
+
+### Refactoring
+
+- **37 production files migrated** — All `getD1Client()` call sites replaced with `getDbRead()` / `getDbWrite()` pattern.
+- **25+ test files migrated** — All `vi.mock("@/lib/d1")` replaced with `vi.mock("@/lib/db")` using `mockResolvedValue` for async singleton.
+- **Worker routes standardized** — Changed `/live` → `/api/live` and `/query` → `/api/query` for consistency.
+
+### UI
+
+- **Season countdown** — Show countdown for active/upcoming seasons, static dates for ended.
+- **Shared SiteFooter** — Extracted common footer with GitHub link, fixed dead URLs.
+- **Header polish** — Reduced header title size, increased spacing, unified pill styles.
+
+### Docs
+
+- **Doc 29: Worker read migration plan** — Full migration design with 4 phases, route contracts, test matrix, security analysis, and architecture diagrams.
+
 ## v1.12.1
 
 ### Features
