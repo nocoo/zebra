@@ -145,6 +145,63 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
     );
   });
 
+  it("should pass ISO 8601 date bounds to aggregation queries", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    // Team aggregation
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
+    mockDbWrite.batch.mockResolvedValue([]);
+
+    await POST(makeRequest(), { params: routeParams });
+
+    // Team aggregation query: params[0]=fromDate, params[1]=toDate
+    const teamParams = mockDbRead.query.mock.calls[0]![1] as string[];
+    expect(teamParams[0]).toBe("2026-01-01T00:00:00.000Z");
+    // end_date 2026-01-31T23:59:00Z + 1 minute
+    expect(teamParams[1]).toBe("2026-02-01T00:00:00.000Z");
+  });
+
+  it("should use ISO 8601 format with T separator for snapshot date bounds (not space-separated)", async () => {
+    // Regression: space-separated dates cause SQLite to match all records on
+    // the boundary date, freezing wrong rankings into the snapshot permanently.
+    const SEASON_WITH_OFFSET = {
+      id: "season-1",
+      start_date: "2026-03-14T16:00:00Z",
+      end_date: "2026-03-21T15:59:00Z",
+    };
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.firstOrNull.mockResolvedValueOnce(SEASON_WITH_OFFSET);
+    mockDbRead.query.mockResolvedValueOnce({
+      results: [
+        {
+          team_id: "team-a",
+          total_tokens: 10000,
+          input_tokens: 6000,
+          output_tokens: 4000,
+          cached_input_tokens: 2000,
+        },
+      ],
+    });
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
+    mockDbWrite.batch.mockResolvedValue([]);
+
+    await POST(makeRequest(), { params: routeParams });
+
+    // Both team and member aggregation queries must use T-separated ISO format
+    const teamParams = mockDbRead.query.mock.calls[0]![1] as string[];
+    expect(teamParams[0]).toContain("T");
+    expect(teamParams[1]).toContain("T");
+    expect(teamParams[0]).not.toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:/);
+    expect(teamParams[1]).not.toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:/);
+    expect(teamParams[0]).toBe("2026-03-14T16:00:00.000Z");
+    expect(teamParams[1]).toBe("2026-03-21T16:00:00.000Z");
+
+    // Member aggregation query uses the same date bounds
+    const memberParams = mockDbRead.query.mock.calls[1]![1] as string[];
+    expect(memberParams[0]).toBe("2026-03-14T16:00:00.000Z");
+    expect(memberParams[1]).toBe("2026-03-21T16:00:00.000Z");
+  });
+
   it("should create member snapshots for all team members", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
