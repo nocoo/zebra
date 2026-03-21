@@ -1,6 +1,11 @@
 name = "pew-ingest"
 main = "src/index.ts"
 compatibility_date = "2026-03-01"
+workers_dev = true
+
+[[routes]]
+pattern = "pew-ingest.worker.hexly.ai"
+custom_domain = true
 
 [[d1_databases]]
 binding = "DB"
