@@ -431,32 +431,28 @@ eslint --max-warnings=0: 0 errors, 0 warnings
 .skip/.only ban: active (no-restricted-syntax rule in test files)
 ```
 
-### L2 Integration/API
+### L2 Integration/API ✅
 ```
-Status: not run in this session (requires dev server + D1 credentials)
+19 tests passed, 53 expect() calls, 13.39s
 Entry:  bun run test:e2e → scripts/run-e2e.ts → :17030
-Last known: passing (pre-existing, no changes to API routes)
+Note:   reads prod D1 via .env.local (all tests are read-only safe)
 ```
 
-### G2 Security
+### G2 Security ✅
 ```
-osv-scanner v2.3.4: FAIL — 15 known vulnerabilities in 5 packages
-  cookie 0.6.0 (fix: 0.7.0)
-  fast-xml-parser 5.4.1 (fix: 5.5.7)
-  flatted 3.4.1 (fix: 3.4.2)
-  next 16.1.6 (fix: 16.1.7)
-  undici 7.18.2 (fix: 7.24.0)
-  → These are pre-existing dependency CVEs, not regressions from this upgrade.
-  → Follow-up: dependency bump in a separate commit.
+osv-scanner v2.3.4: PASS — 0 vulnerabilities (661 packages scanned)
+  Fixed via: next 16.1.6→16.2.1, undici 7.18.2→7.24.5,
+  overrides: cookie→1.1.1, flatted→3.4.2, fast-xml-parser→5.5.8
 
-gitleaks v8.30.1: PASS — 10 commits scanned, no leaks found
+gitleaks v8.30.1: PASS — 12 commits scanned, no leaks found
 ```
 
-### L3 System/E2E
+### L3 System/E2E ✅
 ```
-Status: not run in this session (requires Playwright browser + dev server on :27030)
-Entry:  bun run test:e2e:ui → scripts/run-e2e-ui.ts → Playwright
+10 tests passed, 4 workers, 7.1s
+Entry:  bun run test:e2e:ui → scripts/run-e2e-ui.ts → Playwright on :27030
 Specs:  4 files (smoke.spec.ts, auth.spec.ts, dashboard.spec.ts, navigation.spec.ts)
+Note:   all specs are read-only (no writes to prod D1)
 ```
 
 ### Hooks
