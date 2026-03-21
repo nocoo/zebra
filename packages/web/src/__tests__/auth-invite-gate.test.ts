@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { DbRead, DbWrite } from "@/lib/db";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -23,20 +23,6 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  } as unknown as DbRead;
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  } as unknown as DbWrite;
-}
 
 function makeReq(cookies: Record<string, string> = {}): InviteGateRequest {
   return {

@@ -18,6 +18,7 @@ vi.mock("@/auth", () => ({
 }));
 
 import { POST } from "@/app/api/admin/seasons/[seasonId]/snapshot/route";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
@@ -27,20 +28,6 @@ const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeRequest(
   url = "http://localhost:7030/api/admin/seasons/season-1/snapshot"

@@ -23,6 +23,7 @@ vi.mock("@/auth", () => ({
 
 import { GET, POST } from "@/app/api/admin/seasons/route";
 import { PATCH } from "@/app/api/admin/seasons/[seasonId]/route";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
@@ -38,20 +39,6 @@ const { syncAllRostersForSeason } = (await import(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeRequest(
   method: string,

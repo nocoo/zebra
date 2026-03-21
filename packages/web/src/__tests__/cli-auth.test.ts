@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET, getPublicOrigin } from "@/app/api/auth/cli/route";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 // Mock db
@@ -22,20 +23,6 @@ vi.mock("@/lib/auth-helpers", () => ({
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeRequest(callback?: string, state?: string): Request {
   let url = "http://localhost:7030/api/auth/cli";

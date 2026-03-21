@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -18,20 +19,6 @@ import * as dbModule from "@/lib/db";
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
 };
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeJson(method: string, body?: unknown): Request {
   const opts: RequestInit = { method };

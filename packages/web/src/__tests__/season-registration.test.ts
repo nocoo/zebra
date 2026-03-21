@@ -18,6 +18,7 @@ vi.mock("@/auth", () => ({
 }));
 
 import { POST, DELETE } from "@/app/api/seasons/[seasonId]/register/route";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
@@ -27,20 +28,6 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeRequest(
   method: string,

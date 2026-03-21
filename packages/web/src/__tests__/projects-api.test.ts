@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -19,20 +20,6 @@ import * as dbModule from "@/lib/db";
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makePostRequest(body: unknown): Request {
   return new Request("http://localhost:7030/api/projects", {

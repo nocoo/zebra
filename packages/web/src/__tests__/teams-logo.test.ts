@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createMockDbRead, createMockDbWrite } from "./test-utils";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -39,20 +40,6 @@ const { putTeamLogo, deleteTeamLogoByUrl } = (await import("@/lib/r2")) as unkno
 };
 
 const sharp = (await import("sharp")).default as unknown as ReturnType<typeof vi.fn>;
-
-function createMockDbRead() {
-  return {
-    query: vi.fn(),
-    firstOrNull: vi.fn(),
-  };
-}
-
-function createMockDbWrite() {
-  return {
-    execute: vi.fn(),
-    batch: vi.fn(),
-  };
-}
 
 function makeParams(teamId = "t1") {
   return { params: Promise.resolve({ teamId }) };
