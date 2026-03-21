@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.14.1
+
+### Fixes
+
+- **Season date range query format mismatch** — Leaderboard and snapshot queries used space-separated date format (`2026-03-21 16:00:00`) to compare against `hour_start` values stored as ISO 8601 (`2026-03-21T16:00:00.000Z`). SQLite lexicographic comparison treats `T` (ASCII 84) > ` ` (ASCII 32), causing all records on the boundary date to match regardless of time. This leaked entire days of pre-season data into rankings — S01 frozen snapshot had wrong totals and swapped 2nd/3rd place.
+- **Admin breadcrumb 404** — The `admin` segment in breadcrumbs was lowercase and clickable, leading to a 404 page. Now displays as "Admin" (capitalized) and is non-clickable. Also added proper labels for all admin sub-pages (Token Pricing, Invite Codes, Seasons, Storage).
+
+### UI
+
+- **Season status column redesign** — Replaced cryptic `+reg`/`+roster`/`+wd` tags with polished UI: pulsing green dot for active seasons, clock icon for upcoming, check-circle for ended. Rules shown as bordered pills with descriptive icons. Active seasons show a progress bar with elapsed percentage and days remaining.
+
+### Refactoring
+
+- **Shared test utilities** — Extracted `createMockClient`, `createMockDbRead`, `createMockDbWrite`, and shared request builders into `test-utils.ts`. Migrated 41 test files to use shared mock factories, eliminating ~800 lines of duplicated mock setup.
+- **Pre-commit lint** — Moved ESLint from pre-push to pre-commit hook for faster feedback. Resolved 2 lint warnings for zero-warning policy. Removed dead lint-staged config.
+
 ## v1.14.0
 
 ### Refactoring
