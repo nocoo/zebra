@@ -31,25 +31,12 @@ vi.mock("@/lib/invite", async (importOriginal) => {
 });
 
 import { GET, POST, DELETE } from "@/app/api/admin/invites/route";
-import { createMockDbRead, createMockDbWrite } from "./test-utils";
+import { createMockDbRead, createMockDbWrite, makeJsonRequest } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
 };
-
-function makeRequest(
-  method: string,
-  url = "http://localhost:7030/api/admin/invites",
-  body?: unknown
-): Request {
-  const init: RequestInit = { method };
-  if (body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
-    init.body = JSON.stringify(body);
-  }
-  return new Request(url, init);
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -66,7 +53,7 @@ describe("GET /api/admin/invites", () => {
 
   it("should return 403 for non-admin", async () => {
     resolveAdmin.mockResolvedValueOnce(null);
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
     expect(res.status).toBe(403);
     const json = await res.json();
     expect(json.error).toBe("Forbidden");
@@ -91,7 +78,7 @@ describe("GET /api/admin/invites", () => {
     ];
     mockDbRead.query.mockResolvedValueOnce({ results: mockRows });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.rows).toEqual(mockRows);
@@ -112,7 +99,7 @@ describe("POST /api/admin/invites", () => {
 
   it("should return 403 for non-admin", async () => {
     resolveAdmin.mockResolvedValueOnce(null);
-    const res = await POST(makeRequest("POST", undefined, { count: 1 }));
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 1 }));
     expect(res.status).toBe(403);
   });
 
@@ -125,7 +112,7 @@ describe("POST /api/admin/invites", () => {
     mockDbRead.firstOrNull.mockResolvedValue(null);
     mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
 
-    const res = await POST(makeRequest("POST", undefined, { count: 3 }));
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 3 }));
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.codes).toHaveLength(3);
@@ -140,7 +127,7 @@ describe("POST /api/admin/invites", () => {
       userId: "admin-1",
       email: "admin@test.com",
     });
-    const res = await POST(makeRequest("POST", undefined, { count: 21 }));
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 21 }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("count must be at most 20");
@@ -151,7 +138,7 @@ describe("POST /api/admin/invites", () => {
       userId: "admin-1",
       email: "admin@test.com",
     });
-    const res = await POST(makeRequest("POST", undefined, { count: 0 }));
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 0 }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("count must be a positive integer");
@@ -173,7 +160,7 @@ describe("DELETE /api/admin/invites", () => {
   it("should return 403 for non-admin", async () => {
     resolveAdmin.mockResolvedValueOnce(null);
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=1")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=1")
     );
     expect(res.status).toBe(403);
   });
@@ -183,7 +170,7 @@ describe("DELETE /api/admin/invites", () => {
       userId: "admin-1",
       email: "admin@test.com",
     });
-    const res = await DELETE(makeRequest("DELETE"));
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/admin/invites"));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("id query parameter is required");
@@ -195,7 +182,7 @@ describe("DELETE /api/admin/invites", () => {
       email: "admin@test.com",
     });
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=1abc")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=1abc")
     );
     expect(res.status).toBe(400);
     const json = await res.json();
@@ -208,7 +195,7 @@ describe("DELETE /api/admin/invites", () => {
       email: "admin@test.com",
     });
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=-1")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=-1")
     );
     expect(res.status).toBe(400);
     const json = await res.json();
@@ -224,7 +211,7 @@ describe("DELETE /api/admin/invites", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=1")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=1")
     );
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -242,7 +229,7 @@ describe("DELETE /api/admin/invites", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=2")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=2")
     );
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -262,7 +249,7 @@ describe("DELETE /api/admin/invites", () => {
     });
 
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=3")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=3")
     );
     expect(res.status).toBe(409);
     const json = await res.json();
@@ -280,7 +267,7 @@ describe("DELETE /api/admin/invites", () => {
     mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
     const res = await DELETE(
-      makeRequest("DELETE", "http://localhost:7030/api/admin/invites?id=999")
+      makeJsonRequest("DELETE", "/api/admin/invites?id=999")
     );
     expect(res.status).toBe(404);
     const json = await res.json();

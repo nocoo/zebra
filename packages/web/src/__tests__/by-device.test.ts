@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/usage/by-device/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockClient, makeGetRequest } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -33,14 +33,6 @@ const { buildPricingMap } = (await import("@/lib/pricing")) as unknown as {
   buildPricingMap: ReturnType<typeof vi.fn>;
 };
 
-function makeRequest(params: Record<string, string> = {}): Request {
-  const url = new URL("http://localhost:7030/api/usage/by-device");
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-  return new Request(url.toString());
-}
-
 describe("GET /api/usage/by-device", () => {
   let mockClient: ReturnType<typeof createMockClient>;
 
@@ -54,7 +46,7 @@ describe("GET /api/usage/by-device", () => {
     it("should reject unauthenticated requests", async () => {
       vi.mocked(resolveUser).mockResolvedValueOnce(null);
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/usage/by-device"));
 
       expect(res.status).toBe(401);
       const body = await res.json();
@@ -151,7 +143,7 @@ describe("GET /api/usage/by-device", () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
       const res = await GET(
-        makeRequest({ from: "2026-03-01", to: "2026-03-11" })
+        makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" })
       );
 
       expect(res.status).toBe(200);
@@ -198,7 +190,7 @@ describe("GET /api/usage/by-device", () => {
       // Pricing DB query (no overrides)
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ from: "2026-03-01", to: "2026-03-11" }));
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
       const body = await res.json();
 
       expect(body.devices[0].estimated_cost).toBeTypeOf("number");
@@ -242,7 +234,7 @@ describe("GET /api/usage/by-device", () => {
       // Pricing DB query (no overrides)
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ from: "2026-03-01", to: "2026-03-11" }));
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
       const body = await res.json();
 
       expect(body.devices[0].alias).toBe("MacBook");
@@ -285,7 +277,7 @@ describe("GET /api/usage/by-device", () => {
       // Pricing DB query (no overrides)
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ from: "2026-01-01", to: "2026-03-01" }));
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-01-01", to: "2026-03-01" }));
       const body = await res.json();
 
       expect(body.devices).toHaveLength(1);
@@ -316,7 +308,7 @@ describe("GET /api/usage/by-device", () => {
       // Pricing DB query (no overrides)
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ from: "2026-03-01", to: "2026-03-11" }));
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
       const body = await res.json();
 
       expect(Array.isArray(body.devices[0].sources)).toBe(true);
@@ -328,7 +320,7 @@ describe("GET /api/usage/by-device", () => {
     it("should use default date range when params are missing", async () => {
       mockClient.query.mockResolvedValue({ results: [], meta: {} });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/usage/by-device"));
 
       expect(res.status).toBe(200);
       // Should have called query (not returned 400)
@@ -343,7 +335,7 @@ describe("GET /api/usage/by-device", () => {
     it("should return 500 on D1 error", async () => {
       mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/usage/by-device"));
 
       expect(res.status).toBe(500);
     });
@@ -403,7 +395,7 @@ describe("GET /api/usage/by-device", () => {
       });
 
       const res = await GET(
-        makeRequest({ from: "2026-03-01", to: "2026-03-11" })
+        makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" })
       );
       const body = await res.json();
 
@@ -461,7 +453,7 @@ describe("GET /api/usage/by-device", () => {
       );
 
       const res = await GET(
-        makeRequest({ from: "2026-03-01", to: "2026-03-11" })
+        makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" })
       );
       const body = await res.json();
 

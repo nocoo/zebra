@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createMockDbRead, createMockDbWrite } from "./test-utils";
+import { createMockDbRead, createMockDbWrite, makeJsonRequest } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 // ---------------------------------------------------------------------------
@@ -18,18 +18,6 @@ vi.mock("@/lib/auth-helpers", () => ({
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
-
-function makeRequest(
-  method: string,
-  body?: unknown,
-): Request {
-  const opts: RequestInit = { method };
-  if (body !== undefined) {
-    opts.body = JSON.stringify(body);
-    opts.headers = { "Content-Type": "application/json" };
-  }
-  return new Request("http://localhost:7030/api/settings", opts);
-}
 
 // ---------------------------------------------------------------------------
 // GET /api/settings
@@ -52,7 +40,7 @@ describe("GET /api/settings", () => {
   it("should reject unauthenticated requests with 401", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce(null);
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
 
     expect(res.status).toBe(401);
   });
@@ -65,7 +53,7 @@ describe("GET /api/settings", () => {
       is_public: 0,
     });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -76,7 +64,7 @@ describe("GET /api/settings", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
 
     expect(res.status).toBe(404);
   });
@@ -89,7 +77,7 @@ describe("GET /api/settings", () => {
       .mockRejectedValueOnce(new Error("no such column: nickname"))
       .mockResolvedValueOnce({ slug: "alice" });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -104,7 +92,7 @@ describe("GET /api/settings", () => {
       .mockRejectedValueOnce(new Error("no such column: nickname"))
       .mockResolvedValueOnce(null);
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
 
     expect(res.status).toBe(404);
   });
@@ -117,7 +105,7 @@ describe("GET /api/settings", () => {
       is_public: 1,
     });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -130,7 +118,7 @@ describe("GET /api/settings", () => {
       .mockRejectedValueOnce(new Error("no such column: is_public"))
       .mockResolvedValueOnce({ slug: "alice" });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -144,7 +132,7 @@ describe("GET /api/settings", () => {
       .mockRejectedValueOnce(new Error("no such column: is_public"))
       .mockResolvedValueOnce({ nickname: "Alice", slug: "alice" });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -159,7 +147,7 @@ describe("GET /api/settings", () => {
       .mockRejectedValueOnce(new Error("no such column: nickname"))
       .mockResolvedValueOnce({ slug: "alice" });
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -170,7 +158,7 @@ describe("GET /api/settings", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
 
-    const res = await GET(makeRequest("GET"));
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
 
     expect(res.status).toBe(500);
   });
@@ -202,7 +190,7 @@ describe("PATCH /api/settings", () => {
   it("should reject unauthenticated requests with 401", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce(null);
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "a" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "a" }));
 
     expect(res.status).toBe(401);
   });
@@ -225,7 +213,7 @@ describe("PATCH /api/settings", () => {
   it("should reject non-string nickname", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: 123 }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: 123 }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("nickname must be a string");
@@ -234,7 +222,7 @@ describe("PATCH /api/settings", () => {
   it("should reject nickname that is too long", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "a".repeat(33) }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "a".repeat(33) }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("1-32 characters");
@@ -243,7 +231,7 @@ describe("PATCH /api/settings", () => {
   it("should reject empty nickname string", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "" }));
 
     expect(res.status).toBe(400);
   });
@@ -253,7 +241,7 @@ describe("PATCH /api/settings", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
     mockDbRead.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: "alice", is_public: 0 });
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: null }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: null }));
 
     expect(res.status).toBe(200);
     expect(mockDbWrite.execute).toHaveBeenCalledOnce();
@@ -267,7 +255,7 @@ describe("PATCH /api/settings", () => {
   it("should reject non-string slug", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { slug: 42 }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: 42 }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("slug must be a string");
@@ -276,7 +264,7 @@ describe("PATCH /api/settings", () => {
   it("should reject slug shorter than 2 chars", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { slug: "a" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "a" }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("2-32 characters");
@@ -285,27 +273,27 @@ describe("PATCH /api/settings", () => {
   it("should reject slug longer than 32 chars", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { slug: "a".repeat(33) }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "a".repeat(33) }));
 
     expect(res.status).toBe(400);
   });
 
   it("should reject slug with uppercase or invalid chars", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    const res = await PATCH(makeRequest("PATCH", { slug: "Hello_World" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "Hello_World" }));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("lowercase alphanumeric");
   });
 
   it("should reject slug starting with hyphen", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    const res = await PATCH(makeRequest("PATCH", { slug: "-ab" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "-ab" }));
     expect(res.status).toBe(400);
   });
 
   it("should reject slug ending with hyphen", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    const res = await PATCH(makeRequest("PATCH", { slug: "ab-" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "ab-" }));
     expect(res.status).toBe(400);
   });
 
@@ -313,7 +301,7 @@ describe("PATCH /api/settings", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "other-user" });
 
-    const res = await PATCH(makeRequest("PATCH", { slug: "taken" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: "taken" }));
 
     expect(res.status).toBe(409);
     expect((await res.json()).error).toContain("already taken");
@@ -324,7 +312,7 @@ describe("PATCH /api/settings", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
     mockDbRead.firstOrNull.mockResolvedValueOnce({ nickname: "Alice", slug: null, is_public: 0 });
 
-    const res = await PATCH(makeRequest("PATCH", { slug: null }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { slug: null }));
 
     expect(res.status).toBe(200);
   });
@@ -332,7 +320,7 @@ describe("PATCH /api/settings", () => {
   it("should reject body with no valid fields", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { foo: "bar" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { foo: "bar" }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("No valid fields");
@@ -346,7 +334,7 @@ describe("PATCH /api/settings", () => {
       .mockResolvedValueOnce({ nickname: "Bob", slug: "bob", is_public: 0 }); // read-back
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "Bob", slug: "bob" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob", slug: "bob" }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -365,7 +353,7 @@ describe("PATCH /api/settings", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
     mockDbRead.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: null, is_public: 1 });
 
-    const res = await PATCH(makeRequest("PATCH", { is_public: true }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { is_public: true }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -380,7 +368,7 @@ describe("PATCH /api/settings", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
     mockDbRead.firstOrNull.mockResolvedValueOnce({ nickname: null, slug: null, is_public: 0 });
 
-    const res = await PATCH(makeRequest("PATCH", { is_public: false }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { is_public: false }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -392,7 +380,7 @@ describe("PATCH /api/settings", () => {
   it("should reject non-boolean is_public (string)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { is_public: "true" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { is_public: "true" }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("is_public must be a boolean");
@@ -401,7 +389,7 @@ describe("PATCH /api/settings", () => {
   it("should reject non-boolean is_public (number)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
 
-    const res = await PATCH(makeRequest("PATCH", { is_public: 1 }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { is_public: 1 }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("is_public must be a boolean");
@@ -415,7 +403,7 @@ describe("PATCH /api/settings", () => {
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await PATCH(
-      makeRequest("PATCH", { nickname: "Bob", slug: "bob", is_public: true }),
+      makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob", slug: "bob", is_public: true }),
     );
     const body = await res.json();
 
@@ -431,7 +419,7 @@ describe("PATCH /api/settings", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbWrite.execute.mockRejectedValueOnce(new Error("no such column: nickname"));
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "Bob" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob" }));
 
     expect(res.status).toBe(503);
     expect((await res.json()).error).toContain("migration pending");
@@ -441,7 +429,7 @@ describe("PATCH /api/settings", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 boom"));
 
-    const res = await PATCH(makeRequest("PATCH", { nickname: "Bob" }));
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob" }));
 
     expect(res.status).toBe(500);
   });

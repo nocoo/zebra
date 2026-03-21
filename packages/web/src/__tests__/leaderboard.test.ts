@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/leaderboard/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockClient, makeGetRequest } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -19,14 +19,6 @@ const { resolveAdmin } = (await import("@/lib/admin")) as unknown as {
   resolveAdmin: ReturnType<typeof vi.fn>;
 };
 
-function makeRequest(params: Record<string, string> = {}): Request {
-  const url = new URL("http://localhost:7030/api/leaderboard");
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-  return new Request(url.toString());
-}
-
 describe("GET /api/leaderboard", () => {
   let mockClient: ReturnType<typeof createMockClient>;
 
@@ -38,7 +30,7 @@ describe("GET /api/leaderboard", () => {
 
   describe("query params validation", () => {
     it("should reject invalid period", async () => {
-      const res = await GET(makeRequest({ period: "year" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { period: "year" }));
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -49,13 +41,13 @@ describe("GET /api/leaderboard", () => {
       for (const period of ["week", "month", "all"]) {
         mockClient.query
           .mockResolvedValueOnce({ results: [] })  // leaderboard query
-        const res = await GET(makeRequest({ period }));
+        const res = await GET(makeGetRequest("/api/leaderboard", { period }));
         expect(res.status).toBe(200);
       }
     });
 
     it("should reject limit < 1", async () => {
-      const res = await GET(makeRequest({ limit: "0" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { limit: "0" }));
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -63,13 +55,13 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should reject limit > 100", async () => {
-      const res = await GET(makeRequest({ limit: "200" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { limit: "200" }));
 
       expect(res.status).toBe(400);
     });
 
     it("should reject non-numeric limit", async () => {
-      const res = await GET(makeRequest({ limit: "abc" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { limit: "abc" }));
 
       expect(res.status).toBe(400);
     });
@@ -79,7 +71,7 @@ describe("GET /api/leaderboard", () => {
     it("should default to period=week and limit=50", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -127,7 +119,7 @@ describe("GET /api/leaderboard", () => {
           ],
         });
 
-      const res = await GET(makeRequest({ period: "month" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { period: "month" }));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -161,7 +153,7 @@ describe("GET /api/leaderboard", () => {
     it("should not include date filter for period=all", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest({ period: "all" }));
+      await GET(makeGetRequest("/api/leaderboard", { period: "all" }));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).not.toContain("ur.hour_start >= ?");
@@ -170,7 +162,7 @@ describe("GET /api/leaderboard", () => {
     it("should filter by is_public = 1", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest());
+      await GET(makeGetRequest("/api/leaderboard"));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).toContain("u.is_public = 1");
@@ -179,7 +171,7 @@ describe("GET /api/leaderboard", () => {
     it("should still require slug IS NOT NULL", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest());
+      await GET(makeGetRequest("/api/leaderboard"));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).toContain("u.slug IS NOT NULL");
@@ -188,7 +180,7 @@ describe("GET /api/leaderboard", () => {
     it("should pass limit to SQL", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest({ limit: "10" }));
+      await GET(makeGetRequest("/api/leaderboard", { limit: "10" }));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).toContain("LIMIT ?");
@@ -200,7 +192,7 @@ describe("GET /api/leaderboard", () => {
     it("should return 500 on D1 failure", async () => {
       mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
 
       expect(res.status).toBe(500);
       const body = await res.json();
@@ -212,7 +204,7 @@ describe("GET /api/leaderboard", () => {
     it("should add team JOIN when team param is provided", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ team: "team-abc" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       expect(res.status).toBe(200);
       const sqlCall = mockClient.query.mock.calls[0]!;
@@ -224,7 +216,7 @@ describe("GET /api/leaderboard", () => {
     it("should not include slug IS NOT NULL or is_public when team is set", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest({ team: "team-abc" }));
+      await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).not.toContain("u.slug IS NOT NULL");
@@ -238,7 +230,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such column: u.nickname"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
 
       expect(res.status).toBe(200);
       expect(mockClient.query).toHaveBeenCalledTimes(2);
@@ -255,7 +247,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such column: u.is_public"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
 
       expect(res.status).toBe(200);
       expect(mockClient.query).toHaveBeenCalledTimes(3);
@@ -270,7 +262,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such table: team_members"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ team: "t1" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "t1" }));
 
       expect(res.status).toBe(200);
       expect(mockClient.query).toHaveBeenCalledTimes(2);
@@ -279,7 +271,7 @@ describe("GET /api/leaderboard", () => {
     it("should re-throw non-column/table errors", async () => {
       mockClient.query.mockRejectedValueOnce(new Error("connection refused"));
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
 
       expect(res.status).toBe(500);
     });
@@ -303,7 +295,7 @@ describe("GET /api/leaderboard", () => {
         })
         .mockResolvedValueOnce({ results: [] }); // teams query
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].user.name).toBe("alice");
@@ -328,7 +320,7 @@ describe("GET /api/leaderboard", () => {
         })
         .mockResolvedValueOnce({ results: [] }); // teams query
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].user.name).toBe("Bob Jones");
@@ -339,7 +331,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such column: u.nickname"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ period: "month" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { period: "month" }));
 
       expect(res.status).toBe(200);
       const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
@@ -367,7 +359,7 @@ describe("GET /api/leaderboard", () => {
           ],
         });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -384,7 +376,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such column: u.nickname"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ team: "team-abc" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       expect(res.status).toBe(200);
       const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
@@ -399,7 +391,7 @@ describe("GET /api/leaderboard", () => {
         .mockRejectedValueOnce(new Error("no such table: team_members"))
         .mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ team: "t1" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "t1" }));
 
       expect(res.status).toBe(200);
       expect(mockClient.query).toHaveBeenCalledTimes(3);
@@ -414,7 +406,7 @@ describe("GET /api/leaderboard", () => {
       resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "a@b.com" });
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
 
       expect(res.status).toBe(200);
       const sqlCall = mockClient.query.mock.calls[0]!;
@@ -427,7 +419,7 @@ describe("GET /api/leaderboard", () => {
       resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "a@b.com" });
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest({ admin: "true" }));
+      await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       const sql = sqlCall[0] as string;
@@ -468,7 +460,7 @@ describe("GET /api/leaderboard", () => {
         ],
       });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
       const body = await res.json();
 
       expect(body.entries[0].user.is_public).toBe(true);
@@ -492,7 +484,7 @@ describe("GET /api/leaderboard", () => {
         ],
       });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].user).not.toHaveProperty("is_public");
@@ -502,7 +494,7 @@ describe("GET /api/leaderboard", () => {
       resolveAdmin.mockResolvedValueOnce(null);
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
 
       expect(res.status).toBe(200);
       const sqlCall = mockClient.query.mock.calls[0]!;
@@ -513,7 +505,7 @@ describe("GET /api/leaderboard", () => {
     it("should apply normal filters when admin param is not 'true'", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ admin: "false" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "false" }));
 
       expect(res.status).toBe(200);
       const sqlCall = mockClient.query.mock.calls[0]!;
@@ -527,7 +519,7 @@ describe("GET /api/leaderboard", () => {
       resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "a@b.com" });
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      await GET(makeRequest({ admin: "true" }));
+      await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
 
       const sqlCall = mockClient.query.mock.calls[0]!;
       expect(sqlCall[0]).toContain("u.is_public");
@@ -554,7 +546,7 @@ describe("GET /api/leaderboard", () => {
           ],
         });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -567,7 +559,7 @@ describe("GET /api/leaderboard", () => {
     it("should set cache headers for public leaderboard", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe(
@@ -579,7 +571,7 @@ describe("GET /api/leaderboard", () => {
       resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "a@b.com" });
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ admin: "true" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { admin: "true" }));
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe(
@@ -590,7 +582,7 @@ describe("GET /api/leaderboard", () => {
     it("should NOT set cache headers for team-scoped leaderboard", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest({ team: "team-abc" }));
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe(
@@ -618,7 +610,7 @@ describe("GET /api/leaderboard", () => {
         })
         .mockRejectedValueOnce(new Error("no such table: team_members"));
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -628,7 +620,7 @@ describe("GET /api/leaderboard", () => {
     it("should return empty teams array when no results", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(res.status).toBe(200);
@@ -657,7 +649,7 @@ describe("GET /api/leaderboard", () => {
           ],
         });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].teams).toEqual([{ id: "t1", name: "Eng", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/xyz.jpg" }]);

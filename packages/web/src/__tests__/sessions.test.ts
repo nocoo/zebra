@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockClient, makeGetRequest } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -17,14 +17,6 @@ vi.mock("@/lib/auth-helpers", () => ({
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
 };
-
-function makeRequest(params: Record<string, string> = {}): Request {
-  const url = new URL("http://localhost:7030/api/sessions");
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-  return new Request(url.toString());
-}
 
 describe("GET /api/sessions", () => {
   let GET: (req: Request) => Promise<Response>;
@@ -46,7 +38,7 @@ describe("GET /api/sessions", () => {
     it("should reject unauthenticated requests with 401", async () => {
       vi.mocked(resolveUser).mockResolvedValueOnce(null);
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
 
       expect(res.status).toBe(401);
       const body = await res.json();
@@ -69,7 +61,7 @@ describe("GET /api/sessions", () => {
     it("should query with default date range (last 30 days)", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
 
       expect(res.status).toBe(200);
       expect(mockClient.query).toHaveBeenCalledOnce();
@@ -85,7 +77,7 @@ describe("GET /api/sessions", () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
       const res = await GET(
-        makeRequest({ from: "2026-03-01", to: "2026-03-07" }),
+        makeGetRequest("/api/sessions", { from: "2026-03-01", to: "2026-03-07" }),
       );
 
       expect(res.status).toBe(200);
@@ -98,7 +90,7 @@ describe("GET /api/sessions", () => {
     it("should filter by source", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ source: "claude-code" }));
+      const res = await GET(makeGetRequest("/api/sessions", { source: "claude-code" }));
 
       expect(res.status).toBe(200);
       const [sql, params] = mockClient.query.mock.calls[0]!;
@@ -107,7 +99,7 @@ describe("GET /api/sessions", () => {
     });
 
     it("should reject invalid source filter", async () => {
-      const res = await GET(makeRequest({ source: "invalid-tool" }));
+      const res = await GET(makeGetRequest("/api/sessions", { source: "invalid-tool" }));
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -117,7 +109,7 @@ describe("GET /api/sessions", () => {
     it("should filter by kind", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest({ kind: "human" }));
+      const res = await GET(makeGetRequest("/api/sessions", { kind: "human" }));
 
       expect(res.status).toBe(200);
       const [sql, params] = mockClient.query.mock.calls[0]!;
@@ -126,7 +118,7 @@ describe("GET /api/sessions", () => {
     });
 
     it("should reject invalid kind filter", async () => {
-      const res = await GET(makeRequest({ kind: "invalid" }));
+      const res = await GET(makeGetRequest("/api/sessions", { kind: "invalid" }));
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -134,13 +126,13 @@ describe("GET /api/sessions", () => {
     });
 
     it("should reject invalid date format for from", async () => {
-      const res = await GET(makeRequest({ from: "not-a-date" }));
+      const res = await GET(makeGetRequest("/api/sessions", { from: "not-a-date" }));
 
       expect(res.status).toBe(400);
     });
 
     it("should reject invalid date format for to", async () => {
-      const res = await GET(makeRequest({ to: "xyz" }));
+      const res = await GET(makeGetRequest("/api/sessions", { to: "xyz" }));
 
       expect(res.status).toBe(400);
     });
@@ -191,7 +183,7 @@ describe("GET /api/sessions", () => {
         meta: {},
       });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -233,7 +225,7 @@ describe("GET /api/sessions", () => {
         meta: {},
       });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
       const body = await res.json();
 
       expect(body.summary).toBeDefined();
@@ -247,7 +239,7 @@ describe("GET /api/sessions", () => {
     it("should return empty records when no data", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
       const body = await res.json();
 
       expect(body.records).toEqual([]);
@@ -258,7 +250,7 @@ describe("GET /api/sessions", () => {
     it("should order by started_at DESC", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
 
       expect(res.status).toBe(200);
       const [sql] = mockClient.query.mock.calls[0]!;
@@ -269,7 +261,7 @@ describe("GET /api/sessions", () => {
     it("should return 500 on D1 error", async () => {
       mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
 
-      const res = await GET(makeRequest());
+      const res = await GET(makeGetRequest("/api/sessions"));
 
       expect(res.status).toBe(500);
       const body = await res.json();

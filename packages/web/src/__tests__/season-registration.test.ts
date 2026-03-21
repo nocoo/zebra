@@ -18,7 +18,7 @@ vi.mock("@/auth", () => ({
 }));
 
 import { POST, DELETE } from "@/app/api/seasons/[seasonId]/register/route";
-import { createMockDbRead, createMockDbWrite } from "./test-utils";
+import { createMockDbRead, createMockDbWrite, makeJsonRequest } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
@@ -28,19 +28,6 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function makeRequest(
-  method: string,
-  url = "http://localhost:7030/api/seasons/season-1/register",
-  body?: unknown
-): Request {
-  const init: RequestInit = { method };
-  if (body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
-    init.body = JSON.stringify(body);
-  }
-  return new Request(url, init);
-}
 
 const USER = { userId: "user-1", email: "user@test.com" };
 const regParams = Promise.resolve({ seasonId: "season-1" });
@@ -79,7 +66,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     // Batch write succeeds
     mockDbWrite.batch.mockResolvedValueOnce(undefined);
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(201);
@@ -113,7 +100,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       results: [{ user_id: "user-1" }, { user_id: "user-2" }],
     });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(409);
@@ -132,7 +119,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       allow_late_registration: 0,
     });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(400);
@@ -149,7 +136,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       allow_late_registration: 0,
     });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(400);
@@ -174,7 +161,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     });
     mockDbWrite.batch.mockResolvedValueOnce(undefined);
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(201);
@@ -189,7 +176,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       allow_late_registration: 1,
     });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(400);
@@ -203,7 +190,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
       .mockResolvedValueOnce({ role: "member" });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(403);
@@ -218,7 +205,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ role: "owner" })
       .mockResolvedValueOnce({ id: "existing-reg" });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(409);
@@ -230,7 +217,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     resolveUser.mockResolvedValueOnce(USER);
     mockDbRead.firstOrNull.mockResolvedValueOnce(null);
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(404);
@@ -239,7 +226,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
   it("should reject unauthenticated requests", async () => {
     resolveUser.mockResolvedValueOnce(null);
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(401);
@@ -260,7 +247,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     // Cleanup calls succeed
     mockDbWrite.execute.mockResolvedValue({ changes: 0, duration: 0.01 });
 
-    const res = await POST(makeRequest("POST", undefined, { team_id: "team-1" }), {
+    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(500);
@@ -311,7 +298,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ changes: 2, duration: 0.01 })
       .mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(200);
@@ -333,7 +320,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       allow_late_withdrawal: 0,
     });
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(400);
@@ -356,7 +343,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ changes: 1, duration: 0.01 })
       .mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(200);
@@ -373,7 +360,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       allow_late_withdrawal: 1,
     });
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(400);
@@ -387,7 +374,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
       .mockResolvedValueOnce({ role: "member" });
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(403);
@@ -400,7 +387,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
       .mockResolvedValueOnce({ role: "owner" })
       .mockResolvedValueOnce(null);
 
-    const res = await DELETE(makeRequest("DELETE", undefined, { team_id: "team-1" }), {
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
     });
     expect(res.status).toBe(404);
