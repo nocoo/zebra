@@ -68,7 +68,7 @@ CI / manual:
 
 ## Implementation — 8 Atomic Commits
 
-### Commit 1: `docs: add quality system upgrade plan (doc 30)`
+### Commit 1: `docs: add quality system upgrade plan (doc 30)` ✅
 
 Create this document. Update `docs/README.md` index.
 
@@ -78,7 +78,7 @@ Create this document. Update `docs/README.md` index.
 
 ---
 
-### Commit 2: `chore: upgrade G1 eslint to --max-warnings=0 and ban .skip/.only`
+### Commit 2: `chore: upgrade G1 eslint to --max-warnings=0 and ban .skip/.only` ✅
 
 **`package.json`** — lint script change:
 ```diff
@@ -109,7 +109,7 @@ Create this document. Update `docs/README.md` index.
 
 ---
 
-### Commit 3: `chore: add G2 security gate (osv-scanner + gitleaks)`
+### Commit 3: `chore: add G2 security gate (osv-scanner + gitleaks)` ✅
 
 **Prerequisites** (one-time manual install):
 ```bash
@@ -212,7 +212,7 @@ Pre-push hook delegates to the same `scripts/run-security.ts` — no duplicated 
 
 ---
 
-### Commit 4: `test: install playwright and configure for L3 E2E`
+### Commit 4: `test: install playwright and configure for L3 E2E` ✅
 
 ```bash
 bun add -d @playwright/test
@@ -295,7 +295,7 @@ test("app loads and shows page title", async ({ page }) => {
 
 ---
 
-### Commit 5: `test: add L3 playwright core flow specs`
+### Commit 5: `test: add L3 playwright core flow specs` ✅
 
 Core user journeys. All specs run under `E2E_SKIP_AUTH=true` (set by the runner),
 so auth is bypassed — the proxy passes all requests through and API routes return the
@@ -321,7 +321,7 @@ deterministic `e2e-test-user-id`.
 
 ---
 
-### Commit 6: `chore: update husky hooks to new quality system naming`
+### Commit 6: `chore: update husky hooks to new quality system naming` ✅
 
 **`.husky/pre-commit`** — comment updates:
 ```diff
@@ -355,7 +355,7 @@ deterministic `e2e-test-user-id`.
 
 ---
 
-### Commit 7: `docs: update CLAUDE.md to reference new quality system`
+### Commit 7: `docs: update CLAUDE.md to reference new quality system` ✅
 
 In `CLAUDE.md` → Key Conventions → Testing:
 
@@ -373,7 +373,7 @@ In `CLAUDE.md` → Key Conventions → Testing:
 
 ---
 
-### Commit 8: `docs: finalize doc 30 with verification record`
+### Commit 8: `docs: finalize doc 30 with verification record` ✅
 
 Append a "Verification Record" section to this document with actual results:
 - L1: test count, coverage %
@@ -414,4 +414,53 @@ sh .husky/pre-push               # L2+G2 pass
 
 ## Verification Record
 
-> Filled after all commits are applied. See commit 8.
+Verified: 2026-03-22
+
+### L1 Unit/Component ✅
+```
+Test Files  127 passed (127)
+Tests       2170 passed (2170)
+Coverage    93.82% statements | 90.62% branches | 98.14% functions | 93.82% lines
+Threshold   90% (all four metrics pass)
+```
+
+### G1 Static Analysis ✅
+```
+tsc --noEmit  ×5 packages: 0 errors
+eslint --max-warnings=0: 0 errors, 0 warnings
+.skip/.only ban: active (no-restricted-syntax rule in test files)
+```
+
+### L2 Integration/API
+```
+Status: not run in this session (requires dev server + D1 credentials)
+Entry:  bun run test:e2e → scripts/run-e2e.ts → :17030
+Last known: passing (pre-existing, no changes to API routes)
+```
+
+### G2 Security
+```
+osv-scanner v2.3.4: FAIL — 15 known vulnerabilities in 5 packages
+  cookie 0.6.0 (fix: 0.7.0)
+  fast-xml-parser 5.4.1 (fix: 5.5.7)
+  flatted 3.4.1 (fix: 3.4.2)
+  next 16.1.6 (fix: 16.1.7)
+  undici 7.18.2 (fix: 7.24.0)
+  → These are pre-existing dependency CVEs, not regressions from this upgrade.
+  → Follow-up: dependency bump in a separate commit.
+
+gitleaks v8.30.1: PASS — 10 commits scanned, no leaks found
+```
+
+### L3 System/E2E
+```
+Status: not run in this session (requires Playwright browser + dev server on :27030)
+Entry:  bun run test:e2e:ui → scripts/run-e2e-ui.ts → Playwright
+Specs:  4 files (smoke.spec.ts, auth.spec.ts, dashboard.spec.ts, navigation.spec.ts)
+```
+
+### Hooks
+```
+pre-commit: L1 Unit + G1 Static Analysis (renamed from four-layer)
+pre-push:   L2 Integration/API + G2 Security (renamed, G2 added)
+```
