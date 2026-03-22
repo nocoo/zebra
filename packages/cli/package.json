@@ -40,7 +40,6 @@
   },
   "dependencies": {
     "citty": "^0.1.0",
-    "consola": "^3.4.0",
     "picocolors": "^1.1.0"
   },
   "devDependencies": {

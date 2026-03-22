@@ -1,6 +1,6 @@
 import { defineCommand, showUsage } from "citty";
-import { consola } from "consola";
 import pc from "picocolors";
+import { log } from "./log.js";
 import { homedir } from "node:os";
 import type { Source } from "@pew/core";
 import { resolveDefaultPaths } from "./utils/paths.js";
@@ -35,8 +35,7 @@ function isDevMode(): boolean {
 
 /** Shared handler for corrupted JSONL lines in queue files */
 function handleCorruptLine(line: string, _error: unknown): void {
-  consola.warn(`  ${pc.yellow("Skipping corrupt queue line:")} ${pc.dim(line.slice(0, 80))}${line.length > 80 ? "…" : ""}`);
-}
+  log.warn(`${pc.yellow("Skipping corrupt queue line:")} ${pc.dim(line.slice(0, 80))}${line.length > 80 ? "…" : ""}`);}
 
 function isSource(value: string): value is Source {
   return [
@@ -57,7 +56,7 @@ if (isDevMode()) {
 
 // ---------------------------------------------------------------------------
 // Inline progress — TTY gets a single overwritten line, non-TTY is silent.
-// Warnings always print on their own line (consola.warn).
+// Warnings always print on their own line (log.warn).
 // ---------------------------------------------------------------------------
 
 const isTTY = process.stderr.isTTY === true;
@@ -104,7 +103,7 @@ function logSyncProgress(event: {
 
   if (event.phase === "warn" && event.message) {
     clearProgress();
-    consola.warn(`  ${pc.yellow(event.message)}`);
+    log.warn(pc.yellow(event.message));
   }
 }
 
@@ -131,7 +130,7 @@ function logSessionSyncProgress(event: {
 
   if (event.phase === "warn" && event.message) {
     clearProgress();
-    consola.warn(`  ${pc.yellow(event.message)}`);
+    log.warn(pc.yellow(event.message));
   }
 }
 
@@ -154,7 +153,8 @@ const syncCommand = defineCommand({
   },
   async run({ args }) {
     const paths = resolveDefaultPaths();
-    consola.start("Syncing token usage from AI coding tools...\n");
+    log.start("Syncing token usage from AI coding tools...");
+    log.blank();
 
     // Dynamic import: opencode-sqlite-db.ts uses platform SQLite bindings
     // (bun:sqlite or node:sqlite) which may not be available on older Node.js.
@@ -192,11 +192,11 @@ const syncCommand = defineCommand({
 
     // Token summary
     clearProgress();
-    consola.log("");
+    log.blank();
     if (result.totalDeltas === 0) {
-      consola.info("No new token usage found.");
+      log.info("No new token usage found.");
     } else {
-      consola.success(
+      log.success(
         `Synced ${pc.bold(String(result.totalDeltas))} new events → ${pc.bold(String(result.totalRecords))} queue records`,
       );
       const deltaParts: string[] = [];
@@ -208,7 +208,7 @@ const syncCommand = defineCommand({
       if (result.sources.vscodeCopilot > 0) deltaParts.push(`VSCode Copilot: ${result.sources.vscodeCopilot}`);
       if (result.sources.copilotCli > 0) deltaParts.push(`Copilot CLI: ${result.sources.copilotCli}`);
       if (deltaParts.length > 0) {
-        consola.info(`  ${pc.dim(deltaParts.join("  |  "))}`);
+        log.text(pc.dim(deltaParts.join("  |  ")));
       }
     }
 
@@ -223,12 +223,13 @@ const syncCommand = defineCommand({
     if (fs.vscodeCopilot > 0) scanParts.push(`VSCode Copilot: ${fs.vscodeCopilot}`);
     if (fs.copilotCli > 0) scanParts.push(`Copilot CLI: ${fs.copilotCli}`);
     if (scanParts.length > 0) {
-      consola.info(`  Files scanned: ${pc.dim(scanParts.join("  |  "))}`);
+      log.text(`Files scanned: ${pc.dim(scanParts.join("  |  "))}`);
     }
 
     // ---------- Session sync ----------
-    consola.log("");
-    consola.start("Syncing session statistics...\n");
+    log.blank();
+    log.start("Syncing session statistics...");
+    log.blank();
 
     const sessionResult = await executeSessionSync({
       stateDir: paths.stateDir,
@@ -248,9 +249,9 @@ const syncCommand = defineCommand({
     // Session summary
     clearProgress();
     if (sessionResult.totalSnapshots === 0) {
-      consola.info("No new sessions found.");
+      log.info("No new sessions found.");
     } else {
-      consola.success(
+      log.success(
         `Synced ${pc.bold(String(sessionResult.totalSnapshots))} sessions → ${pc.bold(String(sessionResult.totalRecords))} queue records`,
       );
       const sessParts: string[] = [];
@@ -260,7 +261,7 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.opencode > 0) sessParts.push(`OpenCode: ${sessionResult.sources.opencode}`);
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
       if (sessParts.length > 0) {
-        consola.info(`  ${pc.dim(sessParts.join("  |  "))}`);
+        log.text(pc.dim(sessParts.join("  |  ")));
       }
     }
 
@@ -273,7 +274,7 @@ const syncCommand = defineCommand({
     if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
     if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
     if (sessScanParts.length > 0) {
-      consola.info(`  Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
+      log.text(`Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
     }
 
     // Auto-upload if logged in
@@ -310,28 +311,28 @@ const statusCommand = defineCommand({
       onCorruptLine: handleCorruptLine,
     });
 
-    consola.log("");
-    consola.log(pc.bold("pew status"));
-    consola.log(pc.dim("─".repeat(40)));
-    consola.log(`  Tracked files:   ${pc.cyan(String(result.trackedFiles))}`);
-    consola.log(
-      `  Last sync:       ${result.lastSync ? pc.green(new Date(result.lastSync).toLocaleString()) : pc.dim("never")}`,
+    log.blank();
+    log.text(pc.bold("pew status"));
+    log.text(pc.dim("─".repeat(40)));
+    log.text(`Tracked files:   ${pc.cyan(String(result.trackedFiles))}`);
+    log.text(
+      `Last sync:       ${result.lastSync ? pc.green(new Date(result.lastSync).toLocaleString()) : pc.dim("never")}`,
     );
-    consola.log(
-      `  Pending upload:  ${result.pendingRecords > 0 ? pc.yellow(String(result.pendingRecords)) : pc.dim("0")} records`,
+    log.text(
+      `Pending upload:  ${result.pendingRecords > 0 ? pc.yellow(String(result.pendingRecords)) : pc.dim("0")} records`,
     );
 
     if (Object.keys(result.sources).length > 0) {
-      consola.log("");
-      consola.log(pc.bold("  Files by source:"));
+      log.blank();
+      log.text(pc.bold("Files by source:"));
       for (const [source, count] of Object.entries(result.sources).sort(([a], [b]) => a.localeCompare(b))) {
-        consola.log(`    ${pc.cyan(source.padEnd(14))} ${count}`);
+        log.text(`  ${pc.cyan(source.padEnd(14))} ${count}`);
       }
     }
 
     if (Object.keys(result.notifiers).length > 0) {
-      consola.log("");
-      consola.log(pc.bold("  Notifiers:"));
+      log.blank();
+      log.text(pc.bold("Notifiers:"));
       for (const [source, status] of Object.entries(result.notifiers).sort(([a], [b]) => a.localeCompare(b))) {
         const renderedStatus =
           status === "installed"
@@ -341,10 +342,10 @@ const statusCommand = defineCommand({
               : status === "outdated"
                 ? pc.yellow(status)
                 : pc.dim(status);
-        consola.log(`    ${pc.cyan(source.padEnd(14))} ${renderedStatus}`);
+        log.text(`  ${pc.cyan(source.padEnd(14))} ${renderedStatus}`);
       }
     }
-    consola.log("");
+    log.blank();
   },
 });
 
@@ -371,7 +372,7 @@ const loginCommand = defineCommand({
     const host = resolveHost(dev);
     const { exec } = await import("node:child_process");
 
-    consola.start("Opening browser for authentication...\n");
+    log.start("Opening browser for authentication...");
 
     const result = await executeLogin({
       configDir: paths.stateDir,
@@ -390,21 +391,21 @@ const loginCommand = defineCommand({
     });
 
     if (result.alreadyLoggedIn) {
-      consola.info(
+      log.info(
         `Already logged in. Use ${pc.cyan("pew login --force")} to re-authenticate.`,
       );
       return;
     }
 
     if (result.success) {
-      consola.success(
+      log.success(
         `Logged in as ${pc.bold(result.email ?? "unknown")}`,
       );
-      consola.info(
+      log.info(
         `Token saved to ${pc.dim(paths.stateDir + (dev ? "/config.dev.json" : "/config.json"))}`,
       );
     } else {
-      consola.error(`Login failed: ${result.error}`);
+      log.error(`Login failed: ${result.error}`);
       process.exitCode = 1;
     }
   },
@@ -429,7 +430,7 @@ const notifyCommand = defineCommand({
   },
   async run({ args }) {
     if (!args.source || !isSource(args.source)) {
-      consola.error(`Invalid source: ${String(args.source ?? "")}`);
+      log.error(`Invalid source: ${String(args.source ?? "")}`);
       process.exitCode = 1;
       return;
     }
@@ -471,16 +472,16 @@ const notifyCommand = defineCommand({
     });
 
     if (result.error) {
-      consola.warn(`notify finished with warning: ${result.error}`);
+      log.warn(`notify finished with warning: ${result.error}`);
     }
 
     for (const [i, cycle] of result.cycles.entries()) {
       const prefix = result.cycles.length > 1 ? `cycle ${i + 1}: ` : "";
       if (cycle.tokenSyncError) {
-        consola.warn(`${prefix}token sync failed: ${cycle.tokenSyncError}`);
+        log.warn(`${prefix}token sync failed: ${cycle.tokenSyncError}`);
       }
       if (cycle.sessionSyncError) {
-        consola.warn(`${prefix}session sync failed: ${cycle.sessionSyncError}`);
+        log.warn(`${prefix}session sync failed: ${cycle.sessionSyncError}`);
       }
     }
   },
@@ -507,7 +508,7 @@ const initCommand = defineCommand({
     const selectedSources =
       args.source && isSource(args.source) ? [args.source] : undefined;
     if (args.source && !selectedSources) {
-      consola.error(`Invalid source: ${args.source}`);
+      log.error(`Invalid source: ${args.source}`);
       process.exitCode = 1;
       return;
     }
@@ -520,20 +521,20 @@ const initCommand = defineCommand({
       sources: selectedSources,
     });
 
-    consola.log("");
-    consola.log(pc.bold(args.dryRun ? "pew init (dry run)" : "pew init"));
-    consola.log(`  pew binary: ${pc.cyan(result.pewBin)}`);
-    consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}`);
+    log.blank();
+    log.text(pc.bold(args.dryRun ? "pew init (dry run)" : "pew init"));
+    log.text(`pew binary: ${pc.cyan(result.pewBin)}`);
+    log.text(`notify.cjs: ${pc.dim(result.notifyHandler.path)}`);
     for (const hook of result.hooks) {
       const symbol = hook.changed ? pc.green("✓") : pc.dim("•");
-      consola.log(`  ${symbol} ${hook.source}  ${hook.detail}`);
+      log.text(`${symbol} ${hook.source}  ${hook.detail}`);
       if (hook.warnings?.length) {
         for (const warning of hook.warnings) {
-          consola.log(`    ${pc.yellow(warning)}`);
+          log.text(`  ${pc.yellow(warning)}`);
         }
       }
     }
-    consola.log("");
+    log.blank();
   },
 });
 
@@ -558,7 +559,7 @@ const uninstallCommand = defineCommand({
     const selectedSources =
       args.source && isSource(args.source) ? [args.source] : undefined;
     if (args.source && !selectedSources) {
-      consola.error(`Invalid source: ${args.source}`);
+      log.error(`Invalid source: ${args.source}`);
       process.exitCode = 1;
       return;
     }
@@ -571,20 +572,20 @@ const uninstallCommand = defineCommand({
       sources: selectedSources,
     });
 
-    consola.log("");
-    consola.log(pc.bold(args.dryRun ? "pew uninstall (dry run)" : "pew uninstall"));
-    consola.log(`  notify.cjs: ${pc.dim(result.notifyHandler.path)}  ${result.notifyHandler.detail}`);
-    consola.log(`  codex backup: ${pc.dim(result.codexBackup.path)}  ${result.codexBackup.detail}`);
+    log.blank();
+    log.text(pc.bold(args.dryRun ? "pew uninstall (dry run)" : "pew uninstall"));
+    log.text(`notify.cjs: ${pc.dim(result.notifyHandler.path)}  ${result.notifyHandler.detail}`);
+    log.text(`codex backup: ${pc.dim(result.codexBackup.path)}  ${result.codexBackup.detail}`);
     for (const hook of result.hooks) {
       const symbol = hook.changed ? pc.green("✓") : pc.dim("•");
-      consola.log(`  ${symbol} ${hook.source}  ${hook.detail}`);
+      log.text(`${symbol} ${hook.source}  ${hook.detail}`);
       if (hook.warnings?.length) {
         for (const warning of hook.warnings) {
-          consola.log(`    ${pc.yellow(warning)}`);
+          log.text(`  ${pc.yellow(warning)}`);
         }
       }
     }
-    consola.log("");
+    log.blank();
   },
 });
 
@@ -593,8 +594,8 @@ const uninstallCommand = defineCommand({
 // ---------------------------------------------------------------------------
 
 async function runUpload(stateDir: string, apiUrl: string, dev: boolean): Promise<void> {
-  consola.log("");
-  consola.start("Uploading tokens to dashboard...");
+  log.blank();
+  log.start("Uploading tokens to dashboard...");
 
   const uploadResult = await executeUpload({
     stateDir,
@@ -605,15 +606,13 @@ async function runUpload(stateDir: string, apiUrl: string, dev: boolean): Promis
     onCorruptLine: handleCorruptLine,
     onProgress(event) {
       if (event.phase === "uploading") {
-        consola.info(
-          `  ${pc.dim(`Batch ${event.batch}/${event.totalBatches}`)} (${event.message})`,
-        );
+        log.text(pc.dim(`Batch ${event.batch}/${event.totalBatches}`) + ` (${event.message})`);
       }
     },
   });
 
   if (!uploadResult.success && uploadResult.error?.match(/not logged in/i)) {
-    consola.info(
+    log.info(
       `Not logged in — skipping upload. Run ${pc.cyan("pew login")} to enable.`,
     );
     return;
@@ -621,26 +620,24 @@ async function runUpload(stateDir: string, apiUrl: string, dev: boolean): Promis
 
   if (uploadResult.success) {
     if (uploadResult.uploaded === 0) {
-      consola.info("No pending token records to upload.");
+      log.info("No pending token records to upload.");
     } else {
-      consola.success(
+      log.success(
         `Uploaded ${pc.bold(String(uploadResult.uploaded))} token records in ${uploadResult.batches} batch(es).`,
       );
     }
   } else {
-    consola.error(`Token upload failed: ${uploadResult.error}`);
+    log.error(`Token upload failed: ${uploadResult.error}`);
     if (uploadResult.uploaded > 0) {
-      consola.info(
-        `  ${pc.yellow(String(uploadResult.uploaded))} records uploaded before failure.`,
-      );
+      log.text(`${pc.yellow(String(uploadResult.uploaded))} records uploaded before failure.`);
     }
     process.exitCode = 1;
   }
 }
 
 async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean): Promise<void> {
-  consola.log("");
-  consola.start("Uploading sessions to dashboard...");
+  log.blank();
+  log.start("Uploading sessions to dashboard...");
 
   const uploadResult = await executeSessionUpload({
     stateDir,
@@ -651,9 +648,7 @@ async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean):
     onCorruptLine: handleCorruptLine,
     onProgress(event) {
       if (event.phase === "uploading") {
-        consola.info(
-          `  ${pc.dim(`Batch ${event.batch}/${event.totalBatches}`)} (${event.message})`,
-        );
+        log.text(pc.dim(`Batch ${event.batch}/${event.totalBatches}`) + ` (${event.message})`);
       }
     },
   });
@@ -665,18 +660,16 @@ async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean):
 
   if (uploadResult.success) {
     if (uploadResult.uploaded === 0) {
-      consola.info("No pending session records to upload.");
+      log.info("No pending session records to upload.");
     } else {
-      consola.success(
+      log.success(
         `Uploaded ${pc.bold(String(uploadResult.uploaded))} session records in ${uploadResult.batches} batch(es).`,
       );
     }
   } else {
-    consola.error(`Session upload failed: ${uploadResult.error}`);
+    log.error(`Session upload failed: ${uploadResult.error}`);
     if (uploadResult.uploaded > 0) {
-      consola.info(
-        `  ${pc.yellow(String(uploadResult.uploaded))} records uploaded before failure.`,
-      );
+      log.text(`${pc.yellow(String(uploadResult.uploaded))} records uploaded before failure.`);
     }
     process.exitCode = 1;
   }
@@ -689,7 +682,7 @@ const resetCommand = defineCommand({
   },
   async run() {
     const paths = resolveDefaultPaths();
-    consola.start("Resetting pew state...\n");
+    log.start("Resetting pew state...");
 
     const result = await executeReset({ stateDir: paths.stateDir });
 
@@ -698,17 +691,17 @@ const resetCommand = defineCommand({
 
     if (deleted.length > 0) {
       for (const f of deleted) {
-        consola.log(`  ${pc.green("✓")} ${f.file}`);
+        log.text(`${pc.green("✓")} ${f.file}`);
       }
     }
     if (skipped.length > 0) {
       for (const f of skipped) {
-        consola.log(`  ${pc.dim("•")} ${pc.dim(f.file)} (not found)`);
+        log.text(`${pc.dim("•")} ${pc.dim(f.file)} (not found)`);
       }
     }
 
-    consola.log("");
-    consola.success(
+    log.blank();
+    log.success(
       `Cleared ${deleted.length} state file(s). Run ${pc.cyan("pew sync")} to rebuild.`,
     );
   },
@@ -720,21 +713,19 @@ const updateCommand = defineCommand({
     description: "Update pew to the latest version from npm",
   },
   async run() {
-    consola.start(`Updating pew from v${CLI_VERSION}...\n`);
+    log.start(`Updating pew from v${CLI_VERSION}...`);
 
     const result = await executeUpdate({ currentVersion: CLI_VERSION });
 
     if (result.success) {
       if (result.output) {
-        consola.log(pc.dim(result.output));
+        log.text(pc.dim(result.output));
       }
-      consola.log("");
-      consola.success("pew has been updated to the latest version.");
+      log.blank();
+      log.success("pew has been updated to the latest version.");
     } else {
-      consola.error(`Update failed: ${result.error}`);
-      consola.info(
-        `  You can also update manually: ${pc.cyan("npm install -g @nocoo/pew@latest")}`,
-      );
+      log.error(`Update failed: ${result.error}`);
+      log.text(`You can also update manually: ${pc.cyan("npm install -g @nocoo/pew@latest")}`);
       process.exitCode = 1;
     }
   },
