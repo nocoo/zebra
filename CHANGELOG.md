@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.14.5
+
+### Quality
+
+- **D1 test isolation (Dimension D1)** — Created dedicated test Cloudflare resources (pew-db-test D1 database, pew-ingest-test and pew-test Workers) with a four-layer guard (existence, DB non-equality, Worker URL non-equality, `_test_marker` table). E2E runners automatically validate isolation before starting, preventing accidental writes to production D1. Completes the six-dimension quality system (L1+L2+L3+G1+G2+D1 = Tier S).
+
+### UI
+
+- **Landing page redesign** — Rewritten landing page to clarify that `pew init` installs auto-sync hooks. Added usage examples for `sync`, `reset`, and `update` commands. Fresher, more concise copy.
+- **Loading skeleton alignment** — Fixed skeleton loading states on 5 pages (Models, Devices, Projects, Sessions, Profile) that no longer matched their actual rendered layouts. Each skeleton now mirrors the real grid structure (stat cards, chart grids, tables) to eliminate layout shift.
+
 ## v1.14.4
 
 ### UI
