@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.14.4
+
+### UI
+
+- **Team button consistency** — Unified all team management buttons to icon+text format. Replaced the `Trash2` (trash can) icon on the member "leave team" button with `LogOut` — leaving a team is a departure, not a deletion. Added text labels to previously icon-only buttons (Leave/Delete/Remove/Details) and icons to previously text-only buttons (form Create/Join, season Register/Withdraw).
+
 ## v1.14.3
 
 ### UI
