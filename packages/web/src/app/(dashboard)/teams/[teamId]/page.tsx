@@ -19,6 +19,7 @@ import {
   type AvailableSeason,
 } from "@/hooks/use-season-registration";
 import { formatSeasonDate } from "@/lib/seasons";
+import { UserProfileDialog } from "@/components/user-profile-dialog";
 import type { SeasonStatus } from "@pew/core";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ import type { SeasonStatus } from "@pew/core";
 interface TeamMember {
   userId: string;
   name: string | null;
+  slug: string | null;
   image: string | null;
   role: string;
   joinedAt: string;
@@ -284,6 +286,15 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Profile dialog state
+  const [dialogMember, setDialogMember] = useState<TeamMember | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleMemberClick = useCallback((member: TeamMember) => {
+    setDialogMember(member);
+    setDialogOpen(true);
+  }, []);
+
   const fetchTeam = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -397,9 +408,15 @@ export default function TeamDetailPage() {
         </h2>
         <div className="space-y-1.5">
           {team.members.map((member) => (
-            <div
+            <button
               key={member.userId}
-              className="flex items-center gap-3 rounded-lg bg-secondary px-4 py-2.5"
+              onClick={() => member.slug && handleMemberClick(member)}
+              disabled={!member.slug}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg bg-secondary px-4 py-2.5 text-left transition-colors",
+                member.slug && "hover:bg-accent cursor-pointer",
+                !member.slug && "cursor-default",
+              )}
             >
               <Avatar className="h-7 w-7">
                 {member.image && <AvatarImage src={member.image} />}
@@ -422,7 +439,7 @@ export default function TeamDetailPage() {
               >
                 {member.role === "owner" ? "Owner" : "Member"}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       </section>
@@ -440,6 +457,18 @@ export default function TeamDetailPage() {
           </p>
           <SeasonRegistration teamId={team.id} />
         </section>
+      )}
+
+      {/* Profile dialog */}
+      {dialogMember && (
+        <UserProfileDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          slug={dialogMember.slug}
+          name={dialogMember.name}
+          image={dialogMember.image}
+          rangeMode="tabs"
+        />
       )}
     </div>
   );

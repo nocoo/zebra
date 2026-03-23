@@ -1,7 +1,11 @@
 /**
- * GET /api/users/[slug] — public profile data for a user.
+ * GET /api/users/[slug] — profile data for a user.
  *
- * No auth required. Returns user info + usage summary + records.
+ * Public profiles (is_public=1) are accessible without auth.
+ * Private profiles require the caller to be:
+ *   - an admin, OR
+ *   - a teammate of the target user, OR
+ *   - a participant in the same season as the target user
  *
  * Query params:
  *   days   — number of days to look back (default: 30, max: 365)
@@ -14,6 +18,8 @@
 
 import { NextResponse } from "next/server";
 import { getDbRead } from "@/lib/db";
+import { resolveUser } from "@/lib/auth-helpers";
+import { isAdmin } from "@/lib/admin";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -54,6 +60,68 @@ interface UsageRow {
   output_tokens: number;
   reasoning_output_tokens: number;
   total_tokens: number;
+}
+
+// ---------------------------------------------------------------------------
+// Authorization: bypass is_public
+// ---------------------------------------------------------------------------
+
+interface DbReadLike {
+  firstOrNull<T>(sql: string, params: unknown[]): Promise<T | null>;
+}
+
+/**
+ * Check whether the authenticated caller may view a non-public profile.
+ *
+ * Returns true if the caller is:
+ *   1. an admin, OR
+ *   2. on the same team as the target user, OR
+ *   3. in the same season as the target user (both via registered teams)
+ */
+async function canBypassPublic(
+  request: Request,
+  db: DbReadLike,
+  targetUserId: string,
+): Promise<boolean> {
+  const auth = await resolveUser(request);
+  if (!auth) return false;
+
+  // 1. Admin bypass
+  if (isAdmin(auth.email)) return true;
+
+  // 2. Teammate check — caller and target share at least one team
+  try {
+    const teammate = await db.firstOrNull<{ team_id: string }>(
+      `SELECT a.team_id
+       FROM team_members a
+       JOIN team_members b ON a.team_id = b.team_id
+       WHERE a.user_id = ? AND b.user_id = ?
+       LIMIT 1`,
+      [auth.userId, targetUserId],
+    );
+    if (teammate) return true;
+  } catch {
+    // team_members table may not exist — graceful fallthrough
+  }
+
+  // 3. Same-season check — both users belong to teams registered in the same season
+  try {
+    const sameSeason = await db.firstOrNull<{ season_id: string }>(
+      `SELECT st1.season_id
+       FROM season_teams st1
+       JOIN team_members tm1 ON st1.team_id = tm1.team_id
+       JOIN season_teams st2 ON st1.season_id = st2.season_id
+       JOIN team_members tm2 ON st2.team_id = tm2.team_id
+       WHERE tm1.user_id = ? AND tm2.user_id = ?
+       LIMIT 1`,
+      [auth.userId, targetUserId],
+    );
+    if (sameSeason) return true;
+  } catch {
+    // season_teams table may not exist — graceful fallthrough
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,9 +171,12 @@ export async function GET(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Return 404 if user is not public (don't leak existence)
+  // Return 404 if user is not public — unless caller has access
   if (hasIsPublicColumn && !user.is_public) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const allowed = await canBypassPublic(request, db, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
   }
 
   // 3. Parse query params

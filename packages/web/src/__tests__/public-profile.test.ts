@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/users/[slug]/route";
 import { generateMetadata } from "@/app/u/[slug]/page";
 import * as dbModule from "@/lib/db";
+import * as authHelpersModule from "@/lib/auth-helpers";
+import * as adminModule from "@/lib/admin";
 import { createMockClient } from "./test-utils";
 
 // Mock DB
@@ -9,6 +11,16 @@ vi.mock("@/lib/db", () => ({
   getDbRead: vi.fn(),
   getDbWrite: vi.fn(),
   resetDb: vi.fn(),
+}));
+
+// Mock auth helpers (resolveUser is called for non-public profile bypass check)
+vi.mock("@/lib/auth-helpers", () => ({
+  resolveUser: vi.fn(),
+}));
+
+// Mock admin helpers
+vi.mock("@/lib/admin", () => ({
+  isAdmin: vi.fn(),
 }));
 
 function makeRequest(
@@ -34,6 +46,9 @@ describe("GET /api/users/[slug]", () => {
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
       mockClient as any,
     );
+    // Default: unauthenticated caller (public access)
+    vi.mocked(authHelpersModule.resolveUser).mockResolvedValue(null);
+    vi.mocked(adminModule.isAdmin).mockReturnValue(false);
   });
 
   describe("slug validation", () => {
@@ -316,6 +331,8 @@ describe("generateMetadata for /u/[slug]", () => {
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
       mockClient as any,
     );
+    vi.mocked(authHelpersModule.resolveUser).mockResolvedValue(null);
+    vi.mocked(adminModule.isAdmin).mockReturnValue(false);
   });
 
   it("should include user name in title when is_public = 1", async () => {

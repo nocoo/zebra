@@ -56,17 +56,18 @@ export async function GET(
     }
 
     // Get members — try with nickname, fall back without
-    let members: { results: { user_id: string; name: string | null; nickname: string | null; image: string | null; role: string; joined_at: string }[] };
+    let members: { results: { user_id: string; name: string | null; nickname: string | null; slug: string | null; image: string | null; role: string; joined_at: string }[] };
     try {
       members = await dbRead.query<{
         user_id: string;
         name: string | null;
         nickname: string | null;
+        slug: string | null;
         image: string | null;
         role: string;
         joined_at: string;
       }>(
-        `SELECT tm.user_id, u.name, u.nickname, u.image, tm.role, tm.joined_at
+        `SELECT tm.user_id, u.name, u.nickname, u.slug, u.image, tm.role, tm.joined_at
          FROM team_members tm
          JOIN users u ON u.id = tm.user_id
          WHERE tm.team_id = ?
@@ -91,7 +92,7 @@ export async function GET(
           [teamId],
         );
         members = {
-          results: fallback.results.map((m) => ({ ...m, nickname: null })),
+          results: fallback.results.map((m) => ({ ...m, nickname: null, slug: null })),
         };
       } else {
         throw innerErr;
@@ -121,6 +122,7 @@ export async function GET(
       members: members.results.map((m) => ({
         userId: m.user_id,
         name: m.nickname ?? m.name,
+        slug: m.slug,
         image: m.image,
         role: m.role,
         joinedAt: m.joined_at,
