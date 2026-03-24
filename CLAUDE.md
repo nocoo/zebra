@@ -63,14 +63,12 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 bun packages/cli/dist/bin.js sync --dev
 
 CLI package `@nocoo/pew` is published to npm. Steps:
 
-1. **Bump version** — `bun run scripts/bump-version.ts <version|patch|minor|major>` (updates all 10 files: 6 `package.json` + 4 source constants)
+1. **Release** — `bun run release` (or `bun run release -- minor|major|x.y.z`). This bumps version across all 10 files (6 `package.json` + 4 source constants), syncs lockfile, generates CHANGELOG, verifies no stale versions remain, commits, and interactively pushes + tags + creates GitHub release. Use `--dry-run` to preview.
 2. **Build** — `bun install && bun run build`
 3. **Test** — `bun run test`
 4. **Dry-run** — `npm publish --dry-run` in `packages/cli/`
 5. **Publish** — `npm publish` in `packages/cli/`
 6. **Verify** — `npx @nocoo/pew@latest --help`
-7. **Commit & push** — Triggers Railway auto-deploy for web
-8. **Tag & release** — `git tag vX.Y.Z && git push origin vX.Y.Z`
 
 ## Retrospective
 
