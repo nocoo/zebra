@@ -1,45 +1,155 @@
-# pew
+<p align="center"><img src="logo.png" width="128" height="128"/></p>
 
-Show your tokens — the contribution graph for AI-native developers.
+<h1 align="center">pew</h1>
 
-## Testing & Git Hooks
+<p align="center"><strong>AI 编程工具的 contribution graph</strong><br>追踪 token 用量 · 可视化消耗趋势 · 排行榜竞技</p>
 
-### Prerequisites
+[![npm](https://img.shields.io/npm/v/@nocoo/pew)](https://www.npmjs.com/package/@nocoo/pew)
+[![Node](https://img.shields.io/node/v/@nocoo/pew)](https://nodejs.org/)
+[![License](https://img.shields.io/github/license/nocoo/pew)](LICENSE)
 
-- [Bun](https://bun.sh/) (package manager + runtime)
-- Run `bun install` at the repo root — this triggers `husky` via the `prepare` script, which sets up git hooks automatically.
+---
 
-### Test & Lint Scripts
+## 这是什么
 
-| Script | What it does |
-|--------|-------------|
-| `bun run test` | Run all unit tests (Vitest) |
-| `bun run test:coverage` | Run unit tests with V8 coverage — fails if below 90% threshold |
-| `bun run test:watch` | Run tests in watch mode |
-| `bun run lint` | Full lint: TypeScript strict type check (4 packages) + ESLint |
-| `bun run lint:typecheck` | TypeScript type check only (no ESLint) |
-| `bun run test:e2e` | L3 API E2E tests (starts server on port 17030) |
-| `bun run test:e2e:ui` | L4 BDD E2E tests via Playwright (port 27030) |
+pew 自动从本地 AI 编程工具的日志文件中提取 token 用量数据，聚合后上传至 SaaS 仪表盘，帮你了解每天在 AI 辅助编程上花了多少 token。类似于 GitHub 的 contribution graph，但计数单位是 token 而非 commit。
 
-### Git Hooks (Husky v9)
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Local AI Tool Logs (read-only)                                  │
+│  Claude Code · Codex · Gemini CLI · OpenCode · OpenClaw          │
+│  VS Code Copilot · GitHub Copilot CLI                            │
+└───────────────┬──────────────────────────────────────────────────┘
+                │  pew sync (incremental parse)
+                ▼
+       ParsedDelta[] → 30-min bucket aggregation → QueueRecord[]
+                │
+                │  upload (idempotent upsert)
+                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  SaaS Dashboard                                                  │
+│  仪表盘 · 模型分析 · 设备追踪 · 会话统计 · 排行榜 · 赛季       │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-Hooks are checked into `.husky/` and shared across the team. After `bun install`, they activate automatically.
+## 功能
 
-| Hook | Runs | Purpose |
-|------|------|---------|
-| **pre-commit** | `bun run test:coverage` | Unit tests + 90% coverage threshold. Blocks commit on failure. |
-| **pre-push** | `bun run test:coverage` → `bun run lint` → `bun run test:e2e` | Full quality gate: UT + coverage + TypeScript + ESLint + API E2E. Catches issues from remote merges that bypassed pre-commit. |
+**Token 追踪**
 
-### Coverage Policy
+- **7 种 AI 工具** — Claude Code、Codex CLI、Gemini CLI、OpenCode、OpenClaw、VS Code Copilot、GitHub Copilot CLI
+- **四维 token 计数** — 输入 token、缓存命中 token、输出 token、推理 token
+- **增量同步** — 基于字节偏移/数组索引/时间水位的增量解析，不重复计数
+- **幂等上传** — 服务端 upsert 语义，重复上传不会导致数据膨胀
 
-- **Target: 90%** on statements, branches, functions, and lines.
-- Coverage thresholds are enforced in `vitest.config.ts` and checked on every commit.
-- Modules that are impractical to unit test (React hooks, NextAuth config, middleware, Cloudflare R2 client) are excluded from coverage and covered by E2E tests instead.
-- If a module is hard to test, prefer extracting testable logic into pure functions rather than lowering the threshold.
+**SaaS 仪表盘**
 
-### Lint Policy
+- **多维分析** — 按小时/天、按模型、按设备、按项目查看用量
+- **会话统计** — 消息数、持续时长、工具调用等会话级指标
+- **排行榜** — 公开排行榜 + 赛季系统，与其他开发者比拼
+- **团队协作** — 创建团队，汇总成员用量
 
-- **Zero errors, zero warnings** enforced.
-- TypeScript: `strict: true` + `noUnusedLocals` + `noUnusedParameters` across all packages.
-- ESLint: `typescript-eslint/strict` + `react-hooks/recommended` + `@next/next/recommended`.
-- Individual cases may be suppressed with `eslint-disable-next-line` when justified (with a comment explaining why).
+**自动化**
+
+- **通知钩子** — `pew init` 一键安装，AI 工具会话结束后自动触发同步
+- **只读设计** — 绝不修改用户的 AI 工具原始日志文件
+
+## 安装
+
+```bash
+npm install -g @nocoo/pew
+```
+
+## 命令一览
+
+| 命令 | 说明 |
+|------|------|
+| `pew sync` | 解析本地 AI 工具用量并上传到仪表盘 |
+| `pew status` | 显示同步状态和 token 用量摘要 |
+| `pew login` | 通过浏览器 OAuth 连接仪表盘 |
+| `pew init` | 为已支持的 AI 工具安装通知钩子 |
+| `pew uninstall` | 移除通知钩子 |
+| `pew reset` | 清除所有同步/上传状态，准备全量重扫 |
+| `pew update` | 从 npm 更新到最新版本 |
+
+## 项目结构
+
+```
+pew/
+├── packages/
+│   ├── core/           # 共享 TypeScript 类型 (@pew/core)
+│   ├── cli/            # CLI 工具 (@nocoo/pew, published to npm)
+│   ├── web/            # SaaS 仪表盘 (Next.js 16 + App Router)
+│   ├── worker/         # Cloudflare Worker — D1 写入
+│   └── worker-read/    # Cloudflare Worker — D1 读取
+├── docs/               # 设计文档与架构决策记录
+├── scripts/            # 发布、E2E、安全扫描脚本
+└── .husky/             # Git hooks (pre-commit, pre-push)
+```
+
+## 技术栈
+
+| 层 | 技术 |
+|----|------|
+| 运行时 & 包管理 | [Bun](https://bun.sh/) |
+| CLI 框架 | [citty](https://github.com/unjs/citty) + [picocolors](https://github.com/alexeyraspopov/picocolors) |
+| Web 框架 | [Next.js 16](https://nextjs.org/) (App Router) |
+| UI | [React 19](https://react.dev/) + [Tailwind CSS 4](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/) + [Recharts](https://recharts.org/) |
+| 认证 | [NextAuth.js v5](https://authjs.dev/) (Google OAuth) |
+| 数据库 | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite) |
+| 边缘计算 | [Cloudflare Workers](https://workers.cloudflare.com/) |
+| 类型系统 | [TypeScript](https://www.typescriptlang.org/) (strict mode) |
+
+## 开发
+
+**环境要求**: [Bun](https://bun.sh/) ≥ 1.0, [Node.js](https://nodejs.org/) ≥ 18
+
+```bash
+# 安装依赖（自动配置 Git hooks）
+bun install
+
+# 构建所有包
+bun run build
+
+# 启动 Web 开发服务器 (port 7030)
+bun run dev
+```
+
+| 命令 | 说明 |
+|------|------|
+| `bun run build` | 构建所有包 (core → cli → web → worker) |
+| `bun run dev` | 启动 Web 开发服务器 |
+| `bun run test` | 运行单元测试 (Vitest) |
+| `bun run test:coverage` | 单元测试 + V8 覆盖率（≥ 90% 阈值） |
+| `bun run lint` | TypeScript 类型检查 (5 packages) + ESLint |
+| `bun run test:e2e` | L2 API E2E 测试 (port 17030) |
+| `bun run test:e2e:ui` | L3 BDD E2E 测试 via Playwright (port 27030) |
+| `bun run test:security` | 安全扫描 |
+| `bun run release` | 版本发布（bump + changelog + tag） |
+
+## 测试
+
+| 层级 | 内容 | 工具 | 触发时机 |
+|------|------|------|----------|
+| L1 Unit | 业务逻辑、解析器、工具函数 | Vitest | pre-commit |
+| L2 API E2E | HTTP 端到端、Worker 集成 | bun:test | pre-push |
+| L3 BDD E2E | 浏览器端用户流程 | Playwright | pre-push |
+| G1 Static | TypeScript strict + ESLint `--max-warnings=0` | tsc + ESLint | pre-push |
+| G2 Security | 依赖审计 + 自定义安全规则 | scripts/run-security.ts | 手动 |
+
+覆盖率目标 90%（statements / branches / functions / lines），每次 commit 强制检查。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [docs/01-plan.md](docs/01-plan.md) | 初始规划 |
+| [docs/03-data-pipeline.md](docs/03-data-pipeline.md) | 数据管线架构 |
+| [docs/04-sync-resilience.md](docs/04-sync-resilience.md) | 同步容错机制 |
+| [docs/05-token-accounting.md](docs/05-token-accounting.md) | Token 计量规则 |
+| [docs/06-session-statistics.md](docs/06-session-statistics.md) | 会话统计设计 |
+| [docs/18-season-system.md](docs/18-season-system.md) | 赛季系统 |
+| [docs/30-quality-system-upgrade.md](docs/30-quality-system-upgrade.md) | 质量体系 |
+
+## License
+
+[MIT](LICENSE) © 2026
