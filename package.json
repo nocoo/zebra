@@ -42,6 +42,8 @@
   "overrides": {
     "cookie": "^1.1.1",
     "flatted": "^3.4.2",
-    "fast-xml-parser": "^5.5.8"
+    "fast-xml-parser": "^5.5.8",
+    "picomatch": "^4.0.4",
+    "yaml": "^2.8.3"
   }
 }
