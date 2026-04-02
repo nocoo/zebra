@@ -270,7 +270,7 @@ export default function DashboardPage() {
                 icon={DollarSign}
                 iconColor="text-chart-6"
                 trends={mom ? [
-                  ...(mom.previousMonthSameDate.cost > 0 && mom.previousMonthSameDate.tokens !== mom.previousMonth.tokens
+                  ...(mom.previousMonthSameDate.cost > 0 && mom.previousMonthSameDate.cost !== mom.previousMonth.cost
                     ? [{ value: -Math.round(mom.sameDateCostGrowth), label: "vs same period" }]
                     : []),
                   ...(mom.previousMonth.cost > 0
