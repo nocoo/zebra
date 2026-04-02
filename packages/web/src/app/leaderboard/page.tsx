@@ -403,7 +403,7 @@ export default function LeaderboardPage() {
           </span>
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Who&apos;s burning the most tokens?
+          Join the ultimate AI token horse race today.
         </p>
       </PageHeader>
 
