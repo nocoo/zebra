@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.15.1
+
+### Added
+- Add same-period month comparison to dashboard stat cards (#23)
+
+### Fixed
+- Use cost field for cost growth comparison condition
+
 ## v1.15.0
 
 ### Added
