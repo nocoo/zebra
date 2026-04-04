@@ -283,7 +283,7 @@
  * Custom utilities
  */
 @utility font-display {
-  font-family: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
+  font-family: var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
 }
 
 @utility font-handwriting {
