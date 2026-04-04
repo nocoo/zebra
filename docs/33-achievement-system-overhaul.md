@@ -194,6 +194,15 @@ Clicking opens the achievements page.
 
 Returns all achievement definitions + current user's progress.
 
+**Query Parameters**:
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tzOffset` | number | No | Client's timezone offset in minutes (e.g., `-480` for UTC+8). Used for `weekend-warrior`, `night-owl`, `early-bird`. Defaults to `0` (UTC) if omitted. |
+
+**Notes**:
+- Timezone-dependent achievements (`weekend-warrior`, `night-owl`, `early-bird`) always return `earnedBy: []` and `totalEarned: 0` regardless of the user's actual progress — see Decision 5
+- Frontend should always pass `new Date().getTimezoneOffset()` to get accurate personal progress for these achievements
+
 ```typescript
 interface AchievementResponse {
   achievements: Array<{
@@ -209,7 +218,7 @@ interface AchievementResponse {
     displayValue: string;
     displayThreshold: string;
     unit: string;
-    // Social data
+    // Social data (empty for timezone-dependent achievements)
     earnedBy: Array<{
       id: string;
       name: string;
@@ -266,10 +275,11 @@ interface AchievementMembersResponse {
 1. Create `GET /api/achievements/[id]/members` route:
    - Paginated list of users who earned the achievement
    - Compute approximate `earnedAt` from historical data
+   - Return 404 for timezone-dependent achievements (`weekend-warrior`, `night-owl`, `early-bird`)
 2. Add achievement-specific SQL queries:
-   - Time-of-day achievements (night-owl, early-bird): filter by UTC hour
    - Session-based achievements: aggregate from `session_records`
    - Diversity achievements: `COUNT(DISTINCT ...)` queries
+   - **Exclude** timezone-dependent achievements from social queries (no `earnedBy`, no members endpoint)
 3. Integration tests with real D1 data
 
 ### Phase 3: Achievements Page
