@@ -15,7 +15,7 @@ import { useUsageData, toHeatmapData } from "@/hooks/use-usage-data";
 import { formatTokens, cn } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates, computeCurrentMonthTokens } from "@/lib/cost-helpers";
-import { compareWeekdayWeekend, computeMoMGrowth } from "@/lib/usage-helpers";
+import { compareWeekdayWeekend, computeMoMGrowth, computeStreak, toLocalDailyBuckets } from "@/lib/usage-helpers";
 import { computeBudgetStatus } from "@/lib/budget-helpers";
 import { computeAchievements } from "@/lib/achievement-helpers";
 import { useBudget } from "@/hooks/use-budget";
@@ -26,7 +26,7 @@ import { CostTrendChart } from "@/components/dashboard/cost-trend-chart";
 import { CacheRateChart } from "@/components/dashboard/cache-rate-chart";
 import { IoRatioChart } from "@/components/dashboard/io-ratio-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
-import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
+import { HeatmapHero } from "@/components/dashboard/heatmap-hero";
 import { WeekdayWeekendChart } from "@/components/dashboard/weekday-weekend-chart";
 import { BudgetProgress } from "@/components/dashboard/budget-progress";
 import { BudgetAlert } from "@/components/dashboard/budget-alert";
@@ -40,7 +40,6 @@ import { periodToDateRange, periodLabel, getLocalToday, fillDateRange } from "@/
 import type { Period } from "@/lib/date-helpers";
 import type { DailyCostPoint, DailyCacheRate } from "@/lib/cost-helpers";
 import type { DailyPoint } from "@/hooks/use-usage-data";
-import { Skeleton } from "@/components/ui/skeleton";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -169,6 +168,21 @@ export default function DashboardPage() {
     });
   }, [yearHalfHourData.data, models, pricingMap, tzOffset]);
 
+  // Streak data for HeatmapHero
+  const streakInfo = useMemo(() => {
+    if (!yearHalfHourData.data) return { currentStreak: 0, longestStreak: 0 };
+    return computeStreak(yearHalfHourData.data.records, today, tzOffset);
+  }, [yearHalfHourData.data, today, tzOffset]);
+
+  // Active days count for HeatmapHero
+  const activeDays = useMemo(() => {
+    if (!yearHalfHourData.data) return 0;
+    return toLocalDailyBuckets(yearHalfHourData.data.records, tzOffset).length;
+  }, [yearHalfHourData.data, tzOffset]);
+
+  // Year total tokens for HeatmapHero
+  const yearTotalTokens = yearData.data?.summary.total_tokens ?? 0;
+
   const showForecast = (period === "month" || period === "all") && costForecast !== null;
 
   const subtitle = periodLabel(period);
@@ -205,6 +219,17 @@ export default function DashboardPage() {
       {/* Content */}
       {!loading && data && (
         <>
+          {/* ── Hero: Year Activity Heatmap ──────────────────── */}
+          <HeatmapHero
+            data={heatmapData}
+            year={currentYear}
+            totalTokens={yearTotalTokens}
+            currentStreak={streakInfo.currentStreak}
+            longestStreak={streakInfo.longestStreak}
+            activeDays={activeDays}
+            loading={yearData.loading || yearHalfHourData.loading}
+          />
+
           {/* ── Achievements (collapsible, default closed) ──── */}
           {achievements.length > 0 && (
             <Collapsible>
@@ -369,28 +394,11 @@ export default function DashboardPage() {
           </DashboardSegment>
 
           {/* ── Insights ────────────────────────────────────── */}
-          <DashboardSegment title="Insights">
-            {/* Activity heatmap + Weekday vs Weekend — side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-              <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-                <p className="mb-3 text-xs md:text-sm text-muted-foreground">
-                  {currentYear} Activity
-                </p>
-                {yearData.loading ? (
-                  <Skeleton className="h-[120px] w-full" />
-                ) : (
-                  <HeatmapCalendar
-                    data={heatmapData}
-                    year={currentYear}
-                    valueFormatter={(v) => formatTokens(v)}
-                  />
-                )}
-              </div>
-              {weekdayWeekend && (
-                <WeekdayWeekendChart stats={weekdayWeekend} />
-              )}
-            </div>
-          </DashboardSegment>
+          {weekdayWeekend && (
+            <DashboardSegment title="Insights">
+              <WeekdayWeekendChart stats={weekdayWeekend} />
+            </DashboardSegment>
+          )}
         </>
       )}
     </div>
