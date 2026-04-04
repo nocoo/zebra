@@ -16,7 +16,7 @@ This document plans a comprehensive overhaul inspired by WoW's Achievement syste
 ## Goals
 
 1. **Achievements Page** — standalone route at `/leaderboard/achievements` (or `/achievements`), entry in LeaderboardNav
-2. **Dashboard Integration** — show most recently earned achievement on dashboard Hero, clickable to achievements page
+2. **Dashboard Integration** — show user's highest-tier achievement on dashboard Hero, clickable to achievements page
 3. **Achievement Roster Expansion** — add 20+ new achievements leveraging all available data
 4. **WoW-style Copy** — ironic, self-aware names and descriptions that mock our AI-tool-addiction
 5. **Social Features** — show avatars of users who earned each achievement, click to open profile dialog
@@ -131,7 +131,7 @@ This document plans a comprehensive overhaul inspired by WoW's Achievement syste
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌─ Summary Bar ──────────────────────────────────────────┐ │
-│  │  🏆 42 / 78 Unlocked   ⭐ 12 Diamond   🔥 7-day streak │ │
+│  │  🏆 18 / 25 Unlocked   ⭐ 5 Diamond   🔥 7-day streak  │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
 │  ┌─ Category: Volume ─────────────────────────────────────┐ │
@@ -280,7 +280,7 @@ interface AchievementMembersResponse {
 
 ### Phase 4: Dashboard Integration
 
-1. Create `LatestAchievement` component (shows highest-tier achievement)
+1. Create `TopAchievement` component (shows highest-tier achievement, not most recent)
 2. Replace `AchievementPanel` in Hero sidebar
 3. Add "View All" link to achievements page
 4. Remove client-side achievement computation from dashboard
@@ -295,8 +295,12 @@ interface AchievementMembersResponse {
 
 ### Achievement Computation Strategy
 
-- **Client-side for user's own achievements**: Current approach works well, reuses existing usage data hooks
-- **Server-side for social data**: "Earned by" requires querying other users' data — must be API
+All achievement computation runs server-side in `GET /api/achievements`. The `achievement-helpers.ts` module provides:
+- `AchievementDef` type definitions (shared between API and any future client utilities)
+- `computeTierProgress()` helper (used by API route)
+- Formatting functions (`formatShortTokens`, `formatDollars`, etc.)
+
+The existing client-side dashboard achievement panel will be replaced with a simple fetch to the new API.
 
 ### Caching Considerations
 
@@ -346,7 +350,7 @@ This section resolves the blocking questions identified during review. These dec
 **Implementation**:
 - For social queries, run a server-side aggregation per achievement that computes each user's current value, then derive the approximate unlock time by binary-searching historical data
 - Cache "earned by" lists for 5-10 minutes (low churn)
-- The "Latest Achievement" widget on dashboard will show the **highest-tier achievement** (not most recently unlocked), since we can't reliably track unlock order without persistence
+- The dashboard "Top Achievement" widget shows the **highest-tier achievement** (not most recently unlocked), since we can't reliably track unlock order without persistence
 
 ### Decision 2: Computation Boundary — Server-Side for All New Achievements
 
@@ -369,16 +373,24 @@ This section resolves the blocking questions identified during review. These dec
 
 ### Decision 3: Summary Count — Unlocked Definition IDs, Not Tiers
 
-**Choice**: "42 / 78 Unlocked" counts **achievement definitions with at least one tier unlocked**, not total tier unlocks.
+**Choice**: "18 / 25 Unlocked" counts **achievement definitions with at least one tier unlocked**, not total tier unlocks.
 
 **Rationale**:
-- Users intuitively think "I have 42 achievements" not "I have 42 tier unlocks across 20 achievements"
+- Users intuitively think "I have 18 achievements" not "I have 18 tier unlocks across 25 achievements"
 - WoW counts achievement definitions, not individual tiers
-- The current taxonomy has ~22 achievement definitions × 4 tiers = 88 possible tier unlocks, but showing "42 / 88" is confusing
-- The mock shows "42 / 78" — this implies 78 definitions (some achievements are special/hidden with fewer tiers)
+- The current taxonomy has 25 achievement definitions (see count below), each with 4 tiers = 100 possible tier unlocks, but showing "18 / 100" is confusing
+
+**Taxonomy Count** (25 total):
+- Volume: 5 (power-user, big-day, input-hog, output-addict, reasoning-junkie)
+- Consistency: 5 (streak, veteran, weekend-warrior, night-owl, early-bird)
+- Efficiency: 3 (cache-master, quick-draw, marathon)
+- Spending: 2 (big-spender, daily-burn)
+- Diversity: 3 (tool-hoarder, model-tourist, device-nomad)
+- Sessions: 3 (chatterbox, session-hoarder, automation-addict)
+- Special: 4 (first-blood, centurion, millionaire, billionaire)
 
 **Implementation**:
-- `totalAchievements` = count of all `AchievementDef` entries
+- `totalAchievements` = count of all `AchievementDef` entries (currently 25)
 - `totalUnlocked` = count of definitions where `tier !== "locked"`
 - `diamondCount` = count of definitions where `tier === "diamond"`
 
