@@ -230,8 +230,9 @@ export interface AchievementPanelProps {
 }
 
 /**
- * Vertical panel of achievement cards for the Hero section sidebar.
- * Shows the top achievements (unlocked first, then by progress).
+ * Grid panel of achievement cards for the Hero section sidebar.
+ * 2 columns × up to 3 rows = max 6 achievements.
+ * Shows top achievements (unlocked first, then by progress).
  */
 export function AchievementPanel({ achievements, className }: AchievementPanelProps) {
   if (achievements.length === 0) return null;
@@ -251,20 +252,22 @@ export function AchievementPanel({ achievements, className }: AchievementPanelPr
     return b.progress - a.progress;
   });
 
-  // Show top 4 achievements (or all if fewer)
-  const display = sorted.slice(0, 4);
+  // 2 columns × 3 rows = max 6 achievements
+  const display = sorted.slice(0, 6);
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-center gap-2 mb-1">
+    <div className={cn("flex flex-col gap-3", className)}>
+      <div className="flex items-center gap-2">
         <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Achievements
         </span>
       </div>
-      {display.map((ach) => (
-        <AchievementCard key={ach.id} achievement={ach} />
-      ))}
+      <div className="grid grid-cols-2 gap-2">
+        {display.map((ach) => (
+          <AchievementCard key={ach.id} achievement={ach} />
+        ))}
+      </div>
     </div>
   );
 }
