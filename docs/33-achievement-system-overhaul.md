@@ -199,21 +199,18 @@ Returns all achievement definitions + current user's progress.
 |-------|------|----------|-------------|
 | `tzOffset` | number | No | Client's timezone offset in minutes (e.g., `-480` for UTC+8). Defaults to `0` (UTC) if omitted. |
 
-**`tzOffset` affects these achievements**:
+**`tzOffset` usage by achievement type**:
 
-| Achievement | How tzOffset is used |
-|-------------|---------------------|
-| `streak` | Defines "day" boundary for consecutive active days |
-| `big-day` | Defines "day" boundary for max daily tokens |
-| `veteran` | Defines "day" boundary for unique active day count |
-| `daily-burn` | Defines "day" boundary for max daily cost |
-| `weekend-warrior` | Determines local Saturday/Sunday |
-| `night-owl` | Determines local midnight-6am hours |
-| `early-bird` | Determines local 6am-9am hours |
+| Type | Achievements | Personal progress | Social features |
+|------|--------------|-------------------|-----------------|
+| **UTC-based** | `streak`, `big-day`, `veteran`, `daily-burn` | UTC (tzOffset ignored) | ✅ UTC |
+| **Timezone-dependent** | `weekend-warrior`, `night-owl`, `early-bird` | Uses tzOffset | ❌ Excluded |
 
-**Notes**:
-- Frontend should **always** pass `new Date().getTimezoneOffset()` — omitting it means all day-based achievements use UTC boundaries, which may shift days by ±1 for users far from UTC
-- Social features (`earnedBy`, `/members` endpoint) are **only excluded** for timezone-dependent achievements (`weekend-warrior`, `night-owl`, `early-bird`) — see Decision 5. Other day-based achievements (`streak`, `big-day`, `veteran`, `daily-burn`) still have social features, computed using UTC boundaries for consistency across users
+**Design rationale**:
+- Day-based achievements (`streak`, `big-day`, `veteran`, `daily-burn`) use **UTC for both personal and social** to ensure the same achievement definition has consistent semantics. A user's "big day" is the same whether viewed on their own card or in the earnedBy list.
+- Timezone-dependent achievements (`weekend-warrior`, `night-owl`, `early-bird`) inherently require local time interpretation and cannot be meaningfully compared across users in different timezones — these are excluded from social features entirely (see Decision 5).
+
+**Note**: The `tzOffset` parameter is still accepted but only affects the 3 timezone-dependent achievements. Day-based achievements always use UTC boundaries.
 
 ```typescript
 interface AchievementResponse {
@@ -253,6 +250,12 @@ interface AchievementResponse {
 
 Paginated list of users who earned a specific achievement.
 
+**Error Responses**:
+| Status | Condition |
+|--------|-----------|
+| 404 | Achievement ID not found |
+| 404 | Achievement is timezone-dependent (`weekend-warrior`, `night-owl`, `early-bird`) — these have no social features |
+
 ```typescript
 interface AchievementMembersResponse {
   members: Array<{
@@ -261,7 +264,7 @@ interface AchievementMembersResponse {
     image: string | null;
     slug: string | null;
     tier: "bronze" | "silver" | "gold" | "diamond";
-    earnedAt: string; // ISO datetime
+    earnedAt: string; // ISO datetime (approximate)
     currentValue: number;
   }>;
   cursor: string | null;
@@ -334,16 +337,17 @@ The existing client-side dashboard achievement panel will be replaced with a sim
 
 ### Timezone and Day-Based Achievements
 
-The `hour_start` field is stored in UTC. Many achievements need "local day" or "local hour" boundaries.
+The `hour_start` field is stored in UTC.
 
 **Day-based achievements** (`streak`, `big-day`, `veteran`, `daily-burn`):
-- Use `toLocalDailyBuckets(rows, tzOffset)` to group records into local calendar days
-- These achievements **have social features** — for `earnedBy`/members queries, use UTC (tzOffset=0) for cross-user consistency
-- Personal progress uses the client's tzOffset for accurate day boundaries
+- Use **UTC day boundaries** for both personal progress and social features
+- This ensures consistent semantics: if a user unlocked "big-day" with 100K tokens, they appear in the earnedBy list under the same criteria
+- Implementation: `toLocalDailyBuckets(rows, 0)` — always pass tzOffset=0
 
 **Timezone-dependent achievements** (`weekend-warrior`, `night-owl`, `early-bird`):
 - Require local hour-of-day or day-of-week, which varies by user timezone
-- These achievements are **excluded from social features** — see Decision 5
+- Use client-provided `tzOffset` for personal progress
+- **Excluded from social features** — see Decision 5
 
 ```typescript
 // Convert UTC to user's local time (APPROXIMATE - ignores DST history)
