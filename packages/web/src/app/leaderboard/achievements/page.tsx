@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, Fragment } from "react";
+import { useMemo, Fragment, useState } from "react";
 import Link from "next/link";
 import {
   Flame,
@@ -27,12 +27,26 @@ import {
   Award,
   Crown,
   Rocket,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAchievements, type Achievement, type EarnedByUser } from "@/hooks/use-achievements";
-import { type AchievementTier, type AchievementCategory, CATEGORY_LABELS } from "@/lib/achievement-helpers";
+import {
+  useAchievements,
+  useAchievementMembers,
+  type Achievement,
+  type EarnedByUser,
+  type AchievementMember,
+} from "@/hooks/use-achievements";
+import {
+  type AchievementTier,
+  type AchievementCategory,
+  CATEGORY_LABELS,
+  formatShortTokens,
+} from "@/lib/achievement-helpers";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
 import { PageHeader } from "@/components/leaderboard/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -135,48 +149,53 @@ interface AchievementRingProps {
   progress: number;
   tier: AchievementTier;
   icon: string;
+  size?: number;
 }
 
-function AchievementRing({ progress, tier, icon }: AchievementRingProps) {
-  const offset = RING_CIRCUMFERENCE * (1 - progress);
+function AchievementRing({ progress, tier, icon, size = RING_SIZE }: AchievementRingProps) {
+  const radius = (size - RING_STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - progress);
   const styles = TIER_STYLES[tier];
   const Icon = ICON_MAP[icon] ?? Sparkles;
   const isUnlocked = tier !== "locked";
+  const iconSize = size * 0.36;
 
   return (
     <div className={cn("relative inline-flex items-center justify-center shrink-0", styles.glow, "rounded-full")}>
       <svg
-        width={RING_SIZE}
-        height={RING_SIZE}
-        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
         className="-rotate-90"
       >
         <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_RADIUS}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           fill="none"
           strokeWidth={RING_STROKE}
           className="stroke-muted-foreground/10"
         />
         <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_RADIUS}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           fill="none"
           strokeWidth={RING_STROKE}
           strokeLinecap="round"
-          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDasharray={circumference}
           strokeDashoffset={offset}
           className={cn(styles.ringColor, "transition-[stroke-dashoffset] duration-700 ease-out")}
         />
       </svg>
       <div className={cn(
-        "absolute inset-2 rounded-full bg-gradient-to-br flex items-center justify-center",
+        "absolute rounded-full bg-gradient-to-br flex items-center justify-center",
         styles.gradient
-      )}>
+      )} style={{ inset: size * 0.07 }}>
         <Icon
-          className={cn("h-5 w-5", styles.iconColor, isUnlocked && tier !== "bronze" && "drop-shadow-sm")}
+          className={cn(styles.iconColor, isUnlocked && tier !== "bronze" && "drop-shadow-sm")}
+          style={{ width: iconSize, height: iconSize }}
           strokeWidth={1.5}
         />
       </div>
@@ -185,7 +204,7 @@ function AchievementRing({ progress, tier, icon }: AchievementRingProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Earned By Avatars
+// Earned By Avatars (compact preview)
 // ---------------------------------------------------------------------------
 
 interface EarnedByAvatarsProps {
@@ -203,19 +222,14 @@ function EarnedByAvatars({ earnedBy, totalEarned }: EarnedByAvatarsProps) {
     <div className="flex items-center gap-1.5 mt-2">
       <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Earned by</span>
       <div className="flex -space-x-1.5">
-        {earnedBy.slice(0, displayCount).map((user) => {
-          const profilePath = user.slug ? `/u/${user.slug}` : `/u/${user.id}`;
-          return (
-            <Link key={user.id} href={profilePath} className="relative block">
-              <Avatar className="h-5 w-5 ring-2 ring-background hover:ring-primary transition-[box-shadow]">
-                {user.image && <AvatarImage src={user.image} alt={user.name} />}
-                <AvatarFallback className="text-[8px] bg-muted text-muted-foreground">
-                  {user.name[0]?.toUpperCase() ?? "?"}
-                </AvatarFallback>
-              </Avatar>
-            </Link>
-          );
-        })}
+        {earnedBy.slice(0, displayCount).map((user) => (
+          <Avatar key={user.id} className="h-5 w-5 ring-2 ring-background">
+            {user.image && <AvatarImage src={user.image} alt={user.name} />}
+            <AvatarFallback className="text-[8px] bg-muted text-muted-foreground">
+              {user.name[0]?.toUpperCase() ?? "?"}
+            </AvatarFallback>
+          </Avatar>
+        ))}
       </div>
       {remainingCount > 0 && (
         <span className="text-[10px] text-muted-foreground">
@@ -227,87 +241,235 @@ function EarnedByAvatars({ earnedBy, totalEarned }: EarnedByAvatarsProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Achievement Card (Expanded)
+// Member List (expanded view)
+// ---------------------------------------------------------------------------
+
+interface MemberListProps {
+  members: AchievementMember[];
+  loading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  unit: string;
+}
+
+function MemberList({ members, loading, hasMore, onLoadMore, unit }: MemberListProps) {
+  if (members.length === 0 && !loading) {
+    return (
+      <div className="text-xs text-muted-foreground text-center py-4">
+        No members yet. Be the first to earn this achievement!
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {members.map((member, i) => {
+        const profilePath = member.slug ? `/u/${member.slug}` : `/u/${member.id}`;
+        const tierStyle = TIER_STYLES[member.tier];
+
+        return (
+          <Link
+            key={member.id}
+            href={profilePath}
+            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+          >
+            <span className="text-xs text-muted-foreground w-5 text-right tabular-nums">
+              {i + 1}
+            </span>
+            <Avatar className="h-8 w-8">
+              {member.image && <AvatarImage src={member.image} alt={member.name} />}
+              <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                {member.name[0]?.toUpperCase() ?? "?"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium truncate">{member.name}</span>
+                <span className={cn(
+                  "shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider",
+                  tierStyle.badgeBg,
+                  tierStyle.badgeColor,
+                )}>
+                  {member.tier}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {formatShortTokens(member.currentValue)} {unit}
+              </div>
+            </div>
+          </Link>
+        );
+      })}
+
+      {loading && (
+        <div className="flex items-center justify-center py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {hasMore && !loading && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          className="w-full text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
+        >
+          Load more...
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Achievement Card (Expandable)
 // ---------------------------------------------------------------------------
 
 interface AchievementCardProps {
   achievement: Achievement;
   index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
 }
 
-function AchievementCard({ achievement, index }: AchievementCardProps) {
+function AchievementCard({ achievement, index, isExpanded, onToggle }: AchievementCardProps) {
   const styles = TIER_STYLES[achievement.tier];
   const isUnlocked = achievement.tier !== "locked";
   const isMaxed = achievement.tier === "diamond";
   const pct = Math.round(achievement.progress * 100);
 
+  // Fetch members when expanded
+  const { data: membersData, loading: membersLoading, hasMore, loadMore } = useAchievementMembers(
+    isExpanded ? achievement.id : null
+  );
+
   return (
     <div
       className={cn(
-        "flex flex-col rounded-xl p-4 transition-colors animate-fade-up",
+        "flex flex-col rounded-xl p-4 transition-all animate-fade-up",
         isUnlocked ? "bg-card/80 hover:bg-card" : "bg-muted/30 hover:bg-muted/50",
+        isExpanded && "ring-1 ring-border",
       )}
       style={{ animationDelay: `${Math.min(index * 30, 400)}ms` }}
     >
-      {/* Top row: ring + name/tier */}
-      <div className="flex items-start gap-3">
-        <AchievementRing
-          progress={achievement.progress}
-          tier={achievement.tier}
-          icon={achievement.icon}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={cn(
-              "text-sm font-medium truncate",
-              isUnlocked ? "text-foreground" : "text-muted-foreground"
-            )}>
-              {achievement.name}
-            </span>
-            <span className={cn(
-              "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider",
-              styles.badgeBg,
-              styles.badgeColor,
-            )}>
-              {achievement.tier === "locked" ? "Locked" : achievement.tier}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground italic line-clamp-2">
-            "{achievement.flavorText}"
-          </p>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="mt-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-          <span className="font-medium tabular-nums">{achievement.displayValue}</span>
-          <span>/</span>
-          <span className="tabular-nums">{achievement.displayThreshold}</span>
-          <span>{achievement.unit}</span>
-          {!isMaxed && (
-            <span className="ml-auto tabular-nums">{pct}% → {achievement.tier === "locked" ? "Bronze" : achievement.tier === "bronze" ? "Silver" : achievement.tier === "silver" ? "Gold" : "Diamond"}</span>
-          )}
-          {isMaxed && (
-            <span className="ml-auto flex items-center gap-1 text-primary">
-              <Sparkles className="h-3 w-3" strokeWidth={2} />
-              Max
-            </span>
-          )}
-        </div>
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div
-            className={cn("h-full rounded-full transition-[width] duration-700 ease-out", styles.badgeBg)}
-            style={{ width: `${pct}%` }}
+      {/* Clickable header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left"
+      >
+        {/* Top row: ring + name/tier */}
+        <div className="flex items-start gap-3">
+          <AchievementRing
+            progress={achievement.progress}
+            tier={achievement.tier}
+            icon={achievement.icon}
           />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-sm font-medium truncate",
+                isUnlocked ? "text-foreground" : "text-muted-foreground"
+              )}>
+                {achievement.name}
+              </span>
+              <span className={cn(
+                "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider",
+                styles.badgeBg,
+                styles.badgeColor,
+              )}>
+                {achievement.tier === "locked" ? "Locked" : achievement.tier}
+              </span>
+              <span className="ml-auto shrink-0 text-muted-foreground">
+                {isExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground italic line-clamp-2">
+              "{achievement.flavorText}"
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Earned by avatars */}
-      <EarnedByAvatars
-        earnedBy={achievement.earnedBy}
-        totalEarned={achievement.totalEarned}
-      />
+        {/* Progress bar */}
+        <div className="mt-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <span className="font-medium tabular-nums">{achievement.displayValue}</span>
+            <span>/</span>
+            <span className="tabular-nums">{achievement.displayThreshold}</span>
+            <span>{achievement.unit}</span>
+            {!isMaxed && (
+              <span className="ml-auto tabular-nums">{pct}% → {achievement.tier === "locked" ? "Bronze" : achievement.tier === "bronze" ? "Silver" : achievement.tier === "silver" ? "Gold" : "Diamond"}</span>
+            )}
+            {isMaxed && (
+              <span className="ml-auto flex items-center gap-1 text-primary">
+                <Sparkles className="h-3 w-3" strokeWidth={2} />
+                Max
+              </span>
+            )}
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-[width] duration-700 ease-out", styles.badgeBg)}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Earned by avatars (only when collapsed) */}
+        {!isExpanded && (
+          <EarnedByAvatars
+            earnedBy={achievement.earnedBy}
+            totalEarned={achievement.totalEarned}
+          />
+        )}
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="mt-4 pt-4 border-t border-border">
+          {/* Tier thresholds */}
+          <div className="mb-4">
+            <div className="text-xs font-medium text-muted-foreground mb-2">Tier Thresholds</div>
+            <div className="flex gap-2 flex-wrap">
+              {(["bronze", "silver", "gold", "diamond"] as const).map((tier, i) => {
+                const tierStyle = TIER_STYLES[tier];
+                const threshold = achievement.tiers[i];
+                const isReached = achievement.currentValue >= threshold;
+                return (
+                  <div
+                    key={tier}
+                    className={cn(
+                      "px-2 py-1 rounded text-xs",
+                      isReached ? tierStyle.badgeBg : "bg-muted/50",
+                      isReached ? tierStyle.badgeColor : "text-muted-foreground",
+                    )}
+                  >
+                    <span className="font-medium capitalize">{tier}</span>
+                    <span className="ml-1 tabular-nums">{formatShortTokens(threshold)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Members list */}
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">
+              Leaderboard {achievement.totalEarned > 0 && `(${achievement.totalEarned})`}
+            </div>
+            <MemberList
+              members={membersData?.members ?? []}
+              loading={membersLoading}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              unit={achievement.unit}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -386,6 +548,7 @@ const CATEGORY_ORDER: AchievementCategory[] = [
 
 export default function AchievementsPage() {
   const { data, loading, error } = useAchievements();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Group achievements by category
   const grouped = useMemo(() => {
@@ -399,6 +562,10 @@ export default function AchievementsPage() {
     }
     return map;
   }, [data]);
+
+  const handleToggle = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
 
   return (
     <>
@@ -454,7 +621,13 @@ export default function AchievementsPage() {
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {achievements.map((ach, i) => (
-                        <AchievementCard key={ach.id} achievement={ach} index={i} />
+                        <AchievementCard
+                          key={ach.id}
+                          achievement={ach}
+                          index={i}
+                          isExpanded={expandedId === ach.id}
+                          onToggle={() => handleToggle(ach.id)}
+                        />
                       ))}
                     </div>
                   </div>

@@ -44,6 +44,21 @@ export interface AchievementData {
   summary: AchievementSummary;
 }
 
+export interface AchievementMember {
+  id: string;
+  name: string;
+  image: string | null;
+  slug: string | null;
+  tier: AchievementTier;
+  earnedAt: string;
+  currentValue: number;
+}
+
+export interface AchievementMembersData {
+  members: AchievementMember[];
+  cursor: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -88,4 +103,84 @@ export function useAchievements(): UseAchievementsResult {
   }, [fetchData]);
 
   return { data, loading, error, refetch: fetchData };
+}
+
+// ---------------------------------------------------------------------------
+// useAchievementMembers Hook
+// ---------------------------------------------------------------------------
+
+interface UseAchievementMembersResult {
+  data: AchievementMembersData | null;
+  loading: boolean;
+  error: string | null;
+  loadMore: () => void;
+  hasMore: boolean;
+}
+
+export function useAchievementMembers(
+  achievementId: string | null,
+  limit = 20
+): UseAchievementMembersResult {
+  const [data, setData] = useState<AchievementMembersData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+
+  const fetchData = useCallback(async (nextCursor?: string) => {
+    if (!achievementId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (nextCursor) params.set("cursor", nextCursor);
+
+      const res = await fetch(`/api/achievements/${achievementId}/members?${params}`);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+
+      const json: AchievementMembersData = await res.json();
+
+      if (nextCursor) {
+        // Append to existing data
+        setData((prev) => ({
+          members: [...(prev?.members ?? []), ...json.members],
+          cursor: json.cursor,
+        }));
+      } else {
+        setData(json);
+      }
+      setCursor(json.cursor);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [achievementId, limit]);
+
+  useEffect(() => {
+    if (achievementId) {
+      setData(null);
+      setCursor(null);
+      fetchData();
+    }
+  }, [achievementId, fetchData]);
+
+  const loadMore = useCallback(() => {
+    if (cursor && !loading) {
+      fetchData(cursor);
+    }
+  }, [cursor, loading, fetchData]);
+
+  return {
+    data,
+    loading,
+    error,
+    loadMore,
+    hasMore: cursor !== null,
+  };
 }
