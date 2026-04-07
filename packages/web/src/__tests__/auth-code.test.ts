@@ -392,9 +392,9 @@ describe("POST /api/auth/code/verify", () => {
     expect(body.api_key).toBe("pk_existing_key");
     expect(body.email).toBe("test@example.com");
 
-    // Verify code was marked as used
+    // Verify code was marked as used AFTER user lookup succeeded
     expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining("UPDATE auth_codes"),
+      expect.stringContaining("SET used_at"),
       expect.arrayContaining(["ABCD-1234"])
     );
   });
@@ -494,6 +494,11 @@ describe("POST /api/auth/code/verify", () => {
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
         failed_attempts: 0,
+      })
+      .mockResolvedValueOnce({
+        id: "user-123",
+        email: "test@example.com",
+        api_key: "pk_existing",
       });
 
     mockGetDbRead.mockResolvedValue({
@@ -501,7 +506,7 @@ describe("POST /api/auth/code/verify", () => {
       firstOrNull: mockFirstOrNull,
     });
 
-    // Simulate race: update returns 0 rows (someone else used it first)
+    // Simulate race: SET used_at returns 0 rows (someone else used it first)
     const mockExecute = vi.fn().mockResolvedValue({ changes: 0 });
     mockGetDbWrite.mockResolvedValue({
       execute: mockExecute,
@@ -535,7 +540,7 @@ describe("POST /api/auth/code/verify", () => {
     expect(body.error).toBe("Invalid JSON body");
   });
 
-  it("should return 500 when user not found after valid code", async () => {
+  it("should return 500 when user not found and NOT consume code", async () => {
     const mockFirstOrNull = vi.fn()
       .mockResolvedValueOnce({
         code: "ABCD-1234",
@@ -551,8 +556,9 @@ describe("POST /api/auth/code/verify", () => {
       firstOrNull: mockFirstOrNull,
     });
 
+    const mockExecute = vi.fn().mockResolvedValue({ changes: 1 });
     mockGetDbWrite.mockResolvedValue({
-      execute: vi.fn().mockResolvedValue({ changes: 1 }),
+      execute: mockExecute,
       batch: vi.fn(),
     });
 
@@ -567,6 +573,12 @@ describe("POST /api/auth/code/verify", () => {
 
     const body = await response.json();
     expect(body.error).toBe("User not found");
+
+    // Verify code was NOT consumed (no SET used_at call)
+    const usedAtCalls = mockExecute.mock.calls.filter(
+      (call) => (call[0] as string).includes("SET used_at")
+    );
+    expect(usedAtCalls.length).toBe(0);
   });
 
   it("should return 500 on database error", async () => {

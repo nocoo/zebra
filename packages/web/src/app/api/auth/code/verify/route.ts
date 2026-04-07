@@ -89,8 +89,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: AUTH_ERROR }, { status: 401 });
     }
 
-    // 4. Attempt to mark code as used (atomic)
-    // Conditions: not used, no failed attempts, not expired (re-check in SQL for atomicity)
+    // 4. Get user info and api_key BEFORE consuming the code
+    // This ensures that if user lookup or api_key generation fails, the code remains usable
+    const user = await dbRead.firstOrNull<UserRow>(
+      `SELECT id, email, api_key FROM users WHERE id = ?`,
+      [authCode.user_id]
+    );
+
+    if (!user) {
+      // User was deleted after code creation — don't consume the code, just fail
+      // (Edge case: code is orphaned, will expire naturally)
+      return NextResponse.json({ error: "User not found" }, { status: 500 });
+    }
+
+    let apiKey = user.api_key;
+
+    // 5. Generate api_key if not exists (still before consuming code)
+    if (!apiKey) {
+      apiKey = generateApiKey();
+      await dbWrite.execute(
+        `UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?`,
+        [apiKey, user.id]
+      );
+    }
+
+    // 6. Now that we have the credentials ready, consume the code (atomic)
+    // Conditions: not used, no failed attempts (re-check in SQL for atomicity)
     const updateResult = await dbWrite.execute(
       `UPDATE auth_codes
        SET used_at = datetime('now')
@@ -103,27 +127,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: AUTH_ERROR }, { status: 401 });
     }
 
-    // 5. Get user info and api_key
-    const user = await dbRead.firstOrNull<UserRow>(
-      `SELECT id, email, api_key FROM users WHERE id = ?`,
-      [authCode.user_id]
-    );
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 500 });
-    }
-
-    let apiKey = user.api_key;
-
-    // 6. Generate api_key if not exists
-    if (!apiKey) {
-      apiKey = generateApiKey();
-      await dbWrite.execute(
-        `UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?`,
-        [apiKey, user.id]
-      );
-    }
-
+    // 7. Return credentials (code is now consumed)
     return NextResponse.json({
       api_key: apiKey,
       email: user.email,
