@@ -163,6 +163,9 @@ describe("POST /api/auth/code", () => {
   });
 });
 
+// Generic error message used for all auth failures (matches API)
+const AUTH_ERROR = "Invalid or expired code";
+
 // ---------------------------------------------------------------------------
 // POST /api/auth/code/verify — verify code
 // ---------------------------------------------------------------------------
@@ -202,10 +205,10 @@ describe("POST /api/auth/code/verify", () => {
     expect(response.status).toBe(401);
 
     const body = await response.json();
-    expect(body.error).toBe("Invalid code");
+    expect(body.error).toBe(AUTH_ERROR);
   });
 
-  it("should return 401 when code is already used", async () => {
+  it("should return 401 and increment failed_attempts when code is already used", async () => {
     mockGetDbRead.mockResolvedValue({
       query: vi.fn(),
       firstOrNull: vi.fn().mockResolvedValue({
@@ -213,7 +216,14 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: new Date().toISOString(), // Already used
+        failed_attempts: 0,
       }),
+    });
+
+    const mockExecute = vi.fn().mockResolvedValue({ changes: 1 });
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
     });
 
     const request = new Request("http://localhost/api/auth/code/verify", {
@@ -226,10 +236,16 @@ describe("POST /api/auth/code/verify", () => {
     expect(response.status).toBe(401);
 
     const body = await response.json();
-    expect(body.error).toBe("Code already used");
+    expect(body.error).toBe(AUTH_ERROR);
+
+    // Should increment failed_attempts
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringContaining("failed_attempts = failed_attempts + 1"),
+      ["ABCD-1234"]
+    );
   });
 
-  it("should return 401 when code is expired", async () => {
+  it("should return 401 and increment failed_attempts when code is expired", async () => {
     mockGetDbRead.mockResolvedValue({
       query: vi.fn(),
       firstOrNull: vi.fn().mockResolvedValue({
@@ -237,7 +253,14 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() - 1000).toISOString(), // Expired
         used_at: null,
+        failed_attempts: 0,
       }),
+    });
+
+    const mockExecute = vi.fn().mockResolvedValue({ changes: 1 });
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
     });
 
     const request = new Request("http://localhost/api/auth/code/verify", {
@@ -250,7 +273,44 @@ describe("POST /api/auth/code/verify", () => {
     expect(response.status).toBe(401);
 
     const body = await response.json();
-    expect(body.error).toBe("Code expired");
+    expect(body.error).toBe(AUTH_ERROR);
+
+    // Should increment failed_attempts
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringContaining("failed_attempts = failed_attempts + 1"),
+      ["ABCD-1234"]
+    );
+  });
+
+  it("should return 401 when code has failed_attempts > 0", async () => {
+    mockGetDbRead.mockResolvedValue({
+      query: vi.fn(),
+      firstOrNull: vi.fn().mockResolvedValue({
+        code: "ABCD-1234",
+        user_id: "user-123",
+        expires_at: new Date(Date.now() + 300_000).toISOString(),
+        used_at: null,
+        failed_attempts: 1, // Already had a failed attempt
+      }),
+    });
+
+    const mockExecute = vi.fn().mockResolvedValue({ changes: 1 });
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
+    });
+
+    const request = new Request("http://localhost/api/auth/code/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "ABCD-1234" }),
+    });
+
+    const response = await verifyPOST(request);
+    expect(response.status).toBe(401);
+
+    const body = await response.json();
+    expect(body.error).toBe(AUTH_ERROR);
   });
 
   it("should return api_key and email for valid code", async () => {
@@ -260,6 +320,7 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
+        failed_attempts: 0,
       })
       .mockResolvedValueOnce({
         id: "user-123",
@@ -305,6 +366,7 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
+        failed_attempts: 0,
       })
       .mockResolvedValueOnce({
         id: "user-123",
@@ -350,6 +412,7 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
+        failed_attempts: 0,
       })
       .mockResolvedValueOnce({
         id: "user-123",
@@ -390,6 +453,7 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-123",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
+        failed_attempts: 0,
       });
 
     mockGetDbRead.mockResolvedValue({
@@ -414,7 +478,7 @@ describe("POST /api/auth/code/verify", () => {
     expect(response.status).toBe(401);
 
     const body = await response.json();
-    expect(body.error).toBe("Code already used");
+    expect(body.error).toBe(AUTH_ERROR);
   });
 
   it("should return 400 on invalid JSON body", async () => {
@@ -438,6 +502,7 @@ describe("POST /api/auth/code/verify", () => {
         user_id: "user-deleted",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
         used_at: null,
+        failed_attempts: 0,
       })
       .mockResolvedValueOnce(null); // User was deleted
 
