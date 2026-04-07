@@ -367,6 +367,11 @@ const loginCommand = defineCommand({
       description: "Authenticate with an API key directly (for headless/SSH environments)",
       required: false,
     },
+    show: {
+      type: "boolean",
+      description: "Print the current API token (for sharing to headless machines)",
+      default: false,
+    },
     dev: {
       type: "boolean",
       description: "Use the dev host (pew.dev.hexly.ai)",
@@ -377,6 +382,22 @@ const loginCommand = defineCommand({
     const paths = resolveDefaultPaths();
     const dev = isDevMode();
     const host = resolveHost(dev);
+
+    // Show current token — for copying to headless machines
+    if (args.show) {
+      const { ConfigManager } = await import("./config/manager.js");
+      const configManager = new ConfigManager(paths.stateDir, dev);
+      const config = await configManager.load();
+      if (config.token) {
+        log.info(`${pc.dim("Token:")} ${config.token}`);
+        log.info(
+          `${pc.dim("Copy to headless machine:")} ${pc.cyan(`pew login --token ${config.token}`)}`,
+        );
+      } else {
+        log.warn("Not logged in. Run " + pc.cyan("pew login") + " first.");
+      }
+      return;
+    }
 
     // Direct token login — for headless/SSH environments
     if (args.token) {
