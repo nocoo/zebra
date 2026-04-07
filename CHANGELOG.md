@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.2.6
+
+### Fixed
+- Use cli-base openBrowser instead of inline implementation
+
 ## v2.2.5
 
 ### Fixed
