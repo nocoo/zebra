@@ -784,3 +784,82 @@ export function toDominantSourceTimeline(rows: UsageRow[], tzOffset: number = 0)
       };
     });
 }
+
+// ---------------------------------------------------------------------------
+// toHourlyWeekdayWeekend
+// ---------------------------------------------------------------------------
+
+/** Hourly usage breakdown split by weekday vs weekend. */
+export interface HourlyWeekdayWeekendPoint {
+  /** Hour of day (0-23) */
+  hour: number;
+  /** Average tokens per weekday at this hour */
+  weekday: number;
+  /** Average tokens per weekend day at this hour */
+  weekend: number;
+}
+
+/**
+ * Compute average hourly token usage split by weekday vs weekend.
+ *
+ * Groups half-hour records by local hour-of-day and day-of-week,
+ * then computes average tokens per hour for weekdays (Mon-Fri) and
+ * weekends (Sat-Sun) separately.
+ *
+ * @param rows       — raw UsageRow[] (must be half-hour granularity)
+ * @param dateRange  — period boundaries for calendar fill (local dates "YYYY-MM-DD")
+ * @param tzOffset   — minutes from UTC (positive = west), default 0
+ */
+export function toHourlyWeekdayWeekend(
+  rows: UsageRow[],
+  dateRange: { from: string; to: string },
+  tzOffset: number = 0,
+): HourlyWeekdayWeekendPoint[] {
+  // Accumulators: [hour] -> { weekdayTokens, weekendTokens }
+  const hourly: Array<{ weekdayTokens: number; weekendTokens: number }> = [];
+  for (let h = 0; h < 24; h++) {
+    hourly.push({ weekdayTokens: 0, weekendTokens: 0 });
+  }
+
+  // Count days in range for averaging
+  const startMs = new Date(dateRange.from + "T00:00:00Z").getTime();
+  const endMs = new Date(dateRange.to + "T00:00:00Z").getTime();
+  const DAY_MS = 86_400_000;
+
+  let weekdayCount = 0;
+  let weekendCount = 0;
+
+  for (let ms = startMs; ms <= endMs; ms += DAY_MS) {
+    const dow = new Date(ms).getUTCDay();
+    if (dow === 0 || dow === 6) {
+      weekendCount++;
+    } else {
+      weekdayCount++;
+    }
+  }
+
+  // Accumulate tokens by local hour and weekday/weekend
+  for (const r of rows) {
+    const utcMs = new Date(r.hour_start).getTime();
+    const localMs = utcMs - tzOffset * 60_000;
+    const localDate = new Date(localMs);
+    const localHour = localDate.getUTCHours();
+    const dow = localDate.getUTCDay();
+
+    const bucket = hourly[localHour];
+    if (bucket) {
+      if (dow === 0 || dow === 6) {
+        bucket.weekendTokens += r.total_tokens;
+      } else {
+        bucket.weekdayTokens += r.total_tokens;
+      }
+    }
+  }
+
+  // Compute averages
+  return hourly.map((h, hour) => ({
+    hour,
+    weekday: weekdayCount > 0 ? h.weekdayTokens / weekdayCount : 0,
+    weekend: weekendCount > 0 ? h.weekendTokens / weekendCount : 0,
+  }));
+}

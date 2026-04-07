@@ -15,7 +15,7 @@ import { useAchievements } from "@/hooks/use-achievements";
 import { formatTokens, cn } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates } from "@/lib/cost-helpers";
-import { compareWeekdayWeekend, computeMoMGrowth, computeStreak, toLocalDailyBuckets } from "@/lib/usage-helpers";
+import { compareWeekdayWeekend, computeMoMGrowth, computeStreak, toLocalDailyBuckets, toHourlyWeekdayWeekend } from "@/lib/usage-helpers";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { CostTrendChart } from "@/components/dashboard/cost-trend-chart";
@@ -24,6 +24,7 @@ import { IoRatioChart } from "@/components/dashboard/io-ratio-chart";
 import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
 import { HeatmapHero } from "@/components/dashboard/heatmap-hero";
 import { WeekdayWeekendChart } from "@/components/dashboard/weekday-weekend-chart";
+import { HourlyChart } from "@/components/dashboard/hourly-chart";
 import { SalaryEstimator } from "@/components/dashboard/salary-estimator-card";
 import { SnapshotAlert } from "@/components/dashboard/snapshot-alert";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
@@ -128,6 +129,13 @@ export default function DashboardPage() {
     const toStr = to ?? getLocalToday(tzOffset);
     return compareWeekdayWeekend(halfHourData.data.records, { from, to: toStr }, pricingMap, tzOffset);
   }, [halfHourData.data, from, to, pricingMap, tzOffset]);
+
+  // Hourly weekday/weekend breakdown
+  const hourlyData = useMemo(() => {
+    if (!halfHourData.data) return [];
+    const toStr = to ?? getLocalToday(tzOffset);
+    return toHourlyWeekdayWeekend(halfHourData.data.records, { from, to: toStr }, tzOffset);
+  }, [halfHourData.data, from, to, tzOffset]);
 
   // Streak data for HeatmapHero (from server-side achievements or fallback)
   const currentStreak = achievementsData?.summary.currentStreak ?? 0;
@@ -346,9 +354,12 @@ export default function DashboardPage() {
           {/* ── Insights ────────────────────────────────────── */}
           {weekdayWeekend && (
             <DashboardSegment title="Insights">
-              {/* Weekday vs Weekend takes full width */}
-              <WeekdayWeekendChart stats={weekdayWeekend} />
-              {/* Salary Estimator with internal 50/50 split (card + chart) */}
+              {/* Row 1: Weekday vs Weekend (50%) + Hourly Chart (50%) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+                <WeekdayWeekendChart stats={weekdayWeekend} />
+                <HourlyChart data={hourlyData} />
+              </div>
+              {/* Row 2: Salary Estimator with internal 50/50 split (card + chart) */}
               <SalaryEstimator
                 dailyCosts={dailyCostPoints}
                 dailyTokens={filledDaily}
