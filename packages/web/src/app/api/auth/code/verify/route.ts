@@ -104,13 +104,33 @@ export async function POST(request: Request) {
 
     let apiKey = user.api_key;
 
-    // 5. Generate api_key if not exists (still before consuming code)
+    // 5. Generate api_key if not exists using atomic conditional update
+    // Uses "WHERE api_key IS NULL" to ensure only one concurrent request succeeds in writing.
+    // If another request already set a key, this UPDATE affects 0 rows and we re-read.
     if (!apiKey) {
-      apiKey = generateApiKey();
-      await dbWrite.execute(
-        `UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?`,
-        [apiKey, user.id]
+      const newKey = generateApiKey();
+      const updateKeyResult = await dbWrite.execute(
+        `UPDATE users SET api_key = ?, updated_at = datetime('now')
+         WHERE id = ? AND api_key IS NULL`,
+        [newKey, user.id]
       );
+
+      if (updateKeyResult.changes === 1) {
+        // We won the race — use our generated key
+        apiKey = newKey;
+      } else {
+        // Another request already set a key — re-read to get the actual value
+        const refreshedUser = await dbRead.firstOrNull<UserRow>(
+          `SELECT api_key FROM users WHERE id = ?`,
+          [user.id]
+        );
+        apiKey = refreshedUser?.api_key ?? null;
+
+        if (!apiKey) {
+          // Shouldn't happen, but defensive
+          return NextResponse.json({ error: "Failed to generate API key" }, { status: 500 });
+        }
+      }
     }
 
     // 6. Now that we have the credentials ready, consume the code (atomic)

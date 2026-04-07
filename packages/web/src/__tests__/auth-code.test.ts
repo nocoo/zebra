@@ -399,7 +399,7 @@ describe("POST /api/auth/code/verify", () => {
     );
   });
 
-  it("should generate api_key if user has none", async () => {
+  it("should generate api_key if user has none (atomic conditional update)", async () => {
     const mockFirstOrNull = vi.fn()
       .mockResolvedValueOnce({
         code: "ABCD-1234",
@@ -438,11 +438,58 @@ describe("POST /api/auth/code/verify", () => {
     expect(body.api_key).toMatch(/^pk_[a-f0-9]{32}$/);
     expect(body.email).toBe("test@example.com");
 
-    // Verify api_key was saved to user
+    // Verify api_key update uses conditional WHERE api_key IS NULL
     expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining("UPDATE users SET api_key"),
+      expect.stringContaining("WHERE id = ? AND api_key IS NULL"),
       expect.arrayContaining([expect.stringMatching(/^pk_/), "user-123"])
     );
+  });
+
+  it("should re-read api_key if another request set it concurrently", async () => {
+    const mockFirstOrNull = vi.fn()
+      .mockResolvedValueOnce({
+        code: "ABCD-1234",
+        user_id: "user-123",
+        expires_at: new Date(Date.now() + 300_000).toISOString(),
+        used_at: null,
+        failed_attempts: 0,
+      })
+      .mockResolvedValueOnce({
+        id: "user-123",
+        email: "test@example.com",
+        api_key: null, // No existing key on first read
+      })
+      .mockResolvedValueOnce({
+        api_key: "pk_set_by_other_request", // Another request already set it
+      });
+
+    mockGetDbRead.mockResolvedValue({
+      query: vi.fn(),
+      firstOrNull: mockFirstOrNull,
+    });
+
+    // First UPDATE (api_key) returns 0 changes (lost race), second UPDATE (used_at) succeeds
+    const mockExecute = vi.fn()
+      .mockResolvedValueOnce({ changes: 0 }) // Lost the race to set api_key
+      .mockResolvedValueOnce({ changes: 1 }); // Successfully consumed code
+
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
+    });
+
+    const request = new Request("http://localhost/api/auth/code/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "ABCD-1234" }),
+    });
+
+    const response = await verifyPOST(request);
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    // Should return the key set by the other request, not our generated one
+    expect(body.api_key).toBe("pk_set_by_other_request");
   });
 
   it("should normalize code format (accept without hyphen)", async () => {
