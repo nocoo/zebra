@@ -17,6 +17,11 @@ import {
   uninstallCodexNotifier,
   getCodexNotifierStatus,
 } from "./codex-notifier.js";
+import {
+  installPiHook,
+  uninstallPiHook,
+  getPiHookStatus,
+} from "./pi-hook.js";
 
 interface RegistryDeps {
   spawn?: (cmd: string, args: string[], opts?: object) => { status: number | null };
@@ -132,6 +137,25 @@ const DRIVERS: NotifierDriver[] = [
         pluginBaseDir: paths.openclawPluginDir,
         notifyPath: paths.notifyPath,
         openclawConfigPath: paths.openclawConfigPath,
+      }),
+  },
+  {
+    source: "pi",
+    displayName: "Pi",
+    install: (paths) =>
+      installPiHook({
+        extensionPath: paths.piExtensionPath,
+        notifyPath: paths.notifyPath,
+      }),
+    uninstall: (paths) =>
+      uninstallPiHook({
+        extensionPath: paths.piExtensionPath,
+        notifyPath: paths.notifyPath,
+      }),
+    status: (paths) =>
+      getPiHookStatus({
+        extensionPath: paths.piExtensionPath,
+        notifyPath: paths.notifyPath,
       }),
   },
 ];

@@ -68,6 +68,7 @@ export async function executeNotify(
           openCodeDbPath: opts.openCodeDbPath,
           openSessionDb: opts.openSessionDb,
           openclawDir: opts.openclawDir,
+          piSessionsDir: opts.piSessionsDir,
         });
         cycle.sessionSync = {
           totalSnapshots: sessionResult.totalSnapshots,

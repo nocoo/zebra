@@ -37,6 +37,7 @@ import { geminiSessionDriver } from "./session/gemini-session-driver.js";
 import { openCodeJsonSessionDriver } from "./session/opencode-json-session-driver.js";
 import { openClawSessionDriver } from "./session/openclaw-session-driver.js";
 import { codexSessionDriver } from "./session/codex-session-driver.js";
+import { piSessionDriver } from "./session/pi-session-driver.js";
 import {
   createOpenCodeSqliteSessionDriver,
   type OpenCodeSqliteSessionDriverOpts,
@@ -129,6 +130,7 @@ export interface SessionDriverRegistryOpts {
   openCodeMessageDir?: string;
   openclawDir?: string;
   codexSessionsDir?: string;
+  piSessionsDir?: string;
   openCodeDbPath?: string;
   openSessionDb?: OpenCodeSqliteSessionDriverOpts["openSessionDb"];
 }
@@ -161,6 +163,9 @@ export function createSessionDrivers(opts: SessionDriverRegistryOpts): SessionDr
   }
   if (opts.openclawDir) {
     fileDrivers.push(openClawSessionDriver);
+  }
+  if (opts.piSessionsDir) {
+    fileDrivers.push(piSessionDriver);
   }
   if (opts.openCodeDbPath && opts.openSessionDb) {
     dbDrivers.push(

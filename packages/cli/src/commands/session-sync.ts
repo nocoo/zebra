@@ -56,6 +56,8 @@ export interface SessionSyncOptions {
   } | null;
   /** Override: OpenClaw data directory (~/.openclaw) */
   openclawDir?: string;
+  /** Override: Pi session directory (~/.pi/agent/sessions) */
+  piSessionsDir?: string;
   /** Progress callback */
   onProgress?: (event: SessionProgressEvent) => void;
   /** Callback invoked when a corrupted JSONL line is found in the queue */
@@ -81,6 +83,7 @@ export interface SessionSyncResult {
     gemini: number;
     opencode: number;
     openclaw: number;
+    pi: number;
   };
   /** Total files/directories scanned per source */
   filesScanned: {
@@ -89,6 +92,7 @@ export interface SessionSyncResult {
     gemini: number;
     opencode: number;
     openclaw: number;
+    pi: number;
   };
 }
 
@@ -134,7 +138,7 @@ function sourceKey(source: Source): keyof SessionSyncResult["sources"] | null {
     case "opencode": return "opencode";
     case "openclaw": return "openclaw";
     case "codex": return "codex";
-    case "pi": return null;
+    case "pi": return "pi";
     case "vscode-copilot": return null;
     case "copilot-cli": return null;
   }
@@ -158,8 +162,8 @@ export async function executeSessionSync(
   const cursors = await cursorStore.load();
 
   const allSnapshots: SessionSnapshot[] = [];
-  const sourceCounts = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0 };
-  const filesScanned = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0 };
+  const sourceCounts = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0, pi: 0 };
+  const filesScanned = { claude: 0, codex: 0, gemini: 0, opencode: 0, openclaw: 0, pi: 0 };
 
   // Build driver sets from options
   const { fileDrivers, dbDrivers } = createSessionDrivers(opts);
@@ -172,6 +176,7 @@ export async function executeSessionSync(
     openCodeMessageDir: opts.openCodeMessageDir,
     openCodeDbPath: opts.openCodeDbPath,
     openclawDir: opts.openclawDir,
+    piSessionsDir: opts.piSessionsDir,
   };
 
   // ---------- Phase 1: File-based drivers (generic loop) ----------

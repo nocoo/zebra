@@ -18,6 +18,7 @@ export interface NotifierPaths {
   codexHome: string;
   codexConfigPath: string;
   codexNotifyOriginalPath: string;
+  piExtensionPath: string;
 }
 
 function normalizeEnvPath(value: string | undefined): string | null {
@@ -63,5 +64,6 @@ export function resolveNotifierPaths(
     codexHome,
     codexConfigPath: join(codexHome, "config.toml"),
     codexNotifyOriginalPath: join(stateDir, "codex_notify_original.json"),
+    piExtensionPath: join(home, ".pi", "agent", "extensions", "pew-sync.ts"),
   };
 }

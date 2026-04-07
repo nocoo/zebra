@@ -245,6 +245,7 @@ const syncCommand = defineCommand({
       openCodeDbPath: paths.openCodeDbPath,
       openSessionDb,
       openclawDir: paths.openclawDir,
+      piSessionsDir: paths.piSessionsDir,
       onCorruptLine: handleCorruptLine,
       onProgress(event) {
         logSessionSyncProgress(event);
@@ -265,6 +266,7 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.gemini > 0) sessParts.push(`Gemini: ${sessionResult.sources.gemini}`);
       if (sessionResult.sources.opencode > 0) sessParts.push(`OpenCode: ${sessionResult.sources.opencode}`);
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
+      if (sessionResult.sources.pi > 0) sessParts.push(`Pi: ${sessionResult.sources.pi}`);
       if (sessParts.length > 0) {
         log.text(pc.dim(sessParts.join("  |  ")));
       }
@@ -278,6 +280,7 @@ const syncCommand = defineCommand({
     if (sfs.gemini > 0) sessScanParts.push(`Gemini: ${sfs.gemini}`);
     if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
     if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
+    if (sfs.pi > 0) sessScanParts.push(`Pi: ${sfs.pi}`);
     if (sessScanParts.length > 0) {
       log.text(`Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
     }

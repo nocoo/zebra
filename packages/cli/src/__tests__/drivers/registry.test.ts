@@ -165,17 +165,24 @@ describe("createSessionDrivers", () => {
     expect(fileDrivers[0].source).toBe("codex");
   });
 
-  it("returns all 5 file drivers when all dirs are set", () => {
+  it("includes pi session driver when piSessionsDir is set", () => {
+    const { fileDrivers } = createSessionDrivers({ piSessionsDir: "/tmp/pi/sessions" });
+    expect(fileDrivers).toHaveLength(1);
+    expect(fileDrivers[0].source).toBe("pi");
+  });
+
+  it("returns all 6 file drivers when all dirs are set", () => {
     const { fileDrivers, dbDrivers } = createSessionDrivers({
       claudeDir: "/tmp/claude",
       geminiDir: "/tmp/gemini",
       openCodeMessageDir: "/tmp/oc",
       openclawDir: "/tmp/openclaw",
+      piSessionsDir: "/tmp/pi/sessions",
       codexSessionsDir: "/tmp/codex",
     });
-    expect(fileDrivers).toHaveLength(5);
+    expect(fileDrivers).toHaveLength(6);
     const sources = fileDrivers.map((d) => d.source);
-    expect(sources).toEqual(["claude-code", "codex", "gemini-cli", "opencode", "openclaw"]);
+    expect(sources).toEqual(["claude-code", "codex", "gemini-cli", "opencode", "openclaw", "pi"]);
     expect(dbDrivers).toHaveLength(0);
   });
 
