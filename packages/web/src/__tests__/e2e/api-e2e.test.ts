@@ -383,3 +383,427 @@ describe("GET /api/auth/cli", () => {
     );
   });
 });
+
+// ===========================================================================
+// Showcase API E2E Tests
+// ===========================================================================
+
+async function cleanupShowcases(d1: D1Client): Promise<void> {
+  // Delete upvotes first (FK constraint)
+  await d1.execute("DELETE FROM showcase_upvotes WHERE user_id = ?", [
+    TEST_USER_ID,
+  ]);
+  // Delete showcases
+  await d1.execute("DELETE FROM showcases WHERE user_id = ?", [TEST_USER_ID]);
+}
+
+/** Helper to create a showcase and return its ID */
+async function createTestShowcase(
+  repoUrl: string,
+  tagline?: string,
+): Promise<string> {
+  const res = await fetch(`${BASE_URL}/api/showcases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      github_url: repoUrl,
+      tagline,
+    }),
+  });
+  if (res.status !== 201) {
+    const body = await res.json();
+    throw new Error(`Failed to create showcase: ${body.error}`);
+  }
+  const body = await res.json();
+  return body.id;
+}
+
+describe("Showcase API", () => {
+  // Clean up any leftover showcase data before tests
+  beforeAll(async () => {
+    await cleanupShowcases(d1);
+  });
+
+  // Clean up showcases after all showcase tests
+  afterAll(async () => {
+    await cleanupShowcases(d1);
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/showcases/preview
+  // -------------------------------------------------------------------------
+
+  describe("POST /api/showcases/preview", () => {
+    it("should return preview for valid GitHub repo", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: "https://github.com/nocoo/pew" }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.repo_key).toBe("nocoo/pew");
+      expect(body.github_url).toBe("https://github.com/nocoo/pew");
+      expect(body.title).toBe("pew");
+      expect(body.og_image_url).toContain("opengraph.githubassets.com");
+      expect(typeof body.already_exists).toBe("boolean");
+    });
+
+    it("should return 400 for invalid URL format", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: "https://github.com/nocoo" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid");
+    });
+
+    it("should return 404 for non-existent repo", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_url: "https://github.com/nocoo/this-repo-does-not-exist-xyz",
+        }),
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/showcases (create)
+  // -------------------------------------------------------------------------
+
+  describe("POST /api/showcases", () => {
+    afterAll(async () => {
+      // Clean up for next test group
+      await cleanupShowcases(d1);
+    });
+
+    it("should create a showcase for valid repo", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_url: "https://github.com/nocoo/pew",
+          tagline: "Track your AI coding tool token usage",
+        }),
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+
+      expect(body.id).toBeTruthy();
+      expect(body.repo_key).toBe("nocoo/pew");
+      expect(body.title).toBe("pew");
+      expect(body.tagline).toBe("Track your AI coding tool token usage");
+      expect(body.is_public).toBe(true);
+      expect(body.upvote_count).toBe(0);
+
+      // Verify in D1 directly
+      const row = await d1.firstOrNull<{ repo_key: string }>(
+        "SELECT repo_key FROM showcases WHERE id = ?",
+        [body.id],
+      );
+      expect(row).not.toBeNull();
+      expect(row!.repo_key).toBe("nocoo/pew");
+    });
+
+    it("should return 409 for duplicate repo", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_url: "https://github.com/nocoo/pew",
+        }),
+      });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toContain("already");
+    });
+
+    it("should return 400 for tagline over 280 chars", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_url: "https://github.com/vercel/next.js",
+          tagline: "x".repeat(281),
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("280");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/showcases (list)
+  // -------------------------------------------------------------------------
+
+  describe("GET /api/showcases", () => {
+    let showcaseId: string;
+
+    beforeAll(async () => {
+      showcaseId = await createTestShowcase(
+        "https://github.com/nocoo/pew",
+        "Test showcase for listing",
+      );
+    });
+
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should list public showcases", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(Array.isArray(body.showcases)).toBe(true);
+      expect(typeof body.total).toBe("number");
+      expect(body.total).toBeGreaterThanOrEqual(1);
+
+      // Find our created showcase
+      const ourShowcase = body.showcases.find(
+        (s: { id: string }) => s.id === showcaseId,
+      );
+      expect(ourShowcase).toBeTruthy();
+      expect(ourShowcase.user).toBeTruthy();
+      expect(ourShowcase.user.id).toBe(TEST_USER_ID);
+    });
+
+    it("should return mine=1 showcases for authenticated user", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases?mine=1`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.showcases.length).toBeGreaterThanOrEqual(1);
+      // All should belong to test user
+      for (const s of body.showcases) {
+        expect(s.user.id).toBe(TEST_USER_ID);
+      }
+    });
+
+    it("should respect limit and offset", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases?limit=1&offset=0`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.showcases.length).toBeLessThanOrEqual(1);
+      expect(body.limit).toBe(1);
+      expect(body.offset).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/showcases/[id] (single)
+  // -------------------------------------------------------------------------
+
+  describe("GET /api/showcases/[id]", () => {
+    let showcaseId: string;
+
+    beforeAll(async () => {
+      showcaseId = await createTestShowcase("https://github.com/nocoo/pew");
+    });
+
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should return single showcase", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/${showcaseId}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.id).toBe(showcaseId);
+      expect(body.repo_key).toBe("nocoo/pew");
+      expect(body.user.id).toBe(TEST_USER_ID);
+    });
+
+    it("should return 404 for non-existent showcase", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/non-existent-id`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/showcases/[id] (update)
+  // -------------------------------------------------------------------------
+
+  describe("PATCH /api/showcases/[id]", () => {
+    let showcaseId: string;
+
+    beforeAll(async () => {
+      showcaseId = await createTestShowcase("https://github.com/nocoo/pew");
+    });
+
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should update tagline", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/${showcaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagline: "Updated tagline for testing" }),
+      });
+      expect(res.status).toBe(200);
+
+      // Verify update
+      const getRes = await fetch(`${BASE_URL}/api/showcases/${showcaseId}`);
+      const body = await getRes.json();
+      expect(body.tagline).toBe("Updated tagline for testing");
+    });
+
+    it("should update visibility", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/${showcaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: false }),
+      });
+      expect(res.status).toBe(200);
+
+      // Verify in DB (hidden showcase still visible to owner)
+      const row = await d1.firstOrNull<{ is_public: number }>(
+        "SELECT is_public FROM showcases WHERE id = ?",
+        [showcaseId],
+      );
+      expect(row!.is_public).toBe(0);
+
+      // Restore visibility for other tests
+      await fetch(`${BASE_URL}/api/showcases/${showcaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: true }),
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/showcases/[id]/upvote (toggle)
+  // -------------------------------------------------------------------------
+
+  describe("POST /api/showcases/[id]/upvote", () => {
+    let showcaseId: string;
+
+    beforeAll(async () => {
+      showcaseId = await createTestShowcase("https://github.com/nocoo/pew");
+    });
+
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should add upvote", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/${showcaseId}/upvote`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.upvoted).toBe(true);
+      expect(body.upvote_count).toBe(1);
+
+      // Verify in D1
+      const row = await d1.firstOrNull<{ id: number }>(
+        "SELECT id FROM showcase_upvotes WHERE showcase_id = ? AND user_id = ?",
+        [showcaseId, TEST_USER_ID],
+      );
+      expect(row).not.toBeNull();
+    });
+
+    it("should remove upvote on second call (toggle)", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/${showcaseId}/upvote`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.upvoted).toBe(false);
+      expect(body.upvote_count).toBe(0);
+    });
+
+    it("should return 404 for non-existent showcase", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/non-existent/upvote`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/showcases/[id]/refresh
+  // -------------------------------------------------------------------------
+
+  describe("POST /api/showcases/[id]/refresh", () => {
+    let showcaseId: string;
+
+    beforeAll(async () => {
+      showcaseId = await createTestShowcase("https://github.com/nocoo/pew");
+    });
+
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should refresh metadata from GitHub", async () => {
+      const res = await fetch(
+        `${BASE_URL}/api/showcases/${showcaseId}/refresh`,
+        { method: "POST" },
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.title).toBe("pew");
+      expect(body.repo_key).toBe("nocoo/pew");
+      expect(body.refreshed_at).toBeTruthy();
+    });
+
+    it("should return 404 for non-existent showcase", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/non-existent/refresh`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // DELETE /api/showcases/[id]
+  // -------------------------------------------------------------------------
+
+  describe("DELETE /api/showcases/[id]", () => {
+    afterAll(async () => {
+      await cleanupShowcases(d1);
+    });
+
+    it("should delete showcase", async () => {
+      // Create a new showcase specifically for deletion test
+      const showcaseId = await createTestShowcase(
+        "https://github.com/vercel/next.js",
+      );
+
+      // Delete it
+      const deleteRes = await fetch(`${BASE_URL}/api/showcases/${showcaseId}`, {
+        method: "DELETE",
+      });
+      expect(deleteRes.status).toBe(200);
+
+      // Verify deleted
+      const row = await d1.firstOrNull<{ id: string }>(
+        "SELECT id FROM showcases WHERE id = ?",
+        [showcaseId],
+      );
+      expect(row).toBeNull();
+    });
+
+    it("should return 404 for non-existent showcase", async () => {
+      const res = await fetch(`${BASE_URL}/api/showcases/non-existent`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+});
