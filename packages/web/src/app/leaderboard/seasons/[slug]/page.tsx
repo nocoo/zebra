@@ -42,7 +42,7 @@ function SeasonTableHeader() {
         <span className="flex-1">Team</span>
         <span className="hidden sm:block w-24 shrink-0 text-right">Sessions</span>
         <span className="hidden sm:block w-24 shrink-0 text-right">Duration</span>
-        <span className="w-[140px] sm:w-[220px] shrink-0 text-right">Tokens</span>
+        <span className="min-w-[140px] sm:min-w-[220px] text-right">Tokens</span>
         {/* Expand chevron spacer */}
         <span className="w-4 shrink-0" />
       </div>
@@ -174,7 +174,7 @@ function TeamRow({
         </div>
 
         {/* Total */}
-        <div className="relative z-10 w-[140px] sm:w-[220px] shrink-0 text-right flex items-center justify-end">
+        <div className="relative z-10 min-w-[140px] sm:min-w-[220px] text-right flex items-center justify-end">
           <span className="font-handwriting text-[32px] sm:text-[39px] leading-none tracking-tight text-foreground whitespace-nowrap">
             {formatTokensFull(entry.total_tokens)}
           </span>
@@ -246,7 +246,7 @@ function TeamRow({
                 </div>
 
                 {/* Tokens — same width and font size as team row */}
-                <div className="relative z-10 w-[140px] sm:w-[220px] shrink-0 text-right flex items-center justify-end">
+                <div className="relative z-10 min-w-[140px] sm:min-w-[220px] text-right flex items-center justify-end">
                   <span className="font-handwriting text-[32px] sm:text-[39px] leading-none tracking-tight text-muted-foreground whitespace-nowrap">
                     {formatTokensFull(member.total_tokens)}
                   </span>

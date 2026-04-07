@@ -336,7 +336,7 @@ function LeaderboardRow({
       </div>
 
       {/* Total — check-style handwriting font, full number */}
-      <div className="relative z-10 w-[140px] sm:w-[220px] shrink-0 text-right flex items-center justify-end">
+      <div className="relative z-10 min-w-[140px] sm:min-w-[220px] text-right flex items-center justify-end">
         <span className="font-handwriting text-[32px] sm:text-[39px] leading-none tracking-tight text-foreground whitespace-nowrap">
           {formatTokensFull(total_tokens)}
         </span>
