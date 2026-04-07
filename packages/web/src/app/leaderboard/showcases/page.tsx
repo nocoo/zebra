@@ -22,10 +22,13 @@ export default async function ShowcasesPage() {
   return (
     <>
       <PageHeader>
-        <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">
-          Showcases
+        <h1 className="tracking-tight text-foreground">
+          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
+          <span className="text-[19px] font-normal text-muted-foreground">
+            Showcases
+          </span>
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           Community-submitted GitHub projects worth checking out.
         </p>
       </PageHeader>
