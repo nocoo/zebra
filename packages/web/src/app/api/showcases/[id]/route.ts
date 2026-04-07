@@ -1,0 +1,302 @@
+/**
+ * GET    /api/showcases/[id] — get single showcase
+ * PATCH  /api/showcases/[id] — update showcase (owner or admin)
+ * DELETE /api/showcases/[id] — delete showcase (owner or admin)
+ */
+
+import { NextResponse } from "next/server";
+import { resolveUser } from "@/lib/auth-helpers";
+import { getDbRead, getDbWrite } from "@/lib/db";
+import { isAdmin } from "@/lib/admin";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ShowcaseRow {
+  id: string;
+  user_id: string;
+  repo_key: string;
+  github_url: string;
+  title: string;
+  description: string | null;
+  tagline: string | null;
+  og_image_url: string | null;
+  is_public: number;
+  created_at: string;
+  refreshed_at: string;
+  // Joined user fields
+  user_name: string | null;
+  user_nickname: string | null;
+  user_image: string | null;
+  user_slug: string | null;
+  // Computed
+  upvote_count: number;
+  has_upvoted?: number;
+}
+
+type RouteContext = { params: Promise<{ id: string }> };
+
+// ---------------------------------------------------------------------------
+// GET — get single showcase
+// ---------------------------------------------------------------------------
+
+export async function GET(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const user = await resolveUser(request);
+  const admin = user ? isAdmin(user.email) : false;
+
+  const dbRead = await getDbRead();
+
+  try {
+    let showcase: ShowcaseRow | null;
+
+    if (user) {
+      // Authenticated: include has_upvoted
+      showcase = await dbRead.firstOrNull<ShowcaseRow>(
+        `SELECT
+          s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+          s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+          u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+          (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count,
+          EXISTS(SELECT 1 FROM showcase_upvotes WHERE showcase_id = s.id AND user_id = ?) as has_upvoted
+        FROM showcases s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.id = ?`,
+        [user.userId, id]
+      );
+    } else {
+      // Unauthenticated: no has_upvoted
+      showcase = await dbRead.firstOrNull<ShowcaseRow>(
+        `SELECT
+          s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+          s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+          u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+          (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count
+        FROM showcases s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.id = ?`,
+        [id]
+      );
+    }
+
+    if (!showcase) {
+      return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+    }
+
+    // Access control: hidden showcases only visible to owner or admin
+    if (showcase.is_public !== 1) {
+      const isOwner = user && showcase.user_id === user.userId;
+      if (!isOwner && !admin) {
+        return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+      }
+    }
+
+    return NextResponse.json({
+      id: showcase.id,
+      repo_key: showcase.repo_key,
+      github_url: showcase.github_url,
+      title: showcase.title,
+      description: showcase.description,
+      tagline: showcase.tagline,
+      og_image_url: showcase.og_image_url,
+      upvote_count: showcase.upvote_count,
+      is_public: showcase.is_public === 1,
+      created_at: showcase.created_at,
+      refreshed_at: showcase.refreshed_at,
+      user: {
+        id: showcase.user_id,
+        name: showcase.user_name,
+        nickname: showcase.user_nickname,
+        image: showcase.user_image,
+        slug: showcase.user_slug,
+      },
+      has_upvoted: showcase.has_upvoted !== undefined ? showcase.has_upvoted === 1 : null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("no such table")) {
+      return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+    }
+    console.error("Failed to get showcase:", err);
+    return NextResponse.json(
+      { error: "Failed to get showcase" },
+      { status: 500 }
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PATCH — update showcase
+// ---------------------------------------------------------------------------
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const user = await resolveUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
+  const admin = isAdmin(user.email);
+
+  // Find showcase
+  let showcase: { id: string; user_id: string } | null;
+  try {
+    showcase = await dbRead.firstOrNull<{ id: string; user_id: string }>(
+      "SELECT id, user_id FROM showcases WHERE id = ?",
+      [id]
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("no such table")) {
+      return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+    }
+    console.error("Failed to find showcase:", err);
+    return NextResponse.json(
+      { error: "Failed to find showcase" },
+      { status: 500 }
+    );
+  }
+
+  if (!showcase) {
+    return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+  }
+
+  // Access control: owner or admin
+  const isOwner = showcase.user_id === user.userId;
+  if (!isOwner && !admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Validate input
+  const { tagline, is_public } = body as { tagline?: string | null; is_public?: boolean };
+
+  if (tagline !== undefined && tagline !== null) {
+    if (typeof tagline !== "string") {
+      return NextResponse.json(
+        { error: "tagline must be a string" },
+        { status: 400 }
+      );
+    }
+    if (tagline.length > 280) {
+      return NextResponse.json(
+        { error: "tagline must be 280 characters or less" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (is_public !== undefined && typeof is_public !== "boolean") {
+    return NextResponse.json(
+      { error: "is_public must be a boolean" },
+      { status: 400 }
+    );
+  }
+
+  // Build UPDATE statement
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (tagline !== undefined) {
+    updates.push("tagline = ?");
+    params.push(tagline);
+  }
+
+  if (is_public !== undefined) {
+    updates.push("is_public = ?");
+    params.push(is_public ? 1 : 0);
+  }
+
+  if (updates.length === 0) {
+    return NextResponse.json(
+      { error: "No fields to update" },
+      { status: 400 }
+    );
+  }
+
+  updates.push("updated_at = ?");
+  params.push(new Date().toISOString());
+  params.push(id);
+
+  try {
+    await dbWrite.execute(
+      `UPDATE showcases SET ${updates.join(", ")} WHERE id = ?`,
+      params
+    );
+  } catch (err) {
+    console.error("Failed to update showcase:", err);
+    return NextResponse.json(
+      { error: "Failed to update showcase" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+// ---------------------------------------------------------------------------
+// DELETE — delete showcase
+// ---------------------------------------------------------------------------
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const user = await resolveUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
+  const admin = isAdmin(user.email);
+
+  // Find showcase
+  let showcase: { id: string; user_id: string } | null;
+  try {
+    showcase = await dbRead.firstOrNull<{ id: string; user_id: string }>(
+      "SELECT id, user_id FROM showcases WHERE id = ?",
+      [id]
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("no such table")) {
+      return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+    }
+    console.error("Failed to find showcase:", err);
+    return NextResponse.json(
+      { error: "Failed to find showcase" },
+      { status: 500 }
+    );
+  }
+
+  if (!showcase) {
+    return NextResponse.json({ error: "Showcase not found" }, { status: 404 });
+  }
+
+  // Access control: owner or admin
+  const isOwner = showcase.user_id === user.userId;
+  if (!isOwner && !admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    // Delete showcase (upvotes cascade due to ON DELETE CASCADE)
+    await dbWrite.execute("DELETE FROM showcases WHERE id = ?", [id]);
+  } catch (err) {
+    console.error("Failed to delete showcase:", err);
+    return NextResponse.json(
+      { error: "Failed to delete showcase" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
+}
