@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
-import { isAdmin } from "@/lib/admin";
+import { isAdminUser } from "@/lib/admin";
 import { type ShowcaseRow, MAX_TAGLINE_LENGTH } from "@/lib/showcase-types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -19,7 +19,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const user = await resolveUser(request);
-  const admin = user ? isAdmin(user.email) : false;
+  const admin = user ? await isAdminUser(user) : false;
 
   const dbRead = await getDbRead();
 
@@ -121,7 +121,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
-  const admin = isAdmin(user.email);
+  const admin = await isAdminUser(user);
 
   // Find showcase
   let showcase: { id: string; user_id: string } | null;
@@ -231,7 +231,7 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
-  const admin = isAdmin(user.email);
+  const admin = await isAdminUser(user);
 
   // Find showcase
   let showcase: { id: string; user_id: string } | null;

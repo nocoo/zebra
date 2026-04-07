@@ -67,3 +67,22 @@ export async function resolveAdmin(
 
   return { userId: authResult.userId, email: email as string };
 }
+
+/**
+ * Check if the given AuthResult represents an admin user.
+ * Handles case where email may be missing from the auth result.
+ */
+export async function isAdminUser(
+  authResult: AuthResult
+): Promise<boolean> {
+  let email = authResult.email;
+  if (!email) {
+    const db = await getDbRead();
+    const row = await db.firstOrNull<{ email: string }>(
+      "SELECT email FROM users WHERE id = ?",
+      [authResult.userId]
+    );
+    email = row?.email;
+  }
+  return isAdmin(email);
+}

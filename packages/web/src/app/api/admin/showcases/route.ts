@@ -5,9 +5,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { resolveUser } from "@/lib/auth-helpers";
+import { resolveAdmin } from "@/lib/admin";
 import { getDbRead } from "@/lib/db";
-import { isAdmin } from "@/lib/admin";
 import {
   type AdminShowcaseRow,
   DEFAULT_ADMIN_SHOWCASE_LIMIT,
@@ -19,12 +18,8 @@ import {
 // ---------------------------------------------------------------------------
 
 export async function GET(request: Request) {
-  const user = await resolveUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isAdmin(user.email)) {
+  const admin = await resolveAdmin(request);
+  if (!admin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
