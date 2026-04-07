@@ -75,8 +75,8 @@ export async function checkShowcaseRateLimit(
 // Default Configurations
 // ---------------------------------------------------------------------------
 
-/** Rate limit for showcase creation: 5 showcases per hour */
+/** Rate limit for showcase creation: 20 showcases per hour */
 export const SHOWCASE_CREATE_RATE_LIMIT: RateLimitConfig = {
-  maxRequests: 5,
+  maxRequests: 20,
   windowSeconds: 3600, // 1 hour
 };

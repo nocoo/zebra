@@ -132,7 +132,7 @@ describe("checkShowcaseRateLimit", () => {
 
 describe("SHOWCASE_CREATE_RATE_LIMIT", () => {
   it("has correct default values", () => {
-    expect(SHOWCASE_CREATE_RATE_LIMIT.maxRequests).toBe(5);
+    expect(SHOWCASE_CREATE_RATE_LIMIT.maxRequests).toBe(20);
     expect(SHOWCASE_CREATE_RATE_LIMIT.windowSeconds).toBe(3600);
   });
 });
