@@ -14,6 +14,9 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  Package,
+  Users,
+  Github,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ShowcaseImage } from "@/components/showcase";
@@ -49,6 +52,11 @@ interface AdminShowcasesResponse {
   total: number;
   limit: number;
   offset: number;
+  stats: {
+    totalShowcases: number;
+    uniqueUsers: number;
+    uniqueGithubOwners: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -180,11 +188,45 @@ export function AdminShowcasesContent() {
 
   const showcases = data?.showcases ?? [];
   const total = data?.total ?? 0;
+  const stats = data?.stats ?? { totalShowcases: 0, uniqueUsers: 0, uniqueGithubOwners: 0 };
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
   return (
     <div className="space-y-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex items-center gap-3 rounded-xl bg-secondary p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+            <Package className="h-5 w-5" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{stats.totalShowcases}</p>
+            <p className="text-xs text-muted-foreground">Total Showcases</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl bg-secondary p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-chart-2">
+            <Users className="h-5 w-5" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{stats.uniqueUsers}</p>
+            <p className="text-xs text-muted-foreground">Pew Users</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl bg-secondary p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-chart-7">
+            <Github className="h-5 w-5" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{stats.uniqueGithubOwners}</p>
+            <p className="text-xs text-muted-foreground">GitHub Owners</p>
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">

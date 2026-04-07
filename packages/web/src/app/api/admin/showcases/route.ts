@@ -53,12 +53,31 @@ export async function GET(request: Request) {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Get total count
+    // Get total count (affected by filters)
     const countResult = await dbRead.firstOrNull<{ count: number }>(
       `SELECT COUNT(*) as count FROM showcases s ${whereClause}`,
       params
     );
     const total = countResult?.count ?? 0;
+
+    // Get statistics (always unfiltered for dashboard)
+    const statsResult = await dbRead.firstOrNull<{
+      total_showcases: number;
+      unique_users: number;
+      unique_github_owners: number;
+    }>(
+      `SELECT
+        COUNT(*) as total_showcases,
+        COUNT(DISTINCT user_id) as unique_users,
+        COUNT(DISTINCT SUBSTR(repo_key, 1, INSTR(repo_key, '/') - 1)) as unique_github_owners
+      FROM showcases`
+    );
+
+    const stats = {
+      totalShowcases: statsResult?.total_showcases ?? 0,
+      uniqueUsers: statsResult?.unique_users ?? 0,
+      uniqueGithubOwners: statsResult?.unique_github_owners ?? 0,
+    };
 
     // Get showcases
     const query = `
@@ -105,11 +124,18 @@ export async function GET(request: Request) {
       total,
       limit,
       offset,
+      stats,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg.includes("no such table")) {
-      return NextResponse.json({ showcases: [], total: 0, limit, offset });
+      return NextResponse.json({
+        showcases: [],
+        total: 0,
+        limit,
+        offset,
+        stats: { totalShowcases: 0, uniqueUsers: 0, uniqueGithubOwners: 0 },
+      });
     }
     console.error("Failed to list showcases:", err);
     return NextResponse.json(
