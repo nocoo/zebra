@@ -21,6 +21,10 @@ import {
   DEFAULT_SHOWCASE_LIMIT,
   MAX_SHOWCASE_LIMIT,
 } from "@/lib/showcase-types";
+import {
+  checkShowcaseRateLimit,
+  SHOWCASE_CREATE_RATE_LIMIT,
+} from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // GET — list showcases
@@ -164,6 +168,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Check rate limit before processing
+  const dbRead = await getDbRead();
+  try {
+    const rateLimit = await checkShowcaseRateLimit(
+      dbRead,
+      user.userId,
+      SHOWCASE_CREATE_RATE_LIMIT
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Rate limit exceeded. You can create up to ${rateLimit.limit} showcases per hour.`,
+          retry_after: rateLimit.retryAfter,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfter) },
+        }
+      );
+    }
+  } catch (err) {
+    // If rate limit check fails (e.g., table doesn't exist), continue
+    // This allows the first creation before tables exist
+    const msg = err instanceof Error ? err.message : "";
+    if (!msg.includes("no such table")) {
+      console.error("Rate limit check failed:", err);
+    }
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -228,7 +261,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
 
   // Check if already exists

@@ -25,6 +25,11 @@ vi.mock("@/lib/github", () => ({
   gitHubErrorMessage: vi.fn(),
 }));
 
+vi.mock("@/lib/rate-limit", () => ({
+  checkShowcaseRateLimit: vi.fn(),
+  SHOWCASE_CREATE_RATE_LIMIT: { maxRequests: 5, windowSeconds: 3600 },
+}));
+
 vi.mock("nanoid", () => ({
   nanoid: () => "test-nanoid-123",
 }));
@@ -39,6 +44,7 @@ import {
   gitHubErrorToStatus,
   gitHubErrorMessage,
 } from "@/lib/github";
+import { checkShowcaseRateLimit } from "@/lib/rate-limit";
 
 const mockResolveUser = vi.mocked(resolveUser);
 const mockGetDbRead = vi.mocked(getDbRead);
@@ -48,6 +54,7 @@ const mockFetchGitHubMetadata = vi.mocked(fetchGitHubMetadata);
 const mockBuildOgImageUrl = vi.mocked(buildOgImageUrl);
 const mockGitHubErrorToStatus = vi.mocked(gitHubErrorToStatus);
 const mockGitHubErrorMessage = vi.mocked(gitHubErrorMessage);
+const mockCheckShowcaseRateLimit = vi.mocked(checkShowcaseRateLimit);
 
 function createGetRequest(params: Record<string, string> = {}): Request {
   const url = new URL("http://localhost/api/showcases");
@@ -291,6 +298,16 @@ describe("GET /api/showcases", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/showcases", () => {
+  // Default rate limit mock: allow all requests
+  beforeEach(() => {
+    mockCheckShowcaseRateLimit.mockResolvedValue({
+      allowed: true,
+      current: 0,
+      limit: 5,
+      retryAfter: 0,
+    });
+  });
+
   describe("authentication", () => {
     it("returns 401 when not authenticated", async () => {
       mockResolveUser.mockResolvedValue(null);
@@ -491,6 +508,87 @@ describe("POST /api/showcases", () => {
       expect(res.status).toBe(500);
       const json = await res.json();
       expect(json.error).toBe("Failed to fetch repository information");
+    });
+  });
+
+  describe("rate limiting", () => {
+    beforeEach(() => {
+      mockResolveUser.mockResolvedValue({ userId: "u1", email: "test@example.com" });
+    });
+
+    it("returns 429 when rate limit exceeded", async () => {
+      mockCheckShowcaseRateLimit.mockResolvedValue({
+        allowed: false,
+        current: 5,
+        limit: 5,
+        retryAfter: 3600,
+      });
+
+      const res = await POST(createPostRequest({ github_url: "https://github.com/owner/repo" }));
+
+      expect(res.status).toBe(429);
+      const json = await res.json();
+      expect(json.error).toContain("Rate limit exceeded");
+      expect(json.retry_after).toBe(3600);
+      expect(res.headers.get("Retry-After")).toBe("3600");
+    });
+
+    it("allows request when under rate limit", async () => {
+      mockCheckShowcaseRateLimit.mockResolvedValue({
+        allowed: true,
+        current: 2,
+        limit: 5,
+        retryAfter: 0,
+      });
+      mockNormalizeGitHubUrl.mockReturnValue({
+        repoKey: "owner/repo",
+        displayUrl: "https://github.com/owner/repo",
+        owner: "owner",
+        repo: "repo",
+      });
+      mockFetchGitHubMetadata.mockResolvedValue({
+        owner: "owner",
+        name: "repo",
+        title: "repo",
+        description: null,
+        fullName: "owner/repo",
+      });
+      mockBuildOgImageUrl.mockReturnValue("https://og.example.com/image");
+      const mockDbRead = { firstOrNull: vi.fn().mockResolvedValue(null) };
+      const mockDbWrite = { execute: vi.fn().mockResolvedValue({}) };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+      mockGetDbWrite.mockResolvedValue(mockDbWrite as never);
+
+      const res = await POST(createPostRequest({ github_url: "https://github.com/owner/repo" }));
+
+      expect(res.status).toBe(201);
+    });
+
+    it("continues when rate limit check throws for no such table", async () => {
+      // This allows creation before migration runs
+      mockCheckShowcaseRateLimit.mockRejectedValue(new Error("no such table: showcases"));
+      mockNormalizeGitHubUrl.mockReturnValue({
+        repoKey: "owner/repo",
+        displayUrl: "https://github.com/owner/repo",
+        owner: "owner",
+        repo: "repo",
+      });
+      mockFetchGitHubMetadata.mockResolvedValue({
+        owner: "owner",
+        name: "repo",
+        title: "repo",
+        description: null,
+        fullName: "owner/repo",
+      });
+      mockBuildOgImageUrl.mockReturnValue("https://og.example.com/image");
+      const mockDbRead = { firstOrNull: vi.fn().mockResolvedValue(null) };
+      const mockDbWrite = { execute: vi.fn().mockResolvedValue({}) };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+      mockGetDbWrite.mockResolvedValue(mockDbWrite as never);
+
+      const res = await POST(createPostRequest({ github_url: "https://github.com/owner/repo" }));
+
+      expect(res.status).toBe(201);
     });
   });
 });
