@@ -33,5 +33,8 @@
 | 29 | [29-worker-read-migration.md](29-worker-read-migration.md) | Worker read migration — D1 REST API → Worker native binding | in-progress |
 | 30 | [30-quality-system-upgrade.md](30-quality-system-upgrade.md) | Quality system upgrade — L1+L2+L3+G1+G2 | done |
 | 31 | [31-d1-test-isolation.md](31-d1-test-isolation.md) | D1 test isolation — quality system → Tier S | done |
+| 32 | [32-proxy-token-gap-investigation.md](32-proxy-token-gap-investigation.md) | Proxy token gap investigation | reference |
+| 33 | [33-achievement-system-overhaul.md](33-achievement-system-overhaul.md) | Achievement system overhaul | in-progress |
+| 34 | [34-showcase-system.md](34-showcase-system.md) | ProductHunt-style showcase system | design-complete |
 
 > **Note:** Number 14 is intentionally vacant (original doc 14 was renumbered to 12 to fill a gap).
