@@ -643,16 +643,16 @@ packages/web/src/
 
 ## Implementation Plan
 
-### Phase 1: Database & Core API
+### Phase 1: Database & Core API ✅
 
-1. **Migration** — `scripts/migrations/016-showcases.sql`
-2. **Lib: GitHub helpers** — `lib/github.ts` (URL normalization, metadata fetch)
-3. **API: Preview** — `api/showcases/preview/route.ts`
-4. **API: List & Create** — `api/showcases/route.ts`
-5. **API: Single CRUD** — `api/showcases/[id]/route.ts`
-6. **API: Refresh** — `api/showcases/[id]/refresh/route.ts`
-7. **API: Upvote** — `api/showcases/[id]/upvote/route.ts`
-8. **API: Admin list** — `api/admin/showcases/route.ts`
+1. ✅ **Migration** — `scripts/migrations/016-showcases.sql`
+2. ✅ **Lib: GitHub helpers** — `lib/github.ts` (URL normalization, metadata fetch)
+3. ✅ **API: Preview** — `api/showcases/preview/route.ts`
+4. ✅ **API: List & Create** — `api/showcases/route.ts`
+5. ✅ **API: Single CRUD** — `api/showcases/[id]/route.ts`
+6. ✅ **API: Refresh** — `api/showcases/[id]/refresh/route.ts`
+7. ✅ **API: Upvote** — `api/showcases/[id]/upvote/route.ts`
+8. ✅ **API: Admin list** — `api/admin/showcases/route.ts`
 
 ### Phase 2: Frontend
 
