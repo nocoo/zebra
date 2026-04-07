@@ -362,6 +362,11 @@ const loginCommand = defineCommand({
       description: "Force re-login even if already authenticated",
       default: false,
     },
+    headless: {
+      type: "boolean",
+      description: "Headless mode — prints a URL instead of opening browser (for SSH/remote servers)",
+      default: false,
+    },
     dev: {
       type: "boolean",
       description: "Use the dev host (pew.dev.hexly.ai)",
@@ -372,6 +377,38 @@ const loginCommand = defineCommand({
     const paths = resolveDefaultPaths();
     const dev = isDevMode();
     const host = resolveHost(dev);
+
+    if (args.headless) {
+      // Headless login flow — print URL, poll for token
+      const { executeHeadlessLogin } = await import("./commands/headless-login.js");
+      const result = await executeHeadlessLogin({
+        configDir: paths.stateDir,
+        apiUrl: host,
+        dev,
+        force: args.force,
+      });
+
+      if (result.alreadyLoggedIn) {
+        log.info(
+          `Already logged in. Use ${pc.cyan("pew login --headless --force")} to re-authenticate.`,
+        );
+        return;
+      }
+
+      if (result.success) {
+        log.success(
+          `Logged in as ${pc.bold(result.email ?? "unknown")}`,
+        );
+        log.info(
+          `Token saved to ${pc.dim(paths.stateDir + (dev ? "/config.dev.json" : "/config.json"))}`,
+        );
+      } else {
+        log.error(`Login failed: ${result.error}`);
+        process.exitCode = 1;
+      }
+      return;
+    }
+
     log.start("Opening browser for authentication...");
 
     const result = await executeLogin({
