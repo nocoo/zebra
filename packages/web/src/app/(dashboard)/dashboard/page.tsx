@@ -346,10 +346,13 @@ export default function DashboardPage() {
           {/* ── Insights ────────────────────────────────────── */}
           {weekdayWeekend && (
             <DashboardSegment title="Insights">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-                <WeekdayWeekendChart stats={weekdayWeekend} />
-                <SalaryEstimator dailyCosts={dailyCostPoints} />
-              </div>
+              {/* Weekday vs Weekend takes full width */}
+              <WeekdayWeekendChart stats={weekdayWeekend} />
+              {/* Salary Estimator with internal 50/50 split (card + chart) */}
+              <SalaryEstimator
+                dailyCosts={dailyCostPoints}
+                dailyTokens={filledDaily}
+              />
             </DashboardSegment>
           )}
         </>

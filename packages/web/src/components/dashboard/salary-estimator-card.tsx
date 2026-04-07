@@ -1,19 +1,28 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, createContext, useContext } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 import { Banknote, ExternalLink, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { chart, chartAxis, chartMuted } from "@/lib/palette";
+import { DashboardResponsiveContainer } from "./dashboard-responsive-container";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface SalaryEstimatorCardProps {
-  /** Daily average cost in USD */
-  dailyAvgCost: number;
-  /** Time range label for context */
-  rangeLabel: string;
-  className?: string;
+interface DailyCostWithRatio {
+  date: string;
+  totalCost: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 type TimeRange = "7d" | "30d" | "all";
@@ -28,6 +37,26 @@ const RANGE_OPTIONS: RangeOption[] = [
   { value: "30d", label: "30 days" },
   { value: "all", label: "All time" },
 ];
+
+// Default I/O ratios for upper/lower bounds
+// Based on typical pricing: input=$3, output=$15 per 1M tokens
+// At 100% output (worst case), effective rate is highest
+// At 100% input (best case), effective rate is lowest
+const LOWER_BOUND_OUTPUT_RATIO = 0.1; // 10% output = cheaper
+const UPPER_BOUND_OUTPUT_RATIO = 0.4; // 40% output = more expensive
+
+// ---------------------------------------------------------------------------
+// Context for sharing slider state between card and chart
+// ---------------------------------------------------------------------------
+
+interface SalaryEstimatorContextValue {
+  huangRatio: number;
+  setHuangRatio: (v: number) => void;
+  priceMultiplier: number;
+  setPriceMultiplier: (v: number) => void;
+}
+
+const SalaryEstimatorContext = createContext<SalaryEstimatorContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,32 +84,71 @@ function formatCostDisplay(value: number): string {
   return `$${Math.round(value).toLocaleString()}`;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+/**
+ * Calculate yearly salary from daily cost.
+ */
+function dailyCostToYearlySalary(
+  dailyCost: number,
+  huangRatio: number,
+  priceMultiplier: number
+): number {
+  const adjustedCost = dailyCost * (priceMultiplier / 100);
+  const ratio = huangRatio / 100;
+  if (ratio === 0) return 0;
+  return (adjustedCost * 365) / ratio;
+}
 
 /**
- * Salary Estimator Card — estimates engineer salary based on token consumption.
- *
- * Based on Jensen Huang's "50% theory": a $500K/year engineer should consume
- * $250K/year in AI tokens. This card lets users adjust the ratio and token
- * price multiplier to estimate their equivalent salary.
+ * Estimate cost based on token counts and output ratio.
+ * Uses default fallback pricing: input=$3/1M, output=$15/1M
  */
-export function SalaryEstimatorCard({
+function estimateCostWithRatio(
+  totalTokens: number,
+  outputRatio: number
+): number {
+  const M = 1_000_000;
+  const inputPrice = 3; // $/1M tokens
+  const outputPrice = 15; // $/1M tokens
+
+  const outputTokens = totalTokens * outputRatio;
+  const inputTokens = totalTokens * (1 - outputRatio);
+
+  return (inputTokens / M) * inputPrice + (outputTokens / M) * outputPrice;
+}
+
+/** Format date string "2026-03-07" to "Mar 7" */
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// SalaryEstimatorCard (left side with sliders)
+// ---------------------------------------------------------------------------
+
+interface SalaryEstimatorCardProps {
+  dailyAvgCost: number;
+  rangeLabel: string;
+  className?: string;
+}
+
+function SalaryEstimatorCard({
   dailyAvgCost,
   rangeLabel,
   className,
 }: SalaryEstimatorCardProps) {
-  // Slider states
-  const [huangRatio, setHuangRatio] = useState(50); // % of salary spent on tokens
-  const [priceMultiplier, setPriceMultiplier] = useState(100); // % of current pricing
+  const ctx = useContext(SalaryEstimatorContext);
+  if (!ctx) throw new Error("SalaryEstimatorCard must be used within SalaryEstimator");
 
-  // Calculations
+  const { huangRatio, setHuangRatio, priceMultiplier, setPriceMultiplier } = ctx;
+
   const adjustedDailyCost = dailyAvgCost * (priceMultiplier / 100);
 
   const salaries = useMemo(() => {
-    // token_cost = salary * (huangRatio / 100)
-    // salary = token_cost / (huangRatio / 100)
     const ratio = huangRatio / 100;
     if (ratio === 0) {
       return { weekly: 0, monthly: 0, yearly: 0 };
@@ -97,7 +165,7 @@ export function SalaryEstimatorCard({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] bg-secondary p-4 md:p-5",
+        "rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 flex flex-col",
         className
       )}
     >
@@ -127,7 +195,6 @@ export function SalaryEstimatorCard({
 
       {/* Sliders */}
       <div className="space-y-4">
-        {/* Huang Ratio Slider */}
         <SliderControl
           label="Huang Ratio"
           value={huangRatio}
@@ -139,8 +206,6 @@ export function SalaryEstimatorCard({
           description="Token spend as % of salary"
           defaultValue={50}
         />
-
-        {/* Price Multiplier Slider */}
         <SliderControl
           label="Price Adjustment"
           value={priceMultiplier}
@@ -182,12 +247,201 @@ export function SalaryEstimatorCard({
       </div>
 
       {/* Daily Cost Reference */}
-      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+      <div className="mt-auto pt-4 flex items-center justify-between text-xs text-muted-foreground">
         <span>Daily avg cost ({rangeLabel})</span>
         <span className="font-medium tabular-nums text-foreground">
           {formatCostDisplay(adjustedDailyCost)}
         </span>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SalaryTrendChart (right side)
+// ---------------------------------------------------------------------------
+
+interface SalaryTrendChartProps {
+  data: DailyCostWithRatio[];
+  className?: string;
+}
+
+function SalaryTrendChart({ data, className }: SalaryTrendChartProps) {
+  const ctx = useContext(SalaryEstimatorContext);
+  if (!ctx) throw new Error("SalaryTrendChart must be used within SalaryEstimator");
+
+  const { huangRatio, priceMultiplier } = ctx;
+
+  const chartData = useMemo(() => {
+    return data.map((d) => {
+      const totalTokens = d.inputTokens + d.outputTokens;
+
+      // Use actual cost for the "actual" line
+      const actualSalary = dailyCostToYearlySalary(d.totalCost, huangRatio, priceMultiplier);
+
+      // Calculate upper/lower bounds using fixed output ratios
+      const lowerCost = estimateCostWithRatio(totalTokens, LOWER_BOUND_OUTPUT_RATIO);
+      const upperCost = estimateCostWithRatio(totalTokens, UPPER_BOUND_OUTPUT_RATIO);
+
+      const lowerSalary = dailyCostToYearlySalary(lowerCost, huangRatio, priceMultiplier);
+      const upperSalary = dailyCostToYearlySalary(upperCost, huangRatio, priceMultiplier);
+
+      return {
+        date: d.date,
+        actual: actualSalary,
+        lower: lowerSalary,
+        upper: upperSalary,
+      };
+    });
+  }, [data, huangRatio, priceMultiplier]);
+
+  if (chartData.length === 0) {
+    return (
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-[var(--radius-card)] bg-secondary p-8 text-sm text-muted-foreground",
+          className
+        )}
+      >
+        No data for salary trend
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 flex flex-col",
+        className
+      )}
+    >
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs md:text-sm text-muted-foreground">
+          Salary Trend
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="h-0.5 w-3 rounded-full" style={{ background: chart.violet }} />
+            <span className="text-[10px] text-muted-foreground">Actual</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-0.5 w-3 rounded-full"
+              style={{ background: chartMuted, opacity: 0.6 }}
+            />
+            <span className="text-[10px] text-muted-foreground">Range</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart fills remaining height */}
+      <div className="flex-1 min-h-0">
+        <DashboardResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={chartData}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke={chartAxis}
+              strokeOpacity={0.15}
+              vertical={false}
+            />
+            <XAxis
+              dataKey="date"
+              tickFormatter={fmtDate}
+              tick={{ fill: chartAxis, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tickFormatter={formatSalary}
+              tick={{ fill: chartAxis, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              width={52}
+            />
+            <Tooltip
+              content={<SalaryTooltip />}
+              isAnimationActive={false}
+            />
+            {/* Upper bound (dashed) */}
+            <Line
+              type="monotone"
+              dataKey="upper"
+              stroke={chartMuted}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              strokeOpacity={0.6}
+            />
+            {/* Actual (solid) */}
+            <Line
+              type="monotone"
+              dataKey="actual"
+              stroke={chart.violet}
+              strokeWidth={2}
+              dot={false}
+            />
+            {/* Lower bound (dashed) */}
+            <Line
+              type="monotone"
+              dataKey="lower"
+              stroke={chartMuted}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              strokeOpacity={0.6}
+            />
+          </LineChart>
+        </DashboardResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function SalaryTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey: string; value: number; color: string }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+
+  const labels: Record<string, string> = {
+    actual: "Actual",
+    upper: "Upper Bound",
+    lower: "Lower Bound",
+  };
+
+  return (
+    <div className="rounded-[var(--radius-widget)] bg-secondary p-2.5">
+      <p className="mb-1.5 text-xs font-medium text-foreground">
+        {label ? fmtDate(label) : ""}
+      </p>
+      {["actual", "upper", "lower"].map((key) => {
+        const entry = payload.find((e) => e.dataKey === key);
+        if (!entry) return null;
+        return (
+          <div key={key} className="flex items-center gap-2 text-xs">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{
+                backgroundColor: key === "actual" ? chart.violet : chartMuted,
+                opacity: key === "actual" ? 1 : 0.6,
+              }}
+            />
+            <span className="text-muted-foreground">{labels[key]}</span>
+            <span className="ml-auto font-medium text-foreground tabular-nums">
+              {formatSalary(entry.value)}/yr
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -256,7 +510,6 @@ function SliderControl({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-foreground">{label}</span>
-          {/* Always render badge container to prevent layout shift */}
           <span
             className={cn(
               "rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary transition-opacity",
@@ -288,7 +541,6 @@ function SliderControl({
       </div>
       <p className="text-[10px] text-muted-foreground/70">{description}</p>
 
-      {/* Slider custom styles */}
       <style jsx>{`
         .slider-input {
           -webkit-appearance: none;
@@ -345,11 +597,10 @@ function SliderControl({
 }
 
 // ---------------------------------------------------------------------------
-// Hook: useSalaryEstimatorData
+// Data computation
 // ---------------------------------------------------------------------------
 
 interface SalaryEstimatorData {
-  /** Daily average cost for each time range */
   ranges: {
     "7d": { dailyAvg: number; days: number };
     "30d": { dailyAvg: number; days: number };
@@ -357,16 +608,12 @@ interface SalaryEstimatorData {
   };
 }
 
-/**
- * Compute daily average costs for different time ranges.
- */
 export function computeSalaryEstimatorData(
   dailyCosts: Array<{ date: string; totalCost: number }>
 ): SalaryEstimatorData {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // Helper to filter costs by days ago
   const filterByDays = (days: number) => {
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - days);
@@ -402,21 +649,70 @@ export function computeSalaryEstimatorData(
 }
 
 // ---------------------------------------------------------------------------
-// Wrapper component with time range selector
+// Main Wrapper Component
 // ---------------------------------------------------------------------------
 
 interface SalaryEstimatorProps {
-  dailyCosts: Array<{ date: string; totalCost: number }>;
+  /** Daily cost points with token breakdown */
+  dailyCosts: Array<{
+    date: string;
+    totalCost: number;
+    inputCost?: number;
+    outputCost?: number;
+  }>;
+  /** Daily token breakdown for ratio calculation */
+  dailyTokens?: Array<{
+    date: string;
+    input: number;
+    output: number;
+  }>;
   className?: string;
 }
 
-export function SalaryEstimator({ dailyCosts, className }: SalaryEstimatorProps) {
+export function SalaryEstimator({
+  dailyCosts,
+  dailyTokens,
+  className,
+}: SalaryEstimatorProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("7d");
+  const [huangRatio, setHuangRatio] = useState(50);
+  const [priceMultiplier, setPriceMultiplier] = useState(100);
 
   const data = useMemo(
     () => computeSalaryEstimatorData(dailyCosts),
     [dailyCosts]
   );
+
+  // Merge cost and token data for the chart
+  const chartData = useMemo<DailyCostWithRatio[]>(() => {
+    const tokenMap = new Map<string, { input: number; output: number }>();
+    if (dailyTokens) {
+      for (const t of dailyTokens) {
+        tokenMap.set(t.date, { input: t.input, output: t.output });
+      }
+    }
+
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    // Filter by selected time range
+    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 365;
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    return dailyCosts
+      .filter((d) => d.date >= cutoffStr && d.date <= todayStr)
+      .map((d) => {
+        const tokens = tokenMap.get(d.date);
+        return {
+          date: d.date,
+          totalCost: d.totalCost,
+          inputTokens: tokens?.input ?? 0,
+          outputTokens: tokens?.output ?? 0,
+        };
+      });
+  }, [dailyCosts, dailyTokens, timeRange]);
 
   const currentRange = data.ranges[timeRange];
   const rangeLabel =
@@ -426,31 +722,42 @@ export function SalaryEstimator({ dailyCosts, className }: SalaryEstimatorProps)
         ? "last 30 days"
         : "all time";
 
-  return (
-    <div className={cn("space-y-3", className)}>
-      {/* Time Range Selector */}
-      <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
-        {RANGE_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => setTimeRange(opt.value)}
-            className={cn(
-              "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-              timeRange === opt.value
-                ? "bg-secondary text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+  const contextValue = useMemo(
+    () => ({ huangRatio, setHuangRatio, priceMultiplier, setPriceMultiplier }),
+    [huangRatio, priceMultiplier]
+  );
 
-      <SalaryEstimatorCard
-        dailyAvgCost={currentRange.dailyAvg}
-        rangeLabel={rangeLabel}
-      />
-    </div>
+  return (
+    <SalaryEstimatorContext.Provider value={contextValue}>
+      <div className={cn("space-y-3", className)}>
+        {/* Time Range Selector */}
+        <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+          {RANGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTimeRange(opt.value)}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                timeRange === opt.value
+                  ? "bg-secondary text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Two-column layout: Card (50%) + Chart (50%) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+          <SalaryEstimatorCard
+            dailyAvgCost={currentRange.dailyAvg}
+            rangeLabel={rangeLabel}
+          />
+          <SalaryTrendChart data={chartData} />
+        </div>
+      </div>
+    </SalaryEstimatorContext.Provider>
   );
 }
