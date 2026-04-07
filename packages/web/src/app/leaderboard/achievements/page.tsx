@@ -93,6 +93,7 @@ const TIER_STYLES: Record<AchievementTier, {
   glow: string;
   badgeColor: string;
   badgeBg: string;
+  progressBg: string;
 }> = {
   locked: {
     gradient: "from-muted/50 to-muted/30",
@@ -101,6 +102,7 @@ const TIER_STYLES: Record<AchievementTier, {
     glow: "",
     badgeColor: "text-muted-foreground",
     badgeBg: "bg-muted",
+    progressBg: "bg-muted-foreground/40",
   },
   bronze: {
     gradient: "from-chart-7/30 to-chart-7/10",
@@ -109,6 +111,7 @@ const TIER_STYLES: Record<AchievementTier, {
     glow: "shadow-[0_0_12px_-2px] shadow-chart-7/30",
     badgeColor: "text-chart-7",
     badgeBg: "bg-chart-7/10",
+    progressBg: "bg-chart-7",
   },
   silver: {
     gradient: "from-chart-2/30 to-chart-2/10",
@@ -117,6 +120,7 @@ const TIER_STYLES: Record<AchievementTier, {
     glow: "shadow-[0_0_12px_-2px] shadow-chart-2/30",
     badgeColor: "text-chart-2",
     badgeBg: "bg-chart-2/10",
+    progressBg: "bg-chart-2",
   },
   gold: {
     gradient: "from-chart-6/30 to-chart-6/10",
@@ -125,6 +129,7 @@ const TIER_STYLES: Record<AchievementTier, {
     glow: "shadow-[0_0_16px_-2px] shadow-chart-6/40",
     badgeColor: "text-chart-6",
     badgeBg: "bg-chart-6/10",
+    progressBg: "bg-chart-6",
   },
   diamond: {
     gradient: "from-primary/30 to-chart-8/20",
@@ -133,6 +138,7 @@ const TIER_STYLES: Record<AchievementTier, {
     glow: "shadow-[0_0_20px_-2px] shadow-primary/50",
     badgeColor: "text-primary",
     badgeBg: "bg-primary/10",
+    progressBg: "bg-primary",
   },
 };
 
@@ -232,14 +238,22 @@ function EarnedByAvatars({ earnedBy, totalEarned, onUserClick }: EarnedByAvatars
       <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Earned by</span>
       <div className="flex -space-x-1.5">
         {earnedBy.slice(0, displayCount).map((user) => (
-          <button
+          <span
             key={user.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               onUserClick({ slug: user.slug, name: user.name, image: user.image });
             }}
-            className="focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-full"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                e.preventDefault();
+                onUserClick({ slug: user.slug, name: user.name, image: user.image });
+              }
+            }}
+            className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-full"
           >
             <Avatar className="h-5 w-5 ring-2 ring-background hover:ring-primary transition-all">
               {user.image && <AvatarImage src={user.image} alt={user.name} />}
@@ -247,7 +261,7 @@ function EarnedByAvatars({ earnedBy, totalEarned, onUserClick }: EarnedByAvatars
                 {user.name[0]?.toUpperCase() ?? "?"}
               </AvatarFallback>
             </Avatar>
-          </button>
+          </span>
         ))}
       </div>
       {remainingCount > 0 && (
@@ -433,7 +447,7 @@ function AchievementCard({ achievement, index, isExpanded, onToggle, onUserClick
           </div>
           <div className="h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className={cn("h-full rounded-full transition-[width] duration-700 ease-out", styles.badgeBg)}
+              className={cn("h-full rounded-full transition-[width] duration-700 ease-out", styles.progressBg)}
               style={{ width: `${pct}%` }}
             />
           </div>
