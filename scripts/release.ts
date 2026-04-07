@@ -54,8 +54,6 @@ const VERSION_TARGETS: VersionTarget[] = [
   { path: "packages/worker/package.json", pattern: "json-version" },
   { path: "packages/worker-read/package.json", pattern: "json-version" },
   // Source code version constants
-  { path: "packages/cli/src/cli.ts", pattern: "const-version" },
-  { path: "packages/cli/src/__tests__/cli.test.ts", pattern: "const-version" },
   { path: "packages/worker/src/index.ts", pattern: "const-version" },
   { path: "packages/worker-read/src/index.ts", pattern: "const-version" },
 ];
