@@ -82,6 +82,13 @@ export function ShowcaseFormModal({
     }
   }, [editMode, editData, open, resetPreview]);
 
+  // Invalidate preview when URL changes after successful preview (add mode only)
+  useEffect(() => {
+    if (!editMode && preview && preview.github_url !== githubUrl.trim()) {
+      resetPreview();
+    }
+  }, [editMode, preview, githubUrl, resetPreview]);
+
   // Handle preview fetch
   const handlePreview = useCallback(async () => {
     if (!githubUrl.trim()) return;
