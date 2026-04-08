@@ -172,6 +172,27 @@ describe("GET /api/seasons", () => {
     expect(data.seasons[2].status).toBe("ended");
   });
 
+  it("should sort same-status seasons by start_date descending", async () => {
+    const endedOlder = {
+      ...ENDED_SEASON_ROW,
+      id: "s-old",
+      start_date: "2025-12-01T00:00:00Z",
+      end_date: "2025-12-31T23:59:00Z",
+    };
+    mockClient.query.mockResolvedValueOnce({
+      results: [endedOlder, ENDED_SEASON_ROW],
+    });
+
+    const res = await GET(makeRequest());
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.seasons).toHaveLength(2);
+    // More recent start_date first
+    expect(data.seasons[0].id).toBe("s3");
+    expect(data.seasons[1].id).toBe("s-old");
+  });
+
   it("should handle no-such-table gracefully", async () => {
     mockClient.query.mockRejectedValueOnce(
       new Error("no such table: seasons")

@@ -189,6 +189,26 @@ describe("POST /api/auth/code", () => {
     // Should have tried 3 times (initial + 2 retries)
     expect(mockExecute).toHaveBeenCalledTimes(3);
   });
+
+  it("should handle non-Error throw in code generation", async () => {
+    mockResolveUser.mockResolvedValue({
+      userId: "user-123",
+      email: "test@example.com",
+    });
+
+    const mockExecute = vi.fn().mockRejectedValue("string error");
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
+    });
+
+    const request = new Request("http://localhost/api/auth/code", {
+      method: "POST",
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(500);
+  });
 });
 
 // Generic error message used for all auth failures (matches API)
@@ -478,6 +498,49 @@ describe("POST /api/auth/code/verify", () => {
     const body = await response.json();
     // Should return the key set by the other request, not our generated one
     expect(body.api_key).toBe("pk_set_by_other_request");
+  });
+
+  it("should return 500 when re-read after lost race yields no api_key", async () => {
+    const mockFirstOrNull = vi.fn()
+      .mockResolvedValueOnce({
+        code: "ABCD-1234",
+        user_id: "user-123",
+        expires_at: new Date(Date.now() + 300_000).toISOString(),
+        used_at: null,
+        failed_attempts: 0,
+      })
+      .mockResolvedValueOnce({
+        id: "user-123",
+        email: "test@example.com",
+        api_key: null,
+      })
+      .mockResolvedValueOnce({
+        api_key: null, // Still null after re-read (shouldn't happen, but defensive)
+      });
+
+    mockGetDbRead.mockResolvedValue({
+      query: vi.fn(),
+      firstOrNull: mockFirstOrNull,
+    });
+
+    const mockExecute = vi.fn()
+      .mockResolvedValueOnce({ changes: 0 }); // Lost the race
+
+    mockGetDbWrite.mockResolvedValue({
+      execute: mockExecute,
+      batch: vi.fn(),
+    });
+
+    const request = new Request("http://localhost/api/auth/code/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "ABCD-1234" }),
+    });
+
+    const response = await verifyPOST(request);
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Failed to generate API key");
   });
 
   it("should normalize code format (accept without hyphen)", async () => {

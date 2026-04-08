@@ -217,4 +217,19 @@ describe("PUT /api/admin/settings", () => {
     const res = await PUT(makePut({ key: "some_future_setting", value: "anything" }));
     expect(res.status).toBe(200);
   });
+
+  it("should reject invalid require_invite_code value", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
+    const res = await PUT(makePut({ key: "require_invite_code", value: "yes" }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("require_invite_code");
+  });
+
+  it("should accept valid require_invite_code values", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
+    const res = await PUT(makePut({ key: "require_invite_code", value: "false" }));
+    expect(res.status).toBe(200);
+  });
 });

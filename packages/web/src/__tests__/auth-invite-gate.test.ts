@@ -258,4 +258,21 @@ describe("handleInviteGate", () => {
     // Verify getDbRead was called (and indirectly getDbWrite would be called if needed)
     expect(getDbRead).toHaveBeenCalled();
   });
+
+  it("should allow new user when require_invite_code setting is false", async () => {
+    // getUserByAccount → null (new user)
+    vi.mocked(mockDbRead.firstOrNull)
+      .mockResolvedValueOnce(null) // No existing user
+      .mockResolvedValueOnce({ value: "false" }); // require_invite_code = false
+
+    const result = await handleInviteGate(
+      makeReq(), // no invite cookie needed
+      GOOGLE_ACCOUNT,
+      mockDbRead,
+      mockDbWrite
+    );
+    expect(result).toBe(true);
+    // No invite code should be consumed
+    expect(vi.mocked(mockDbWrite.execute)).not.toHaveBeenCalled();
+  });
 });

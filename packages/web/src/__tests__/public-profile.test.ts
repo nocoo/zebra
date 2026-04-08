@@ -477,6 +477,44 @@ describe("GET /api/users/[slug]", () => {
       expect(body.user.first_seen).toBe("2026-01-15T00:00:00Z");
     });
 
+    it("should accept valid days param", async () => {
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({
+          id: "u1",
+          name: "Test",
+          image: null,
+          slug: "test",
+          is_public: 1,
+          created_at: "2026-01-01",
+        })
+        .mockResolvedValueOnce({ first_seen: null });
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const [req, ctx] = makeRequest("test", { days: "30" });
+      const res = await GET(req, ctx);
+      expect(res.status).toBe(200);
+    });
+
+    it("should handle firstSeen query failure gracefully", async () => {
+      mockClient.firstOrNull
+        .mockResolvedValueOnce({
+          id: "u1",
+          name: "Test",
+          image: null,
+          slug: "test",
+          is_public: 1,
+          created_at: "2026-01-01",
+        })
+        .mockRejectedValueOnce(new Error("DB error"));
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const [req, ctx] = makeRequest("test");
+      const res = await GET(req, ctx);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.user.first_seen).toBeNull();
+    });
+
     it("should reject invalid from/to datetime format", async () => {
       mockClient.firstOrNull.mockResolvedValueOnce({
         id: "u1",

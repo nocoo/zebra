@@ -507,5 +507,40 @@ describe("DELETE /api/showcases/[id]", () => {
       const json = await res.json();
       expect(json.error).toBe("Failed to delete showcase");
     });
+
+    it("handles non-Error throw in GET", async () => {
+      mockResolveUser.mockResolvedValue(null);
+      const mockDbRead = {
+        firstOrNull: vi.fn().mockRejectedValue("string error"),
+      };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+
+      const res = await GET(createRequest("GET"), createContext());
+      expect(res.status).toBe(500);
+    });
+
+    it("handles non-Error throw in PATCH", async () => {
+      mockResolveUser.mockResolvedValue({ userId: "u1", email: "owner@example.com" });
+      mockIsAdminUser.mockResolvedValue(false);
+      const mockDbRead = {
+        firstOrNull: vi.fn().mockRejectedValue("string error"),
+      };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+
+      const res = await PATCH(createRequest("PATCH", { tagline: "test" }), createContext());
+      expect(res.status).toBe(500);
+    });
+
+    it("handles non-Error throw in DELETE", async () => {
+      mockResolveUser.mockResolvedValue({ userId: "u1", email: "owner@example.com" });
+      mockIsAdminUser.mockResolvedValue(false);
+      const mockDbRead = {
+        firstOrNull: vi.fn().mockRejectedValue(42),
+      };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+
+      const res = await DELETE(createRequest("DELETE"), createContext());
+      expect(res.status).toBe(500);
+    });
   });
 });

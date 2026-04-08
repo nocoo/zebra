@@ -317,6 +317,34 @@ describe("GET /api/usage/by-device", () => {
       expect(body.devices[0].models).toEqual(["claude-sonnet-4-20250514", "o3"]);
     });
 
+    it("should return empty arrays for null sources/models", async () => {
+      mockClient.query
+        .mockResolvedValueOnce({
+          results: [
+            {
+              device_id: "d1",
+              device_name: "mac",
+              total_tokens: 100,
+              input_tokens: 50,
+              output_tokens: 50,
+              cached_input_tokens: 0,
+              reasoning_output_tokens: 0,
+              sources: null,
+              models: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ results: [] })
+        .mockResolvedValueOnce({ results: [] })
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.devices[0].sources).toEqual([]);
+      expect(body.devices[0].models).toEqual([]);
+    });
+
     it("should use default date range when params are missing", async () => {
       mockClient.query.mockResolvedValue({ results: [], meta: {} });
 
