@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.12.0
+
+### Added
+- Add member management UI to admin organizations page
+- Upgrade leaderboard scope dropdown
+- Add organization leaderboard API
+- Add organizations settings page
+- Add user organization APIs
+- Add admin organization management page
+- Add admin organization members API
+- Add organization logo upload
+- Add admin organizations CRUD API
+- Add organization types to @pew/core
+- Add organizations migration
+
+### Changed
+- Ignore worker migrations symlinks
+- Add missing unit tests for organization admin APIs and fix coverage
+- Resolve merge conflict in docs/README.md
+- Change settings organizations icon from Building2 to Globe2
+- Skip flaky filesystem/timing tests in CI
+- Fix flaky tests for CI environment
+- Mark organization E2E tests as done
+- Add L2 E2E tests for organization flow
+- Fix build order and tsbuildinfo cleanup
+- Mark leaderboard scope dropdown upgrade as done
+- Mark organization leaderboard tests as done
+- Add L1 tests for organization leaderboard
+- Mark organization leaderboard API as done
+- Mark organizations settings page as done
+- Run build before lint (tsc needs @pew/core)
+- Mark user org API tests as done
+- Add L1 tests for user organization APIs
+- Use osv-scanner CLI instead of broken v2 action
+- Mark user organization APIs as done
+- Mark admin organization management page as done
+- Update doc 36 verification record
+- Add L1 tests for admin organizations API
+- Pin actions to SHA and add OSV permissions
+- Adjust coverage exclusions for 90% branch threshold
+- Add organization system plan
+- Add GitHub Actions CI plan (doc 36)
+- Add GitHub Actions workflow for L1+G1+Build+G2a
+
+### Fixed
+- Align E2E tests with actual UI text
+- Anonymous scoped leaderboard requests must not be publicly cached
+- Resolve lint errors in sync.ts and pi-hook.ts
+
 ## v2.11.0
 
 ### Added

@@ -19,7 +19,7 @@
 // Version
 // ---------------------------------------------------------------------------
 
-export const WORKER_VERSION = "2.11.0";
+export const WORKER_VERSION = "2.12.0";
 
 // ---------------------------------------------------------------------------
 // Boot timestamp (for uptime calculation)
