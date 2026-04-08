@@ -23,14 +23,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build
+        run: bun run build
+
       - name: G1 Static Analysis
         run: bun run lint
 
       - name: L1 Unit Tests + Coverage
         run: bun run test:coverage
-
-      - name: Build
-        run: bun run build
 
       - name: G2a Dependency CVE Scan
         run: |
