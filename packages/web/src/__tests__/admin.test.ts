@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isAdmin, resolveAdmin } from "@/lib/admin";
+import { isAdmin, resolveAdmin, isAdminUser } from "@/lib/admin";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -158,5 +158,74 @@ describe("resolveAdmin", () => {
 
     const result = await resolveAdmin(new Request("http://localhost"));
     expect(result).toBeNull();
+  });
+});
+
+describe("isAdminUser", () => {
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDbRead = createMockDbRead();
+    vi.mocked(getDbRead).mockResolvedValue(mockDbRead);
+    process.env = { ...ORIGINAL_ENV, ADMIN_EMAILS: "admin@example.com" };
+  });
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it("should return true when email is admin", async () => {
+    const result = await isAdminUser({
+      userId: "u1",
+      email: "admin@example.com",
+    });
+    expect(result).toBe(true);
+  });
+
+  it("should return false when email is not admin", async () => {
+    const result = await isAdminUser({
+      userId: "u1",
+      email: "user@example.com",
+    });
+    expect(result).toBe(false);
+  });
+
+  it("should fall back to DB lookup when auth result has no email", async () => {
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ email: "admin@example.com" });
+
+    const result = await isAdminUser({
+      userId: "u1",
+      email: undefined,
+    });
+
+    expect(mockDbRead.firstOrNull).toHaveBeenCalledWith(
+      "SELECT email FROM users WHERE id = ?",
+      ["u1"],
+    );
+    expect(result).toBe(true);
+  });
+
+  it("should return false when DB lookup finds no email", async () => {
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+
+    const result = await isAdminUser({
+      userId: "u1",
+      email: undefined,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("should return false when DB lookup returns non-admin email", async () => {
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ email: "user@example.com" });
+
+    const result = await isAdminUser({
+      userId: "u1",
+      email: undefined,
+    });
+
+    expect(result).toBe(false);
   });
 });

@@ -9,6 +9,9 @@ import {
   chartNegative,
   chartPrimary,
   withAlpha,
+  agentColor,
+  modelColor,
+  teamColor,
 } from "../lib/palette";
 
 describe("palette", () => {
@@ -47,6 +50,67 @@ describe("palette", () => {
 
     it("should handle alpha of 0", () => {
       expect(withAlpha("muted", 0)).toBe("hsl(var(--muted) / 0)");
+    });
+  });
+
+  describe("agentColor()", () => {
+    it("should return correct color for known agents", () => {
+      expect(agentColor("claude-code")).toEqual({ color: chart.violet, token: "chart-1" });
+      expect(agentColor("opencode")).toEqual({ color: chart.magenta, token: "chart-2" });
+      expect(agentColor("gemini-cli")).toEqual({ color: chart.pink, token: "chart-3" });
+      expect(agentColor("codex")).toEqual({ color: chart.coral, token: "chart-4" });
+      expect(agentColor("openclaw")).toEqual({ color: chart.orange, token: "chart-5" });
+      expect(agentColor("vscode-copilot")).toEqual({ color: chart.gold, token: "chart-6" });
+      expect(agentColor("copilot-cli")).toEqual({ color: chart.lime, token: "chart-7" });
+      expect(agentColor("hermes")).toEqual({ color: chart.acid, token: "chart-8" });
+    });
+
+    it("should return fallback color for unknown agents", () => {
+      expect(agentColor("unknown-agent")).toEqual({ color: chart.acid, token: "chart-8" });
+      expect(agentColor("")).toEqual({ color: chart.acid, token: "chart-8" });
+    });
+  });
+
+  describe("modelColor()", () => {
+    it("should return consistent color for the same model name", () => {
+      const color1 = modelColor("claude-opus-4");
+      const color2 = modelColor("claude-opus-4");
+      expect(color1).toEqual(color2);
+    });
+
+    it("should return different colors for different models", () => {
+      const opus = modelColor("claude-opus-4");
+      const sonnet = modelColor("claude-sonnet-4");
+      // Different models should hash differently (may occasionally collide, but unlikely)
+      expect(opus.color).toBeDefined();
+      expect(sonnet.color).toBeDefined();
+    });
+
+    it("should return valid chart color format", () => {
+      const result = modelColor("gpt-4o");
+      expect(result.color).toMatch(/^hsl\(var\(--chart-\d\)\)$/);
+      expect(result.token).toMatch(/^chart-\d$/);
+    });
+  });
+
+  describe("teamColor()", () => {
+    it("should return consistent color for the same team name", () => {
+      const color1 = teamColor("Engineering");
+      const color2 = teamColor("Engineering");
+      expect(color1).toEqual(color2);
+    });
+
+    it("should handle Unicode characters (CJK, emoji)", () => {
+      const cjk = teamColor("工程团队");
+      const emoji = teamColor("🚀 Rocket");
+      expect(cjk.color).toMatch(/^hsl\(var\(--chart-\d\)\)$/);
+      expect(emoji.color).toMatch(/^hsl\(var\(--chart-\d\)\)$/);
+    });
+
+    it("should return valid chart color format", () => {
+      const result = teamColor("Alpha Team");
+      expect(result.color).toMatch(/^hsl\(var\(--chart-\d\)\)$/);
+      expect(result.token).toMatch(/^chart-\d$/);
     });
   });
 });

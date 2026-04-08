@@ -107,19 +107,26 @@ export function openHermesDb(
     return null;
   }
 
-  const stmt = db.prepare(
-    `SELECT
-       id,
-       model,
-       input_tokens,
-       output_tokens,
-       cache_read_tokens,
-       cache_write_tokens,
-       reasoning_tokens
-     FROM sessions
-     WHERE started_at IS NOT NULL
-     ORDER BY started_at ASC`,
-  );
+  let stmt: SqliteStmt;
+  try {
+    stmt = db.prepare(
+      `SELECT
+         id,
+         model,
+         input_tokens,
+         output_tokens,
+         cache_read_tokens,
+         cache_write_tokens,
+         reasoning_tokens
+       FROM sessions
+       WHERE started_at IS NOT NULL
+       ORDER BY started_at ASC`,
+    );
+  } catch {
+    // Schema mismatch or corrupt DB
+    db.close();
+    return null;
+  }
 
   return {
     querySessions: () => stmt.all() as SessionRow[],

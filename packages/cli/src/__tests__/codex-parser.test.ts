@@ -372,4 +372,120 @@ describe("parseCodexFile", () => {
     expect(result.deltas[1].model).toBe("o3");
     expect(result.lastModel).toBe("o3");
   });
+
+  it("should skip token_count events without timestamp", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      turnContext("gpt-5.4"),
+      // token_count event without timestamp field
+      JSON.stringify({
+        type: "event_msg",
+        payload: {
+          type: "token_count",
+          info: {
+            total_token_usage: { input_tokens: 500, output_tokens: 100 },
+          },
+        },
+      }),
+      // Valid token_count with timestamp
+      tokenCount({ inputTokens: 1000, outputTokens: 200 }, "2026-03-09T10:00:05.000Z"),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(1000);
+  });
+
+  it("should skip token_count events without info field", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      turnContext("gpt-5.4"),
+      JSON.stringify({
+        timestamp: "2026-03-09T10:00:05.000Z",
+        type: "event_msg",
+        payload: {
+          type: "token_count",
+          // missing info field
+        },
+      }),
+      tokenCount({ inputTokens: 500, outputTokens: 100 }, "2026-03-09T10:00:10.000Z"),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(500);
+  });
+
+  it("should skip token_count events without total_token_usage field", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      turnContext("gpt-5.4"),
+      JSON.stringify({
+        timestamp: "2026-03-09T10:00:05.000Z",
+        type: "event_msg",
+        payload: {
+          type: "token_count",
+          info: {
+            // missing total_token_usage
+            some_other_field: 123,
+          },
+        },
+      }),
+      tokenCount({ inputTokens: 500, outputTokens: 100 }, "2026-03-09T10:00:10.000Z"),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(500);
+  });
+
+  it("should ignore turn_context with empty model string", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      sessionMeta({ model: "gpt-5.3-codex" }),
+      // turn_context with empty model — should NOT override session_meta
+      turnContext("   "), // whitespace only, trims to empty
+      tokenCount({ inputTokens: 500, outputTokens: 100 }, "2026-03-09T10:00:05.000Z"),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].model).toBe("gpt-5.3-codex");
+  });
+
+  it("should skip empty lines in JSONL", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      turnContext("gpt-5.4"),
+      "", // empty line
+      tokenCount({ inputTokens: 500, outputTokens: 100 }, "2026-03-09T10:00:05.000Z"),
+      "", // another empty line
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(500);
+  });
+
+  it("should skip JSON objects without valid type string", async () => {
+    const filePath = join(tempDir, "rollout.jsonl");
+    const lines = [
+      turnContext("gpt-5.4"),
+      // Objects without valid type field
+      JSON.stringify({ timestamp: "2026-03-09T10:00:02.000Z", type: null }),
+      JSON.stringify({ timestamp: "2026-03-09T10:00:03.000Z", type: 123 }),
+      JSON.stringify({ timestamp: "2026-03-09T10:00:04.000Z" }), // no type field
+      tokenCount({ inputTokens: 500, outputTokens: 100 }, "2026-03-09T10:00:05.000Z"),
+    ];
+    await writeFile(filePath, lines.join("\n") + "\n");
+
+    const result = await parseCodexFile({ filePath, startOffset: 0, lastTotals: null, lastModel: null });
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].tokens.inputTokens).toBe(500);
+  });
 });

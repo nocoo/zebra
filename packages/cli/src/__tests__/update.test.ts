@@ -16,7 +16,7 @@ describe("executeUpdate", () => {
     expect(result.error).toBeUndefined();
   });
 
-  it("should return failure when command throws", async () => {
+  it("should return failure when command throws Error", async () => {
     const result = await executeUpdate({
       currentVersion: "1.0.0",
       execFn: async () => {
@@ -26,6 +26,18 @@ describe("executeUpdate", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("EACCES");
+  });
+
+  it("should return failure when command throws non-Error", async () => {
+    const result = await executeUpdate({
+      currentVersion: "1.0.0",
+      execFn: async () => {
+        throw "string error";
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("string error");
   });
 
   it("should combine stdout and stderr in output", async () => {

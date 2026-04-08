@@ -286,4 +286,26 @@ describe("executeUninstall", () => {
     expect(removeCodexBackupFn).not.toHaveBeenCalled();
     expect(result.codexBackup.detail).toBe("not selected");
   });
+
+  it("handles non-Error throws when driver uninstall fails", async () => {
+    const uninstallDriverFn = vi.fn().mockRejectedValueOnce("string error");
+
+    const result = await executeUninstall({
+      stateDir: "/tmp/pew",
+      home: "/tmp",
+      sources: ["codex"],
+      resolveNotifierPathsFn: createPaths,
+      uninstallDriverFn,
+      removeNotifyHandlerFn: vi.fn(),
+      removeCodexBackupFn: vi.fn(async () => ({
+        changed: false,
+        path: "/tmp/pew/codex_notify_original.json",
+        detail: "not found",
+      })),
+    });
+
+    expect(result.hooks).toHaveLength(1);
+    expect(result.hooks[0]?.action).toBe("skip");
+    expect(result.hooks[0]?.detail).toBe("string error");
+  });
 });

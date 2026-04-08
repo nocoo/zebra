@@ -169,4 +169,68 @@ describe("executeInit", () => {
       },
     ]);
   });
+
+  it("uses getAllDrivers for dry-run when sources not specified", async () => {
+    const getAllDriversFn = vi.fn(() => [
+      { source: "claude-code" as Source, displayName: "Claude Code" },
+    ]);
+
+    const result = await executeInit({
+      stateDir: "/tmp/pew",
+      home: "/tmp",
+      dryRun: true,
+      pewBin: "/tmp/bin/pew",
+      resolveNotifierPathsFn: createPaths,
+      writeNotifyHandlerFn: vi.fn(),
+      getAllDriversFn,
+      mkdirFn: vi.fn(),
+    });
+
+    expect(getAllDriversFn).toHaveBeenCalled();
+    expect(result.hooks).toHaveLength(1);
+    expect(result.hooks[0]?.source).toBe("claude-code");
+  });
+
+  it("uses provided sources for dry-run when specified", async () => {
+    const getAllDriversFn = vi.fn();
+
+    const result = await executeInit({
+      stateDir: "/tmp/pew",
+      home: "/tmp",
+      dryRun: true,
+      pewBin: "/tmp/bin/pew",
+      sources: ["codex", "gemini-cli"],
+      resolveNotifierPathsFn: createPaths,
+      writeNotifyHandlerFn: vi.fn(),
+      getAllDriversFn,
+      mkdirFn: vi.fn(),
+    });
+
+    // getAllDriversFn should NOT be called when sources are provided
+    expect(getAllDriversFn).not.toHaveBeenCalled();
+    expect(result.hooks).toHaveLength(2);
+    expect(result.hooks.map((h) => h.source)).toEqual(["codex", "gemini-cli"]);
+  });
+
+  it("handles non-Error throws when driver install fails", async () => {
+    const installDriverFn = vi.fn().mockRejectedValueOnce("string error");
+
+    const result = await executeInit({
+      stateDir: "/tmp/pew",
+      home: "/tmp",
+      pewBin: "/tmp/bin/pew",
+      sources: ["codex"],
+      resolveNotifierPathsFn: createPaths,
+      writeNotifyHandlerFn: vi.fn(async () => ({
+        changed: true,
+        path: "/tmp/pew/bin/notify.cjs",
+      })),
+      installDriverFn,
+      mkdirFn: vi.fn(async () => {}),
+    });
+
+    expect(result.hooks).toHaveLength(1);
+    expect(result.hooks[0]?.action).toBe("skip");
+    expect(result.hooks[0]?.detail).toBe("string error");
+  });
 });
