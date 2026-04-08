@@ -218,6 +218,67 @@ describe("autoRegisterTeamsForSeason", () => {
     expect(batchStatements[0]!.sql).toContain("INSERT INTO season_teams");
   });
 
+  it("should continue processing after read error and preserve partial success", async () => {
+    // Team-1: member query fails
+    // Team-2: succeeds
+    // Result should show registered=1, skipped=1 (not throw)
+    mockDbRead.firstOrNull
+      .mockResolvedValueOnce(mockUpcomingSeason())
+      // team-2: no conflict
+      .mockResolvedValueOnce(null)
+      // team-2 owner lookup
+      .mockResolvedValueOnce({ user_id: "owner-2" });
+    mockDbRead.query
+      .mockResolvedValueOnce({
+        // 2 eligible teams
+        results: [
+          { id: "team-1", created_by: "owner-1" },
+          { id: "team-2", created_by: "owner-2" },
+        ],
+      })
+      // team-1 member query fails
+      .mockRejectedValueOnce(new Error("D1 read timeout"))
+      // team-2 members
+      .mockResolvedValueOnce({ results: [{ user_id: "u2" }] });
+
+    mockDbWrite.batch.mockResolvedValueOnce([]);
+
+    const result = await autoRegisterTeamsForSeason(mockDbRead, mockDbWrite, "season-1");
+
+    expect(result.registered).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(mockDbWrite.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should skip team on conflict check read error but continue", async () => {
+    mockDbRead.firstOrNull
+      .mockResolvedValueOnce(mockUpcomingSeason())
+      // team-1: conflict check fails
+      .mockRejectedValueOnce(new Error("D1 read error"))
+      // team-2: no conflict
+      .mockResolvedValueOnce(null)
+      // team-2 owner lookup
+      .mockResolvedValueOnce({ user_id: "owner-2" });
+    mockDbRead.query
+      .mockResolvedValueOnce({
+        results: [
+          { id: "team-1", created_by: "owner-1" },
+          { id: "team-2", created_by: "owner-2" },
+        ],
+      })
+      // team-1 members (query succeeds, then conflict check fails)
+      .mockResolvedValueOnce({ results: [{ user_id: "u1" }] })
+      // team-2 members
+      .mockResolvedValueOnce({ results: [{ user_id: "u2" }] });
+
+    mockDbWrite.batch.mockResolvedValueOnce([]);
+
+    const result = await autoRegisterTeamsForSeason(mockDbRead, mockDbWrite, "season-1");
+
+    expect(result.registered).toBe(1);
+    expect(result.skipped).toBe(1);
+  });
+
   it("should compensate on batch failure and count as skipped", async () => {
     mockDbRead.firstOrNull
       .mockResolvedValueOnce(mockUpcomingSeason())
