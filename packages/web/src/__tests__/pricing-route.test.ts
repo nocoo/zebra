@@ -90,4 +90,17 @@ describe("GET /api/pricing", () => {
     const body = await res.json();
     expect(typeof body).toBe("object");
   });
+
+  it("should handle non-Error thrown values", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.query.mockRejectedValueOnce("string error");
+
+    const res = await GET(new Request("http://localhost:7020/api/pricing"));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(typeof body).toBe("object");
+    consoleSpy.mockRestore();
+  });
 });

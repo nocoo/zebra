@@ -1,12 +1,13 @@
 /**
- * Cloudflare R2 client for team logo storage.
+ * Cloudflare R2 client for team and organization logo storage.
  *
  * Uses the same R2 bucket/credentials as otter's icon storage.
- * Logos are stored at: apps/pew/teams-logo/{teamId}/{uniqueId}.jpg
- * Served via: https://s.zhe.to/apps/pew/teams-logo/{teamId}/{uniqueId}.jpg
+ * Team logos: apps/pew/teams-logo/{teamId}/{uniqueId}.jpg
+ * Org logos:  apps/pew/orgs-logo/{orgId}/{uniqueId}.jpg
+ * Served via: https://s.zhe.to/apps/pew/...
  *
  * Each upload gets a unique filename so CDN caches never serve stale logos.
- * The full URL is persisted in the teams.logo_url column.
+ * The full URL is persisted in the logo_url column.
  */
 
 import {
@@ -19,7 +20,8 @@ import {
 // Configuration
 // ---------------------------------------------------------------------------
 
-const LOGO_PREFIX = "apps/pew/teams-logo";
+const TEAM_LOGO_PREFIX = "apps/pew/teams-logo";
+const ORG_LOGO_PREFIX = "apps/pew/orgs-logo";
 const CDN_BASE = "https://s.zhe.to";
 
 interface R2Config {
@@ -73,13 +75,13 @@ export function __resetR2ClientForTests(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Team Logo API
 // ---------------------------------------------------------------------------
 
 /** Generate a unique R2 key for a new team logo upload. */
 export function generateLogoKey(teamId: string): string {
   const uniqueId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-  return `${LOGO_PREFIX}/${teamId}/${uniqueId}.jpg`;
+  return `${TEAM_LOGO_PREFIX}/${teamId}/${uniqueId}.jpg`;
 }
 
 /** Public CDN URL for a given R2 key. */
@@ -120,6 +122,56 @@ export async function putTeamLogo(
 
 /** Delete a team logo from R2 by its CDN URL. No-op if url is null/invalid. */
 export async function deleteTeamLogoByUrl(url: string | null): Promise<void> {
+  if (!url) return;
+  const key = logoUrlToKey(url);
+  if (!key) return;
+
+  const { client, bucket } = getClient();
+
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Organization Logo API
+// ---------------------------------------------------------------------------
+
+/** Generate a unique R2 key for a new org logo upload. */
+export function generateOrgLogoKey(orgId: string): string {
+  const uniqueId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  return `${ORG_LOGO_PREFIX}/${orgId}/${uniqueId}.jpg`;
+}
+
+/**
+ * Store an organization logo JPG in R2 with immutable caching.
+ * Returns the full CDN URL.
+ */
+export async function putOrgLogo(
+  orgId: string,
+  data: Buffer,
+): Promise<string> {
+  const { client, bucket } = getClient();
+  const key = generateOrgLogoKey(orgId);
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: data,
+      ContentType: "image/jpeg",
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  );
+
+  return logoKeyToUrl(key);
+}
+
+/** Delete an org logo from R2 by its CDN URL. No-op if url is null/invalid. */
+export async function deleteOrgLogoByUrl(url: string | null): Promise<void> {
   if (!url) return;
   const key = logoUrlToKey(url);
   if (!key) return;

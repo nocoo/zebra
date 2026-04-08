@@ -1,0 +1,212 @@
+/**
+ * POST /api/admin/organizations/[orgId]/logo — upload org logo (admin only).
+ * DELETE /api/admin/organizations/[orgId]/logo — remove org logo (admin only).
+ *
+ * Accepts multipart/form-data with a single "file" field.
+ * Validates: PNG or JPEG, max 2 MB.
+ * Converts to JPEG quality 80, 256x256 center-crop, stores in R2 with a unique filename.
+ * The full CDN URL is persisted in organizations.logo_url.
+ */
+
+import { NextResponse } from "next/server";
+import sharp from "sharp";
+import { resolveAdmin } from "@/lib/admin";
+import { getDbRead, getDbWrite } from "@/lib/db";
+import { putOrgLogo, deleteOrgLogoByUrl } from "@/lib/r2";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/jpg"]);
+const OUTPUT_SIZE = 256; // resize to 256x256 center-crop
+const JPEG_QUALITY = 80;
+
+// ---------------------------------------------------------------------------
+// POST — upload logo
+// ---------------------------------------------------------------------------
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ orgId: string }> },
+) {
+  const admin = await resolveAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { orgId } = await params;
+
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
+
+  // Verify org exists
+  const org = await dbRead.firstOrNull<{ id: string }>(
+    "SELECT id FROM organizations WHERE id = ?",
+    [orgId],
+  );
+
+  if (!org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  // Parse multipart form data
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Expected multipart/form-data" },
+      { status: 400 },
+    );
+  }
+
+  const file = formData.get("file");
+  if (!file || !(file instanceof File)) {
+    return NextResponse.json(
+      { error: "Missing file field" },
+      { status: 400 },
+    );
+  }
+
+  // Validate MIME type
+  if (!ACCEPTED_TYPES.has(file.type)) {
+    return NextResponse.json(
+      { error: "Only PNG and JPEG images are accepted" },
+      { status: 400 },
+    );
+  }
+
+  // Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: "File too large (max 2 MB)" },
+      { status: 400 },
+    );
+  }
+
+  // Read file buffer
+  const arrayBuffer = await file.arrayBuffer();
+  const inputBuffer = Buffer.from(arrayBuffer);
+
+  // Convert to JPEG, resize to 256x256 (center-crop), quality 80
+  let jpegBuffer: Buffer;
+  try {
+    jpegBuffer = await sharp(inputBuffer)
+      .resize(OUTPUT_SIZE, OUTPUT_SIZE, { fit: "cover" })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid image file" },
+      { status: 400 },
+    );
+  }
+
+  // Upload to R2 (returns new unique CDN URL)
+  let newLogoUrl: string;
+  try {
+    newLogoUrl = await putOrgLogo(orgId, jpegBuffer);
+  } catch (err) {
+    console.error("Failed to upload org logo to R2:", err);
+    return NextResponse.json(
+      { error: "Failed to store logo" },
+      { status: 500 },
+    );
+  }
+
+  // Persist new URL to DB — compensate by deleting the new R2 object on failure
+  let oldLogoUrl: string | null;
+  try {
+    const oldOrg = await dbRead.firstOrNull<{ logo_url: string | null }>(
+      "SELECT logo_url FROM organizations WHERE id = ?",
+      [orgId],
+    );
+    oldLogoUrl = oldOrg?.logo_url ?? null;
+
+    await dbWrite.execute(
+      "UPDATE organizations SET logo_url = ?, updated_at = datetime('now') WHERE id = ?",
+      [newLogoUrl, orgId],
+    );
+  } catch (err) {
+    console.error("Failed to persist logo URL to DB:", err);
+    // Compensate: delete the just-uploaded R2 object to avoid orphan
+    try {
+      await deleteOrgLogoByUrl(newLogoUrl);
+    } catch {
+      // Double-fault: log but accept potential orphan
+      console.error("Compensating R2 delete also failed for:", newLogoUrl);
+    }
+    return NextResponse.json(
+      { error: "Failed to save logo" },
+      { status: 500 },
+    );
+  }
+
+  // Best-effort delete old R2 object
+  if (oldLogoUrl) {
+    try {
+      await deleteOrgLogoByUrl(oldLogoUrl);
+    } catch {
+      // Orphaned old R2 object is harmless
+    }
+  }
+
+  return NextResponse.json({ logoUrl: newLogoUrl });
+}
+
+// ---------------------------------------------------------------------------
+// DELETE — remove logo
+// ---------------------------------------------------------------------------
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ orgId: string }> },
+) {
+  const admin = await resolveAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { orgId } = await params;
+
+  const dbRead = await getDbRead();
+  const dbWrite = await getDbWrite();
+
+  // Verify org exists
+  const org = await dbRead.firstOrNull<{ id: string; logo_url: string | null }>(
+    "SELECT id, logo_url FROM organizations WHERE id = ?",
+    [orgId],
+  );
+
+  if (!org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  // Clear logo_url in DB first — DB is the authoritative state.
+  try {
+    await dbWrite.execute(
+      "UPDATE organizations SET logo_url = NULL, updated_at = datetime('now') WHERE id = ?",
+      [orgId],
+    );
+  } catch (err) {
+    console.error("Failed to clear logo_url in DB:", err);
+    return NextResponse.json(
+      { error: "Failed to remove logo" },
+      { status: 500 },
+    );
+  }
+
+  // Best-effort delete from R2
+  if (org.logo_url) {
+    try {
+      await deleteOrgLogoByUrl(org.logo_url);
+    } catch (err) {
+      // Storage leak is tolerable; dangling reference is not
+      console.error("Failed to delete org logo from R2 (DB already cleared):", err);
+    }
+  }
+
+  return NextResponse.json({ ok: true });
+}

@@ -317,6 +317,34 @@ describe("GET /api/usage/by-device", () => {
       expect(body.devices[0].models).toEqual(["claude-sonnet-4-20250514", "o3"]);
     });
 
+    it("should return empty arrays for null sources/models", async () => {
+      mockClient.query
+        .mockResolvedValueOnce({
+          results: [
+            {
+              device_id: "d1",
+              device_name: "mac",
+              total_tokens: 100,
+              input_tokens: 50,
+              output_tokens: 50,
+              cached_input_tokens: 0,
+              reasoning_output_tokens: 0,
+              sources: null,
+              models: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ results: [] })
+        .mockResolvedValueOnce({ results: [] })
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.devices[0].sources).toEqual([]);
+      expect(body.devices[0].models).toEqual([]);
+    });
+
     it("should use default date range when params are missing", async () => {
       mockClient.query.mockResolvedValue({ results: [], meta: {} });
 
@@ -461,5 +489,43 @@ describe("GET /api/usage/by-device", () => {
       expect(res.status).toBe(200);
       expect(body.devices[0].estimated_cost).toBe(18);
     });
+  });
+
+  it("should return 500 on unexpected error", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+    mockClient.query.mockRejectedValueOnce(new Error("DB connection failed"));
+
+    const res = await GET(new Request("http://localhost:7020/api/usage/by-device"));
+    expect(res.status).toBe(500);
+  });
+
+  it("should return 500 when error is not Error instance", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+    mockClient.query.mockRejectedValueOnce("string error");
+
+    const res = await GET(new Request("http://localhost:7020/api/usage/by-device"));
+    expect(res.status).toBe(500);
+  });
+
+  it("should return 400 for invalid date format in from param", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/usage/by-device?from=not-a-date"),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid date");
+  });
+
+  it("should return 400 for invalid date format in to param", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/usage/by-device?from=2026-03-01&to=baddate"),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid date");
   });
 });

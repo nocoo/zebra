@@ -38,5 +38,7 @@
 | 34 | [34-showcase-system.md](34-showcase-system.md) | ProductHunt-style showcase system | design-complete |
 | 35 | [35-hermes-support.md](35-hermes-support.md) | Hermes Agent token tracking (SQLite session-level diff) | done |
 | 36 | [36-kosmos-support-design.md](36-kosmos-support-design.md) | Kosmos / PM Studio token + session tracking | done |
+| 36b | [36-organization-system.md](36-organization-system.md) | Organization entity for interest-based grouping | done |
+| 37 | [37-github-actions-ci.md](37-github-actions-ci.md) | GitHub Actions CI — Phase 1 (no secrets) | in-progress |
 
 > **Note:** Number 14 is intentionally vacant (original doc 14 was renumbered to 12 to fill a gap).

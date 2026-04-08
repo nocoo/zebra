@@ -534,4 +534,28 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
     expect(res.status).toBe(503);
     expect(data.error).toContain("not yet migrated");
   });
+
+  it("should return 500 on unexpected error", async () => {
+    mockClient.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/seasons/season-1/leaderboard"),
+      { params: Promise.resolve({ seasonId: "season-1" }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(data.error).toContain("Failed to load season leaderboard");
+  });
+
+  it("should return 500 when error is not Error instance", async () => {
+    mockClient.firstOrNull.mockRejectedValueOnce("string error");
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/seasons/season-1/leaderboard"),
+      { params: Promise.resolve({ seasonId: "season-1" }) },
+    );
+
+    expect(res.status).toBe(500);
+  });
 });

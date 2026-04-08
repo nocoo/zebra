@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   Globe,
   Users,
+  Building2,
   ChevronDown,
 } from "lucide-react";
 import { cn, formatTokensFull } from "@/lib/utils";
@@ -34,8 +36,46 @@ interface Team {
   logo_url: string | null;
 }
 
-/** Scope dropdown value: "global" | team id */
-type ScopeValue = "global" | string;
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+}
+
+/** Scope selection: global, or org/team with ID */
+interface ScopeSelection {
+  type: "global" | "org" | "team";
+  id?: string;
+}
+
+// ---------------------------------------------------------------------------
+// localStorage persistence
+// ---------------------------------------------------------------------------
+
+const SCOPE_STORAGE_KEY = "pew:leaderboard:scope";
+
+function loadScopeFromStorage(): ScopeSelection | null {
+  try {
+    const stored = localStorage.getItem(SCOPE_STORAGE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as ScopeSelection;
+    if (parsed.type === "global" || ((parsed.type === "org" || parsed.type === "team") && parsed.id)) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveScopeToStorage(scope: ScopeSelection): void {
+  try {
+    localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
+  } catch {
+    // Silently fail
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Period tabs
@@ -105,16 +145,53 @@ function TeamLogoBadge({ logoUrl, name }: { logoUrl: string | null; name: string
 }
 
 // ---------------------------------------------------------------------------
-// Scope dropdown (team filter)
+// Org logo inline icon (with fallback)
+// ---------------------------------------------------------------------------
+
+function OrgLogoIcon({
+  logoUrl,
+  name,
+  className,
+}: {
+  logoUrl: string | null;
+  name: string;
+  className?: string;
+}) {
+  const [error, setError] = useState(false);
+  const [prevUrl, setPrevUrl] = useState(logoUrl);
+
+  if (logoUrl !== prevUrl) {
+    setPrevUrl(logoUrl);
+    setError(false);
+  }
+
+  if (!logoUrl || error) {
+    return <Building2 className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", className)} strokeWidth={1.5} />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- external org logos, can't use next/image
+    <img
+      src={logoUrl}
+      alt={name}
+      className={cn("h-3.5 w-3.5 shrink-0 rounded-sm object-cover", className)}
+      onError={() => setError(true)}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scope dropdown (org + team filter)
 // ---------------------------------------------------------------------------
 
 function ScopeDropdown({
   value,
   onChange,
+  organizations,
   teams,
 }: {
-  value: ScopeValue;
-  onChange: (v: ScopeValue) => void;
+  value: ScopeSelection;
+  onChange: (v: ScopeSelection) => void;
+  organizations: Organization[];
   teams: Team[];
 }) {
   const [open, setOpen] = useState(false);
@@ -133,19 +210,24 @@ function ScopeDropdown({
 
   const iconClass = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
 
-  const selectedTeam = teams.find((t) => t.id === value);
-  const label = value === "global" ? "Global" : selectedTeam?.name ?? "Global";
+  // Find selected item
+  const selectedOrg = value.type === "org" ? organizations.find((o) => o.id === value.id) : null;
+  const selectedTeam = value.type === "team" ? teams.find((t) => t.id === value.id) : null;
+  const label = value.type === "global" ? "Global" : selectedOrg?.name ?? selectedTeam?.name ?? "Global";
 
   const labelIcon =
-    value === "global" ? (
+    value.type === "global" ? (
       <Globe className={iconClass} strokeWidth={1.5} />
+    ) : selectedOrg ? (
+      <OrgLogoIcon logoUrl={selectedOrg.logoUrl} name={selectedOrg.name} />
     ) : selectedTeam ? (
       <TeamLogoIcon logoUrl={selectedTeam.logo_url} name={selectedTeam.name} />
     ) : (
-      <Users className={iconClass} strokeWidth={1.5} />
+      <Globe className={iconClass} strokeWidth={1.5} />
     );
 
-  if (teams.length === 0) return null;
+  // Hide dropdown if no orgs or teams
+  if (organizations.length === 0 && teams.length === 0) return null;
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -167,30 +249,62 @@ function ScopeDropdown({
         />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-border bg-background p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] max-h-[320px] overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg">
+          {/* Global option */}
           <DropdownItem
-            active={value === "global"}
+            active={value.type === "global"}
             onClick={() => {
-              onChange("global");
+              onChange({ type: "global" });
               setOpen(false);
             }}
           >
             <Globe className={iconClass} strokeWidth={1.5} />
             Global
           </DropdownItem>
-          {teams.map((team) => (
-            <DropdownItem
-              key={team.id}
-              active={value === team.id}
-              onClick={() => {
-                onChange(team.id);
-                setOpen(false);
-              }}
-            >
-              <TeamLogoIcon logoUrl={team.logo_url} name={team.name} />
-              {team.name}
-            </DropdownItem>
-          ))}
+
+          {/* Organizations group */}
+          {organizations.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
+                Organizations
+              </div>
+              {organizations.map((org) => (
+                <DropdownItem
+                  key={org.id}
+                  active={value.type === "org" && value.id === org.id}
+                  onClick={() => {
+                    onChange({ type: "org", id: org.id });
+                    setOpen(false);
+                  }}
+                >
+                  <OrgLogoIcon logoUrl={org.logoUrl} name={org.name} />
+                  {org.name}
+                </DropdownItem>
+              ))}
+            </>
+          )}
+
+          {/* Teams group */}
+          {teams.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
+                Teams
+              </div>
+              {teams.map((team) => (
+                <DropdownItem
+                  key={team.id}
+                  active={value.type === "team" && value.id === team.id}
+                  onClick={() => {
+                    onChange({ type: "team", id: team.id });
+                    setOpen(false);
+                  }}
+                >
+                  <TeamLogoIcon logoUrl={team.logo_url} name={team.name} />
+                  {team.name}
+                </DropdownItem>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -327,16 +441,23 @@ const MAX_ENTRIES = 100;
 // ---------------------------------------------------------------------------
 
 export default function LeaderboardPage() {
+  const { status } = useSession();
+  const isAuthenticated = status === "authenticated";
+
   const [period, setPeriod] = useState<LeaderboardPeriod>("week");
-  const [scope, setScope] = useState<ScopeValue>("global");
+  const [scope, setScope] = useState<ScopeSelection>({ type: "global" });
+  const [scopeInitialized, setScopeInitialized] = useState(false);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const teamId = scope !== "global" ? scope : null;
+  const teamId = scope.type === "team" ? scope.id ?? null : null;
+  const orgId = scope.type === "org" ? scope.id ?? null : null;
 
   const { data, loading, refreshing, error } = useLeaderboard({
     period,
     teamId,
+    orgId,
     limit: MAX_ENTRIES,
   });
 
@@ -347,23 +468,74 @@ export default function LeaderboardPage() {
   }, [period, scope]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const fetchTeams = useCallback(async () => {
+  // Fetch user's organizations and teams
+  const fetchOrgsAndTeams = useCallback(async () => {
     try {
-      const res = await fetch("/api/teams");
-      if (res.ok) {
-        const json = await res.json();
-        setTeams(json.teams ?? []);
+      const [orgsRes, teamsRes] = await Promise.all([
+        fetch("/api/organizations/mine"),
+        fetch("/api/teams"),
+      ]);
+
+      if (orgsRes.ok) {
+        const orgsJson = await orgsRes.json();
+        setOrganizations(orgsJson.organizations ?? []);
+      }
+      if (teamsRes.ok) {
+        const teamsJson = await teamsRes.json();
+        setTeams(teamsJson.teams ?? []);
       }
     } catch {
-      // Silently fail — teams are optional, viewer may not be logged in
+      // Silently fail — scope dropdown optional
     }
   }, []);
 
-  /* eslint-disable react-hooks/set-state-in-effect -- async fetch, setState is after await */
+  // Initialize scope from localStorage and fetch orgs/teams (logged-in only)
+  /* eslint-disable react-hooks/set-state-in-effect -- async fetch and localStorage read */
   useEffect(() => {
-    fetchTeams();
-  }, [fetchTeams]);
+    if (!isAuthenticated) {
+      setScopeInitialized(true);
+      return;
+    }
+
+    fetchOrgsAndTeams().then(() => {
+      // After fetching orgs/teams, restore scope from localStorage
+      const stored = loadScopeFromStorage();
+      if (stored) {
+        // Will be validated below after orgs/teams are loaded
+        setScope(stored);
+      }
+      setScopeInitialized(true);
+    });
+  }, [isAuthenticated, fetchOrgsAndTeams]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Validate stored scope against available orgs/teams
+  // (intentionally calling setState in effect to correct invalid state after async load)
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!scopeInitialized) return;
+
+    if (scope.type === "org" && scope.id) {
+      const valid = organizations.some((o) => o.id === scope.id);
+      if (!valid) {
+        setScope({ type: "global" });
+        saveScopeToStorage({ type: "global" });
+      }
+    } else if (scope.type === "team" && scope.id) {
+      const valid = teams.some((t) => t.id === scope.id);
+      if (!valid) {
+        setScope({ type: "global" });
+        saveScopeToStorage({ type: "global" });
+      }
+    }
+  }, [scopeInitialized, scope, organizations, teams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Handle scope change
+  const handleScopeChange = (newScope: ScopeSelection) => {
+    setScope(newScope);
+    saveScopeToStorage(newScope);
+  };
 
   return (
     <>
@@ -408,12 +580,15 @@ export default function LeaderboardPage() {
             ))}
           </div>
 
-          {/* Scope dropdown (team filter) */}
-          <ScopeDropdown
-            value={scope}
-            onChange={setScope}
-            teams={teams}
-          />
+          {/* Scope dropdown (org/team filter) — only show for authenticated users */}
+          {isAuthenticated && (
+            <ScopeDropdown
+              value={scope}
+              onChange={handleScopeChange}
+              organizations={organizations}
+              teams={teams}
+            />
+          )}
         </div>
 
         {/* Error */}

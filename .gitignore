@@ -18,3 +18,4 @@ coverage/
 # Playwright
 playwright-report/
 test-results/
+packages/worker/migrations/

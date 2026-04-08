@@ -541,4 +541,15 @@ describe("DELETE /api/admin/pricing", () => {
 
     expect(res.status).toBe(500);
   });
+
+  it("should return 500 when DELETE error is not Error instance", async () => {
+    resolveAdmin.mockResolvedValueOnce({
+      userId: "admin-1",
+      email: "admin@test.com",
+    });
+    mockDbWrite.execute.mockRejectedValueOnce("string error");
+
+    const res = await DELETE(makeDelete({ id: "1" }));
+    expect(res.status).toBe(500);
+  });
 });

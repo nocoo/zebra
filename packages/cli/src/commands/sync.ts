@@ -472,7 +472,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
       message: `Checking ${displayName} database...`,
     });
 
-    const prevCursor = cursors[dbCursorKey] as unknown | undefined;
+    const prevCursor = cursors[dbCursorKey] as unknown;
 
     // Detect DB cursor loss (parallel to file-based knownFilePaths logic):
     // If the DB was previously synced (tracked in knownDbSources) but the

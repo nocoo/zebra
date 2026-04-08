@@ -126,4 +126,19 @@ describe("POST /api/auth/verify-invite", () => {
     expect(json.valid).toBe(false);
     expect(json.error).toBe("Invalid invite code format");
   });
+
+  it("should return 500 when DB throws unexpected error", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const mockDb = {
+      firstOrNull: vi.fn().mockRejectedValue(new Error("DB connection timeout")),
+    };
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDb as never);
+
+    const res = await POST(makeRequest({ code: "ABCDEFGH" }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toContain("Failed to verify");
+    consoleSpy.mockRestore();
+  });
 });

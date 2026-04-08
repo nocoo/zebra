@@ -97,6 +97,30 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(404);
   });
 
+  it("should return 404 when user not found at level 1 (is_public missing)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    // Full query fails (is_public missing), level 1 returns null (user not found)
+    mockDbRead.firstOrNull
+      .mockRejectedValueOnce(new Error("no such column: is_public"))
+      .mockResolvedValueOnce(null);
+
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
+
+    expect(res.status).toBe(404);
+  });
+
+  it("should return 500 when level 1 query fails with non-column error", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    // Full query fails (is_public missing), level 1 fails with unexpected error
+    mockDbRead.firstOrNull
+      .mockRejectedValueOnce(new Error("no such column: is_public"))
+      .mockRejectedValueOnce(new Error("DB connection timeout"));
+
+    const res = await GET(makeJsonRequest("GET", "/api/settings"));
+
+    expect(res.status).toBe(500);
+  });
+
   it("should return is_public: true when DB value is 1", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.firstOrNull.mockResolvedValueOnce({
@@ -428,6 +452,15 @@ describe("PATCH /api/settings", () => {
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 boom"));
+
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob" }));
+
+    expect(res.status).toBe(500);
+  });
+
+  it("should return 500 when error is not Error instance", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbWrite.execute.mockRejectedValueOnce("string error");
 
     const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob" }));
 

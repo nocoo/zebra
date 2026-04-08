@@ -591,3 +591,49 @@ export interface NotifierOperationResult {
   /** Warning messages (non-fatal) */
   warnings?: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Organizations
+// ---------------------------------------------------------------------------
+
+/** Organization entity */
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Organization with member count (for admin list) */
+export interface OrganizationWithCount extends Organization {
+  memberCount: number;
+}
+
+/** Organization membership */
+export interface OrganizationMember {
+  id: string;
+  orgId: string;
+  userId: string;
+  joinedAt: string;
+}
+
+/** Organization member with user details (for member list) */
+export interface OrganizationMemberWithUser extends OrganizationMember {
+  user: {
+    id: string;
+    name: string | null;
+    image: string | null;
+    slug: string | null;
+  };
+}
+
+/** Lightweight org info for dropdown */
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+}

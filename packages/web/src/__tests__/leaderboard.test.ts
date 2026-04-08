@@ -10,6 +10,19 @@ vi.mock("@/lib/db", () => ({
   resetDb: vi.fn(),
 }));
 
+// Mock auth-helpers for scoped leaderboard tests
+vi.mock("@/lib/auth-helpers", () => ({
+  resolveUser: vi.fn(),
+}));
+
+vi.mock("@/auth", () => ({
+  shouldUseSecureCookies: vi.fn(() => false),
+}));
+
+const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
+  resolveUser: ReturnType<typeof vi.fn>;
+};
+
 describe("GET /api/leaderboard", () => {
   let mockClient: ReturnType<typeof createMockClient>;
 
@@ -17,6 +30,8 @@ describe("GET /api/leaderboard", () => {
     vi.clearAllMocks();
     mockClient = createMockClient();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(mockClient as any);
+    // Default to authenticated user for scope tests
+    resolveUser.mockResolvedValue({ userId: "test-user" });
   });
 
   describe("query params validation", () => {
@@ -195,15 +210,14 @@ describe("GET /api/leaderboard", () => {
   });
 
   describe("team filter", () => {
-    it("should add team JOIN when team param is provided", async () => {
+    it("should add EXISTS filter when team param is provided", async () => {
       mockClient.query.mockResolvedValueOnce({ results: [] });
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       expect(res.status).toBe(200);
       const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("JOIN team_members tm");
-      expect(sqlCall[0]).toContain("tm.team_id = ?");
+      expect(sqlCall[0]).toContain("EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = ur.user_id AND tm.team_id = ?)");
       expect(sqlCall[1]).toContain("team-abc");
     });
 
@@ -215,6 +229,31 @@ describe("GET /api/leaderboard", () => {
       const sqlCall = mockClient.query.mock.calls[0]!;
       // Team filter still respects user opt-out
       expect(sqlCall[0]).toContain("u.is_public = 1");
+    });
+
+    it("should silently ignore team param for anonymous users", async () => {
+      resolveUser.mockResolvedValueOnce(null); // Anonymous
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.scope).toBe("global");
+      // Should NOT have team filter in SQL
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).not.toContain("team_members");
+    });
+
+    it("should set Cache-Control: private, no-store for anonymous team-scoped request", async () => {
+      resolveUser.mockResolvedValueOnce(null); // Anonymous
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
+
+      expect(res.status).toBe(200);
+      // Even though data is global, scope param was present so must not be public cached
+      expect(res.headers.get("Cache-Control")).toBe("private, no-store");
     });
   });
 
@@ -328,7 +367,7 @@ describe("GET /api/leaderboard", () => {
       expect(fallbackSql).toContain("ur.hour_start >= ?");
     });
 
-    it("should preserve team join in level 1 fallback", async () => {
+    it("should preserve EXISTS filter in level 1 fallback", async () => {
       mockClient.query
         .mockRejectedValueOnce(new Error("no such column: u.nickname"))
         .mockResolvedValueOnce({ results: [] });
@@ -337,8 +376,134 @@ describe("GET /api/leaderboard", () => {
 
       expect(res.status).toBe(200);
       const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(fallbackSql).toContain("JOIN team_members tm");
-      expect(fallbackSql).toContain("tm.team_id = ?");
+      expect(fallbackSql).toContain("EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = ur.user_id AND tm.team_id = ?)");
+    });
+  });
+
+  describe("organization filter", () => {
+    it("should add EXISTS filter when org param is provided", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.scope).toBe("org");
+      expect(body.scopeId).toBe("org-123");
+
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).toContain("EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = ur.user_id AND om.org_id = ?)");
+      expect(sqlCall[1]).toContain("org-123");
+    });
+
+    it("should return 400 when both org and team are provided", async () => {
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123", team: "team-abc" }));
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Cannot specify both");
+    });
+
+    it("should silently ignore org param for anonymous users", async () => {
+      resolveUser.mockResolvedValueOnce(null); // Anonymous
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.scope).toBe("global");
+      expect(body.scopeId).toBeUndefined();
+      // Should NOT have org filter in SQL
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).not.toContain("organization_members");
+    });
+
+    it("should set Cache-Control: private, no-store for anonymous org-scoped request", async () => {
+      resolveUser.mockResolvedValueOnce(null); // Anonymous
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      expect(res.status).toBe(200);
+      // Even though data is global, scope param was present so must not be public cached
+      expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    });
+
+    it("should include is_public filter even when org is set (opt-out respected)", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      const sqlCall = mockClient.query.mock.calls[0]!;
+      expect(sqlCall[0]).toContain("u.is_public = 1");
+    });
+
+    it("should set Cache-Control: private, no-store for org-scoped leaderboard", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    });
+
+    it("should fail closed when organization_members table is missing", async () => {
+      mockClient.query
+        .mockRejectedValueOnce(new Error("no such table: organization_members"))
+        .mockRejectedValueOnce(new Error("no such table: organization_members"));
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      expect(res.status).toBe(500);
+      expect(mockClient.query).toHaveBeenCalledTimes(2);
+    });
+
+    it("should preserve EXISTS filter in level 1 fallback for org", async () => {
+      mockClient.query
+        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
+        .mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
+
+      expect(res.status).toBe(200);
+      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
+      expect(fallbackSql).toContain("EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = ur.user_id AND om.org_id = ?)");
+    });
+  });
+
+  describe("response shape", () => {
+    it("should include scope='global' when no scope params", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard"));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.scope).toBe("global");
+      expect(body.scopeId).toBeUndefined();
+    });
+
+    it("should include scope='team' and scopeId when team param is provided", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-xyz" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.scope).toBe("team");
+      expect(body.scopeId).toBe("team-xyz");
+    });
+
+    it("should include scope='org' and scopeId when org param is provided", async () => {
+      mockClient.query.mockResolvedValueOnce({ results: [] });
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-abc" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.scope).toBe("org");
+      expect(body.scopeId).toBe("org-abc");
     });
   });
 
@@ -433,5 +598,13 @@ describe("GET /api/leaderboard", () => {
       expect(teamsSql).toContain("team_members");
       expect(teamsSql).toContain("IN (?)");
     });
+  });
+
+  it("should return 500 when error is not Error instance", async () => {
+    mockClient.query.mockRejectedValueOnce("string error");
+
+    const res = await GET(makeGetRequest("/api/leaderboard"));
+
+    expect(res.status).toBe(500);
   });
 });
