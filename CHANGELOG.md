@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.7.0
+
+### Added
+- Implement hermes notifier driver
+- Implement hermes token driver
+- Implement hermes SQLite parser with session-level diff
+- Add hermes path resolution and sync orchestration
+- Add hermes source to type system and validation
+- Sort public showcases by upvote count descending
+
+### Changed
+- Boost branch coverage to 90% threshold
+- Clarify Hermes requires manual plugin installation
+- Document manual plugin installation and post-implementation fixes
+- Update supported tools count from 7 to 8
+- Mark hermes support implementation complete
+
+### Fixed
+- Add Hermes SQLite pre-check warnings (parity with OpenCode)
+- Add Hermes to sync summary output
+- Remove model IS NOT NULL filter (prevents data loss)
+- OpenCode failure should not disable Hermes driver
+- Remove broken Hermes notifier (manual install only)
+- Correct Hermes SQL query to use sessions table
+- RowCount should reflect raw query rows, not deltas
+- Wire Hermes paths into CLI main entry points
+- Separate cursor slots for opencode/hermes SQLite
+- Reuse resolvePewBin() instead of new findPewBinary()
+- CLI runtime guard + notifier pewBin injection
+- Critical Web API validation + palette fixes
+- Correct interface inconsistencies in hermes design
+
 ## v2.6.0
 
 ### Added
