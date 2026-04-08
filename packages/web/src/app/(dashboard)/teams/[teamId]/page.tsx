@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Users,
@@ -11,6 +11,9 @@ import {
   UserMinus,
   UserPlus,
   Trash2,
+  Camera,
+  Pencil,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -47,6 +50,7 @@ interface TeamDetail {
   role: string;
   members: TeamMember[];
   auto_register_season: boolean;
+  logo_url: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +353,16 @@ export default function TeamDetailPage() {
   // Invite dialog
   const { openInviteDialog, dialogProps: inviteDialogProps } = useInviteDialog();
 
+  // Logo upload
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Rename
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
   const handleMemberClick = useCallback((member: TeamMember) => {
     setDialogMember(member);
     setDialogOpen(true);
@@ -378,6 +392,130 @@ export default function TeamDetailPage() {
   useEffect(() => {
     fetchTeam();
   }, [fetchTeam]);
+
+  // -------------------------------------------------------------------------
+  // Logo upload/remove (owner only)
+  // -------------------------------------------------------------------------
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so the same file can be re-selected
+    if (logoInputRef.current) logoInputRef.current.value = "";
+
+    // Client-side validation
+    if (!file.type.startsWith("image/png") && !file.type.startsWith("image/jpeg")) {
+      setMessage({ type: "error", text: "Only PNG and JPEG images are accepted." });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ type: "error", text: "File too large (max 2 MB)." });
+      return;
+    }
+
+    setUploadingLogo(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`/api/teams/${teamId}/logo`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "Logo updated!" });
+        fetchTeam();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage({
+          type: "error",
+          text: (data as { error?: string }).error ?? "Failed to upload logo.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    const confirmed = await confirm({
+      title: "Remove team logo?",
+      description: "The current logo will be deleted. You can upload a new one anytime.",
+      confirmText: "Remove",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/teams/${teamId}/logo`, { method: "DELETE" });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Logo removed." });
+        fetchTeam();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage({
+          type: "error",
+          text: (data as { error?: string }).error ?? "Failed to remove logo.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Rename (owner only)
+  // -------------------------------------------------------------------------
+
+  const startEditing = () => {
+    if (!team) return;
+    setEditName(team.name);
+    setEditing(true);
+    setTimeout(() => editInputRef.current?.focus(), 0);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setEditName("");
+  };
+
+  const handleRename = async () => {
+    if (!team) return;
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === team.name) {
+      cancelEditing();
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "Team renamed." });
+        setEditing(false);
+        fetchTeam();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage({
+          type: "error",
+          text: (data as { error?: string }).error ?? "Failed to rename.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error." });
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   // -------------------------------------------------------------------------
   // Kick member (owner only)
@@ -521,18 +659,100 @@ export default function TeamDetailPage() {
 
       {/* Header */}
       <div>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-muted-foreground shrink-0">
-            <Users className="h-5 w-5" strokeWidth={1.5} />
+        <div className="flex items-start gap-4">
+          {/* Team Logo */}
+          <div className="relative shrink-0">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent text-muted-foreground overflow-hidden">
+              {team.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- external team logos
+                <img
+                  src={team.logo_url}
+                  alt={`${team.name} logo`}
+                  className="h-14 w-14 object-cover"
+                />
+              ) : (
+                <Users className="h-6 w-6" strokeWidth={1.5} />
+              )}
+            </div>
+            {/* Logo edit buttons (owner only) */}
+            {isOwner && (
+              <div className="absolute -bottom-1 -right-1 flex gap-0.5">
+                <button
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadingLogo}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+                  title="Change logo"
+                >
+                  {uploadingLogo ? (
+                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                  ) : (
+                    <Camera className="h-3 w-3" strokeWidth={2} />
+                  )}
+                </button>
+                {team.logo_url && (
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 transition-colors"
+                    title="Remove logo"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                )}
+              </div>
+            )}
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={handleLogoChange}
+              className="hidden"
+            />
           </div>
+
+          {/* Team Name + Info */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight">{team.name}</h1>
-            <p className="text-sm text-muted-foreground">
+            {editing ? (
+              <div className="flex items-center gap-2">
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  maxLength={64}
+                  className="rounded-lg border border-border bg-background px-3 py-1.5 text-lg font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-shadow min-w-0 flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename();
+                    if (e.key === "Escape") cancelEditing();
+                  }}
+                  disabled={savingName}
+                />
+                {savingName && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 group/name">
+                <h1 className="text-2xl md:text-3xl font-semibold font-display tracking-tight truncate">
+                  {team.name}
+                </h1>
+                {isOwner && (
+                  <button
+                    onClick={startEditing}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/50 group-hover/name:text-muted-foreground hover:!text-foreground hover:bg-accent transition-colors shrink-0"
+                    title="Rename team"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="mt-1 text-sm text-muted-foreground">
               {team.members.length} member
               {team.members.length !== 1 ? "s" : ""}
               {isOwner && " · You are the owner"}
             </p>
           </div>
+
           {/* Invite button (owner only) */}
           {isOwner && (
             <button
