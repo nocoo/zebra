@@ -76,7 +76,9 @@ Replace generic SQL proxy with typed query functions. Group by domain:
 | `leaderboard` | `getLeaderboardData` | P2 |
 | `pricing` | `getPricing`, `listPricing` | P3 |
 | `admin` | `listInviteCodes`, `getAdminStats` | P3 |
-| `live` | (health check, no DB query) | N/A |
+| `live` | `healthCheck` (proxy to worker-read `/api/live`) | P3 |
+
+**Note on `live`**: The current `/api/live` route uses `getDbRead().query("SELECT 1")` for DB connectivity check. Migration option: proxy directly to worker-read's `/api/live` endpoint which already performs the same check with native D1 binding.
 
 **Goal**: Once all domains are migrated, the generic `/api/query` endpoint can be removed entirely. Until then, Phase 1 validation provides defense-in-depth.
 
@@ -115,8 +117,20 @@ P2-{domain}-6: Remove raw SQL from migrated routes
 - End-to-end query flow through DbRead adapter
 
 ### L3: E2E Tests
-- Existing `api-e2e.test.ts` covers read paths
-- No new L3 tests needed for security hardening
+
+Current `api-e2e.test.ts` coverage is limited to:
+- `GET /api/usage`
+- `GET /api/auth/cli`
+- Showcase endpoints
+
+**Gap**: Most read domains (achievements, devices, teams, seasons, organizations, etc.) lack L3 coverage.
+
+**Plan**: Add minimal L3 regression tests for each domain during Phase 2 migration:
+```
+P2-{domain}-L3: Add E2E smoke test for critical read path
+```
+
+This ensures RPC migration doesn't break production behavior.
 
 ### G1: Static Analysis
 - TypeScript strict mode (already enabled)
@@ -132,14 +146,16 @@ P2-{domain}-6: Remove raw SQL from migrated routes
 
 ## File Changes Summary
 
-### Phase 1
+### Phase 1 (Completed)
 
-| File | Change |
-|------|--------|
-| `packages/worker-read/src/index.ts` | Enhanced SQL validation |
-| `packages/worker-read/src/__tests__/sql-validation.test.ts` | New test file |
+| File | Change | Status |
+|------|--------|--------|
+| `packages/worker-read/src/index.ts` | Tokenizer-based SQL validation | ✅ Done |
+| `packages/worker-read/src/index.test.ts` | Bypass attempt test cases | ✅ Done |
 
-### Phase 2 (per domain)
+**Note**: Tests were added to the existing `index.test.ts` rather than a separate file.
+
+### Phase 2 (Planned, per domain)
 
 | File | Change |
 |------|--------|
@@ -172,6 +188,7 @@ P2-{domain}-6: Remove raw SQL from migrated routes
 - [ ] leaderboard (P2)
 - [ ] pricing (P3)
 - [ ] admin (P3)
+- [ ] live (P3)
 
 ## References
 
