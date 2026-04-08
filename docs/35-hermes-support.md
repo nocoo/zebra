@@ -398,8 +398,8 @@ export const HermesNotifierDriver: NotifierDriver = {
       };
     }
     
-    // 获取 pew 可执行路径
-    const pewBin = await findPewBinary();  // 查找 pew 命令路径
+    // 获取 pew 可执行路径（复用现有 helper）
+    const pewBin = await resolvePewBin();  // 已处理 argv[1]、which/where.exe、Windows shim
     
     // 创建插件目录
     await mkdir(pluginDir, { recursive: true });
@@ -784,7 +784,7 @@ M packages/cli/src/notifier/registry.ts
 ```
 
 **核心实现**:
-- `findPewBinary()` - 查找 pew 可执行文件路径（`which pew` 或 argv[1] 兄弟目录）
+- 复用 `resolvePewBin()` - 已处理 argv[1]、which/where.exe、Windows shim（notify-handler.ts:195）
 - `buildPluginPython(pewBin: string)` - 注入绝对路径到 plugin
 - `install()` - 创建 `~/.hermes/plugins/pew/`，注入 pew 绝对路径
 - `uninstall()` - 删除插件目录
@@ -796,7 +796,8 @@ feat(cli): add hermes notifier driver
 
 - Install pew plugin to $HERMES_HOME/plugins/pew/
 - Plugin triggers `PEW_BIN notify --source=hermes` on post_llm_call
-- Inject absolute pew path via findPewBinary() (避免 PATH 不完整)
+- Reuse resolvePewBin() from notify-handler.ts (no new helper needed)
+- resolvePewBin() handles argv[1], which/where.exe, Windows shim
 - buildPluginPython() takes pewBin not notifyPath (Python env needs pew CLI)
 - Support HERMES_HOME override
 - Add install/uninstall/status tests
