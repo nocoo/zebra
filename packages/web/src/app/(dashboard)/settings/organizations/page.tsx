@@ -174,6 +174,18 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Join or leave organizations to filter your leaderboard.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Want to add a new organization?{" "}
+          <a
+            href="https://github.com/nocoo/pew/issues/new?labels=organization&title=[Org]+Request:+"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            Submit a request on GitHub
+          </a>
+          .
+        </p>
       </div>
 
       {/* Organization List */}
