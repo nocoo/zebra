@@ -41,7 +41,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@nocoo/cli-base": "^0.2.0"
+    "@nocoo/cli-base": "^0.2.3"
   },
   "devDependencies": {
     "@pew/core": "workspace:*",
