@@ -99,6 +99,7 @@ export async function executeLogin(options: LoginOptions): Promise<LoginResult> 
     timeoutMs,
     generateNonce,
     accentColor: PEW_ACCENT_COLOR,
+    log: (msg: string) => console.log(msg),
   });
 
   return {
