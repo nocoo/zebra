@@ -61,7 +61,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockAggregates });
+      expect(body).toEqual({ result: mockAggregates });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -95,7 +95,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockDaily });
+      expect(body).toEqual({ result: mockDaily });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -135,7 +135,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockCost });
+      expect(body).toEqual({ result: mockCost });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -170,7 +170,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockDiversity });
+      expect(body).toEqual({ result: mockDiversity });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -207,7 +207,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSession });
+      expect(body).toEqual({ result: mockSession });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -241,7 +241,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockHourly });
+      expect(body).toEqual({ result: mockHourly });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -280,7 +280,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockCost });
+      expect(body).toEqual({ result: mockCost });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -318,7 +318,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockEarners });
+      expect(body).toEqual({ result: mockEarners });
     });
 
     it("should return 400 when params missing", async () => {
@@ -354,7 +354,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 42 });
+      expect(body).toEqual({ result: 42 });
     });
 
     it("should return 0 when no result", async () => {
@@ -370,7 +370,7 @@ describe("achievements RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 0 });
+      expect(body).toEqual({ result: 0 });
     });
 
     it("should return 400 when params missing", async () => {

@@ -85,7 +85,7 @@ async function handleGetInviteCode(
     .bind(req.code)
     .first<InviteCodeRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckInviteCodeExists(
@@ -101,7 +101,7 @@ async function handleCheckInviteCodeExists(
     .bind(req.code)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleListInviteCodes(
@@ -123,7 +123,7 @@ async function handleListInviteCodes(
 
   const results = await db.prepare(sql).bind(...params).all<InviteCodeRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetAuthCode(
@@ -143,7 +143,7 @@ async function handleGetAuthCode(
     .bind(req.code)
     .first<AuthCodeRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckUserHasUnusedInvite(
@@ -163,7 +163,7 @@ async function handleCheckUserHasUnusedInvite(
     .bind(req.userId)
     .first<{ id: string }>();
 
-  return Response.json({ data: { hasUnused: result !== null } });
+  return Response.json({ result: { hasUnused: result !== null } });
 }
 
 // ---------------------------------------------------------------------------

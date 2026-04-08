@@ -53,7 +53,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockEntries });
+      expect(body).toEqual({ result: mockEntries });
     });
 
     it("should support pagination", async () => {
@@ -101,7 +101,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockEntries });
+      expect(body).toEqual({ result: mockEntries });
     });
 
     it("should support pagination", async () => {
@@ -146,7 +146,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { rank: 5, total_tokens: 500000 } });
+      expect(body).toEqual({ result: { rank: 5, total_tokens: 500000 } });
     });
 
     it("should return null when user not in season", async () => {
@@ -161,7 +161,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -193,7 +193,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { rank: 3, total_tokens: 2500000 } });
+      expect(body).toEqual({ result: { rank: 3, total_tokens: 2500000 } });
     });
 
     it("should return null when team not in season", async () => {
@@ -208,7 +208,7 @@ describe("leaderboard RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {

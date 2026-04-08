@@ -154,7 +154,7 @@ async function handleGetTeamMembership(
     .bind(req.teamId, req.userId)
     .first<{ role: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleListUserTeams(
@@ -177,7 +177,7 @@ async function handleListUserTeams(
     .bind(req.userId)
     .all<TeamRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleCheckTeamSlugExists(
@@ -193,7 +193,7 @@ async function handleCheckTeamSlugExists(
     .bind(req.slug)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleGetTeamById(
@@ -214,7 +214,7 @@ async function handleGetTeamById(
       .bind(req.teamId)
       .first<TeamDetailRow>();
 
-    return Response.json({ data: result });
+    return Response.json({ result: result });
   } catch (err) {
     // Fall back to query without auto_register_season
     const msg = err instanceof Error ? err.message : "";
@@ -256,7 +256,7 @@ async function handleGetTeamMembers(
       .bind(req.teamId)
       .all<TeamMemberRow>();
 
-    return Response.json({ data: results.results });
+    return Response.json({ result: results.results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg.includes("no such column")) {
@@ -296,7 +296,7 @@ async function handleGetTeamSeasonRegistrations(
     .bind(req.teamId)
     .all<{ season_id: string }>();
 
-  return Response.json({ data: results.results.map((r) => r.season_id) });
+  return Response.json({ result: results.results.map((r) => r.season_id) });
 }
 
 async function handleCountTeamMembers(
@@ -312,7 +312,7 @@ async function handleCountTeamMembers(
     .bind(req.teamId)
     .first<{ cnt: number }>();
 
-  return Response.json({ data: { count: result?.cnt ?? 0 } });
+  return Response.json({ result: { count: result?.cnt ?? 0 } });
 }
 
 async function handleGetTeamLogoUrl(
@@ -328,7 +328,7 @@ async function handleGetTeamLogoUrl(
     .bind(req.teamId)
     .first<{ logo_url: string | null }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleFindTeamByInviteCode(
@@ -344,7 +344,7 @@ async function handleFindTeamByInviteCode(
     .bind(req.inviteCode)
     .first<{ id: string; name: string; slug: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckTeamMembershipExists(
@@ -363,7 +363,7 @@ async function handleCheckTeamMembershipExists(
     .bind(req.teamId, req.userId)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleGetAppSetting(
@@ -379,7 +379,7 @@ async function handleGetAppSetting(
     .bind(req.key)
     .first<{ value: string }>();
 
-  return Response.json({ data: result?.value ?? null });
+  return Response.json({ result: result?.value ?? null });
 }
 
 async function handleGetTeamMemberUserIds(
@@ -395,7 +395,7 @@ async function handleGetTeamMemberUserIds(
     .bind(req.teamId)
     .all<{ user_id: string }>();
 
-  return Response.json({ data: results.results.map((r) => r.user_id) });
+  return Response.json({ result: results.results.map((r) => r.user_id) });
 }
 
 async function handleGetTeamOwner(
@@ -413,7 +413,7 @@ async function handleGetTeamOwner(
     .bind(req.teamId)
     .first<{ user_id: string }>();
 
-  return Response.json({ data: result?.user_id ?? null });
+  return Response.json({ result: result?.user_id ?? null });
 }
 
 async function handleCheckUsersShareTeam(
@@ -438,7 +438,7 @@ async function handleCheckUsersShareTeam(
     .bind(req.userId1, req.userId2)
     .first<{ team_id: string }>();
 
-  return Response.json({ data: { shared: result !== null } });
+  return Response.json({ result: { shared: result !== null } });
 }
 
 // ---------------------------------------------------------------------------

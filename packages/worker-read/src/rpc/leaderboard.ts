@@ -96,7 +96,7 @@ async function handleGetUserLeaderboard(
     .bind(req.seasonId, limit, offset)
     .all<LeaderboardEntryRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetTeamLeaderboard(
@@ -130,7 +130,7 @@ async function handleGetTeamLeaderboard(
     .bind(req.seasonId, limit, offset)
     .all<TeamLeaderboardEntryRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetUserRank(
@@ -161,7 +161,7 @@ async function handleGetUserRank(
     .bind(req.seasonId, req.userId)
     .first<{ rank: number; total_tokens: number }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetTeamRank(
@@ -199,7 +199,7 @@ async function handleGetTeamRank(
     .bind(req.seasonId, req.teamId)
     .first<{ rank: number; total_tokens: number }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 // ---------------------------------------------------------------------------

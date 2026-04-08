@@ -63,7 +63,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockLogs });
+      expect(body).toEqual({ result: mockLogs });
     });
 
     it("should filter by userId", async () => {
@@ -156,7 +156,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockLog });
+      expect(body).toEqual({ result: mockLog });
     });
 
     it("should return null when not found", async () => {
@@ -170,7 +170,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when logId missing", async () => {
@@ -205,7 +205,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
   });
 
@@ -235,7 +235,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockUsers });
+      expect(body).toEqual({ result: mockUsers });
     });
 
     it("should filter by role", async () => {
@@ -313,7 +313,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockUser });
+      expect(body).toEqual({ result: mockUser });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -342,7 +342,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 1000 });
+      expect(body).toEqual({ result: 1000 });
     });
 
     it("should filter by role", async () => {
@@ -379,7 +379,7 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 0 });
+      expect(body).toEqual({ result: 0 });
     });
   });
 

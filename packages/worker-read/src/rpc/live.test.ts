@@ -59,7 +59,7 @@ describe("live RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSessions });
+      expect(body).toEqual({ result: mockSessions });
     });
 
     it("should respect limit", async () => {
@@ -102,7 +102,7 @@ describe("live RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockActivity });
+      expect(body).toEqual({ result: mockActivity });
     });
 
     it("should filter by userId", async () => {
@@ -163,7 +163,7 @@ describe("live RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
   });
 
@@ -188,7 +188,7 @@ describe("live RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
 
     it("should return 400 when userId missing", async () => {

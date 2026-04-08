@@ -64,7 +64,7 @@ describe("usage RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockRecords });
+      expect(body).toEqual({ result: mockRecords });
     });
 
     it("should filter by source when provided", async () => {
@@ -144,7 +144,7 @@ describe("usage RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSummary });
+      expect(body).toEqual({ result: mockSummary });
     });
 
     it("should return 400 when params missing", async () => {
@@ -188,7 +188,7 @@ describe("usage RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockDetails });
+      expect(body).toEqual({ result: mockDetails });
     });
 
     it("should return 400 when params missing", async () => {
@@ -240,7 +240,7 @@ describe("usage RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTimeline });
+      expect(body).toEqual({ result: mockTimeline });
     });
 
     it("should return 400 when params missing", async () => {
@@ -287,7 +287,7 @@ describe("usage RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPricing });
+      expect(body).toEqual({ result: mockPricing });
     });
   });
 

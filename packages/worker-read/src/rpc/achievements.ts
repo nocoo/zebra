@@ -159,7 +159,7 @@ async function handleGetUsageAggregates(
     .bind(req.userId)
     .first<UsageAggregatesRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetDailyUsage(
@@ -181,7 +181,7 @@ async function handleGetDailyUsage(
     .bind(req.userId)
     .all<DailyUsageRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetDailyCostBreakdown(
@@ -205,7 +205,7 @@ async function handleGetDailyCostBreakdown(
     .bind(req.userId)
     .all<DailyCostRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetDiversityCounts(
@@ -228,7 +228,7 @@ async function handleGetDiversityCounts(
     .bind(req.userId)
     .first<DiversityRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetSessionAggregates(
@@ -253,7 +253,7 @@ async function handleGetSessionAggregates(
     .bind(req.userId)
     .first<SessionAggregatesRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetHourlyUsage(
@@ -274,7 +274,7 @@ async function handleGetHourlyUsage(
     .bind(req.userId)
     .all<HourlyUsageRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetCostByModelSource(
@@ -298,7 +298,7 @@ async function handleGetCostByModelSource(
     .bind(req.userId)
     .all<CostByModelSourceRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetAchievementEarners(
@@ -317,7 +317,7 @@ async function handleGetAchievementEarners(
     .bind(req.threshold, req.limit, req.offset)
     .all<AchievementEarnerRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetAchievementEarnersCount(
@@ -336,7 +336,7 @@ async function handleGetAchievementEarnersCount(
     .bind(req.threshold)
     .first<{ count: number }>();
 
-  return Response.json({ data: result?.count ?? 0 });
+  return Response.json({ result: result?.count ?? 0 });
 }
 
 // ---------------------------------------------------------------------------

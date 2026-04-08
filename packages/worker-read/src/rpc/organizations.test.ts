@@ -51,7 +51,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockOrgs });
+      expect(body).toEqual({ result: mockOrgs });
     });
   });
 
@@ -74,7 +74,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockOrgs });
+      expect(body).toEqual({ result: mockOrgs });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -105,7 +105,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockOrg });
+      expect(body).toEqual({ result: mockOrg });
     });
 
     it("should return null when not found", async () => {
@@ -119,7 +119,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when orgId missing", async () => {
@@ -150,7 +150,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when not a member", async () => {
@@ -165,7 +165,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -200,7 +200,7 @@ describe("organizations RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockMembers });
+      expect(body).toEqual({ result: mockMembers });
     });
 
     it("should return 400 when orgId missing", async () => {

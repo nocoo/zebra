@@ -180,7 +180,7 @@ async function handleListProjects(
     .bind(req.userId)
     .all<ProjectRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleListAliasesWithStats(
@@ -245,7 +245,7 @@ async function handleListAliasesWithStats(
   const stmt = db.prepare(sql);
   const results = await stmt.bind(...params).all<AliasStatsRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleListUnassignedRefs(
@@ -310,7 +310,7 @@ async function handleListUnassignedRefs(
   const stmt = db.prepare(sql);
   const results = await stmt.bind(...params).all<UnassignedRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleListProjectTags(
@@ -326,7 +326,7 @@ async function handleListProjectTags(
     .bind(req.userId)
     .all<TagRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetProjectByName(
@@ -345,7 +345,7 @@ async function handleGetProjectByName(
     .bind(req.userId, req.name)
     .first<{ id: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetProjectById(
@@ -366,7 +366,7 @@ async function handleGetProjectById(
     .bind(req.projectId, req.userId)
     .first<ProjectRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleSessionRecordExists(
@@ -389,7 +389,7 @@ async function handleSessionRecordExists(
     .bind(req.userId, req.source, req.projectRef)
     .first<{ "1": number }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleGetAliasOwner(
@@ -411,7 +411,7 @@ async function handleGetAliasOwner(
     .bind(req.userId, req.source, req.projectRef)
     .first<{ project_id: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleAliasAttachedToProject(
@@ -433,7 +433,7 @@ async function handleAliasAttachedToProject(
     .bind(req.userId, req.projectId, req.source, req.projectRef)
     .first<{ project_id: string }>();
 
-  return Response.json({ data: { attached: result !== null } });
+  return Response.json({ result: { attached: result !== null } });
 }
 
 async function handleProjectTagExists(
@@ -455,7 +455,7 @@ async function handleProjectTagExists(
     .bind(req.userId, req.projectId, req.tag)
     .first<{ tag: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleGetProjectAliasStats(
@@ -489,7 +489,7 @@ async function handleGetProjectAliasStats(
     .bind(req.projectId)
     .all<AliasStatsRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetProjectTagList(
@@ -512,7 +512,7 @@ async function handleGetProjectTagList(
     .bind(req.userId, req.projectId)
     .all<{ tag: string }>();
 
-  return Response.json({ data: results.results.map((r) => r.tag) });
+  return Response.json({ result: results.results.map((r) => r.tag) });
 }
 
 async function handleGetProjectTimeline(
@@ -550,7 +550,7 @@ async function handleGetProjectTimeline(
     .bind(req.userId, req.from, req.to)
     .all<TimelineRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetProjectByNameExcluding(
@@ -571,7 +571,7 @@ async function handleGetProjectByNameExcluding(
     .bind(req.userId, req.name, req.excludeId)
     .first<{ id: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleProjectExistsForUser(
@@ -590,7 +590,7 @@ async function handleProjectExistsForUser(
     .bind(req.projectId, req.userId)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 // ---------------------------------------------------------------------------

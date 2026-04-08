@@ -67,7 +67,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockShowcase });
+      expect(body).toEqual({ result: mockShowcase });
     });
 
     it("should return 400 when showcaseId missing", async () => {
@@ -98,7 +98,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockShowcase });
+      expect(body).toEqual({ result: mockShowcase });
     });
 
     it("should return 400 when slug missing", async () => {
@@ -128,7 +128,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { id: "s1", user_id: "u1" } });
+      expect(body).toEqual({ result: { id: "s1", user_id: "u1" } });
     });
 
     it("should return 400 when showcaseId missing", async () => {
@@ -159,7 +159,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true, id: "s1" } });
+      expect(body).toEqual({ result: { exists: true, id: "s1" } });
     });
 
     it("should return exists: false when not found", async () => {
@@ -174,7 +174,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false, id: undefined } });
+      expect(body).toEqual({ result: { exists: false, id: undefined } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -206,7 +206,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when no upvote", async () => {
@@ -221,7 +221,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -252,7 +252,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 42 });
+      expect(body).toEqual({ result: 42 });
     });
 
     it("should return 0 when null result", async () => {
@@ -266,7 +266,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 0 });
+      expect(body).toEqual({ result: 0 });
     });
 
     it("should return 400 when showcaseId missing", async () => {
@@ -299,7 +299,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockShowcases });
+      expect(body).toEqual({ result: mockShowcases });
     });
 
     it("should filter by userId when provided", async () => {
@@ -333,7 +333,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 100 });
+      expect(body).toEqual({ result: 100 });
     });
 
     it("should return 0 when null result", async () => {
@@ -346,7 +346,7 @@ describe("showcases RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: 0 });
+      expect(body).toEqual({ result: 0 });
     });
   });
 

@@ -115,7 +115,7 @@ async function handleListDevices(
     .bind(req.userId, req.userId, req.userId, req.userId)
     .all<DeviceRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleCheckDeviceExists(
@@ -142,7 +142,7 @@ async function handleCheckDeviceExists(
     .bind(req.userId, req.deviceId, req.userId, req.deviceId)
     .first<{ device_id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleCheckDuplicateAlias(
@@ -165,7 +165,7 @@ async function handleCheckDuplicateAlias(
     .bind(req.userId, req.alias, req.excludeDeviceId)
     .first<{ device_id: string }>();
 
-  return Response.json({ data: { duplicate: result !== null } });
+  return Response.json({ result: { duplicate: result !== null } });
 }
 
 async function handleCheckDeviceHasRecords(
@@ -187,7 +187,7 @@ async function handleCheckDeviceHasRecords(
     .bind(req.userId, req.deviceId)
     .first<{ cnt: number }>();
 
-  return Response.json({ data: { hasRecords: (result?.cnt ?? 0) > 0 } });
+  return Response.json({ result: { hasRecords: (result?.cnt ?? 0) > 0 } });
 }
 
 async function handleGetDeviceAlias(
@@ -209,7 +209,7 @@ async function handleGetDeviceAlias(
     .bind(req.userId, req.deviceId)
     .first<{ alias: string }>();
 
-  return Response.json({ data: result?.alias ?? null });
+  return Response.json({ result: result?.alias ?? null });
 }
 
 // ---------------------------------------------------------------------------

@@ -74,7 +74,7 @@ async function handleListOrganizations(db: D1Database): Promise<Response> {
     )
     .all<OrgRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleListUserOrganizations(
@@ -96,7 +96,7 @@ async function handleListUserOrganizations(
     .bind(req.userId)
     .all<OrgRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetOrganizationById(
@@ -112,7 +112,7 @@ async function handleGetOrganizationById(
     .bind(req.orgId)
     .first<OrgRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckOrgMembership(
@@ -134,7 +134,7 @@ async function handleCheckOrgMembership(
     .bind(req.orgId, req.userId)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleListOrgMembers(
@@ -156,7 +156,7 @@ async function handleListOrgMembers(
     .bind(req.orgId)
     .all<OrgMemberRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 // ---------------------------------------------------------------------------

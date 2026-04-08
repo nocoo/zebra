@@ -49,7 +49,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: "10" });
+      expect(body).toEqual({ result: "10" });
     });
 
     it("should return null when setting not found", async () => {
@@ -63,7 +63,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when key missing", async () => {
@@ -94,7 +94,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSettings });
+      expect(body).toEqual({ result: mockSettings });
     });
   });
 
@@ -115,7 +115,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: "dark" });
+      expect(body).toEqual({ result: "dark" });
     });
 
     it("should return null when setting not found", async () => {
@@ -130,7 +130,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -165,7 +165,7 @@ describe("settings RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSettings });
+      expect(body).toEqual({ result: mockSettings });
     });
 
     it("should return 400 when userId missing", async () => {

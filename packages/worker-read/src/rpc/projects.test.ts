@@ -64,7 +64,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockProjects });
+      expect(body).toEqual({ result: mockProjects });
     });
 
     it("should return 400 when userId is missing", async () => {
@@ -103,7 +103,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockAliases });
+      expect(body).toEqual({ result: mockAliases });
     });
 
     it("should return aliases with date range filter", async () => {
@@ -157,7 +157,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockRefs });
+      expect(body).toEqual({ result: mockRefs });
     });
 
     it("should return 400 when userId is missing", async () => {
@@ -192,7 +192,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTags });
+      expect(body).toEqual({ result: mockTags });
     });
 
     it("should return 400 when userId is missing", async () => {
@@ -220,7 +220,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { id: "p1" } });
+      expect(body).toEqual({ result: { id: "p1" } });
     });
 
     it("should return null when not found", async () => {
@@ -235,7 +235,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -272,7 +272,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockProject });
+      expect(body).toEqual({ result: mockProject });
     });
 
     it("should return null when not found", async () => {
@@ -287,7 +287,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -320,7 +320,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when not found", async () => {
@@ -336,7 +336,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -370,7 +370,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { project_id: "p1" } });
+      expect(body).toEqual({ result: { project_id: "p1" } });
     });
 
     it("should return null when alias not found", async () => {
@@ -386,7 +386,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -409,7 +409,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { attached: true } });
+      expect(body).toEqual({ result: { attached: true } });
     });
 
     it("should return attached: false when alias not attached", async () => {
@@ -426,7 +426,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { attached: false } });
+      expect(body).toEqual({ result: { attached: false } });
     });
   });
 
@@ -448,7 +448,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when tag not found", async () => {
@@ -464,7 +464,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
   });
 
@@ -502,7 +502,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
 
     it("should return 400 when projectId is missing", async () => {
@@ -535,7 +535,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: ["backend", "frontend", "react"] });
+      expect(body).toEqual({ result: ["backend", "frontend", "react"] });
     });
 
     it("should return empty array when no tags", async () => {
@@ -550,7 +550,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: [] });
+      expect(body).toEqual({ result: [] });
     });
   });
 
@@ -577,7 +577,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTimeline });
+      expect(body).toEqual({ result: mockTimeline });
     });
 
     it("should return 400 when params missing", async () => {
@@ -611,7 +611,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { id: "p2" } });
+      expect(body).toEqual({ result: { id: "p2" } });
     });
 
     it("should return null when no other project with same name", async () => {
@@ -627,7 +627,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -648,7 +648,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when project not owned", async () => {
@@ -663,7 +663,7 @@ describe("projects RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
   });
 

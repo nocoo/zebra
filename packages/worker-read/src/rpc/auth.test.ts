@@ -57,7 +57,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockCode });
+      expect(body).toEqual({ result: mockCode });
     });
 
     it("should return null when not found", async () => {
@@ -71,7 +71,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when code missing", async () => {
@@ -101,7 +101,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when code not found", async () => {
@@ -115,7 +115,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
 
     it("should return 400 when code missing", async () => {
@@ -148,7 +148,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockCodes });
+      expect(body).toEqual({ result: mockCodes });
     });
 
     it("should filter unused codes when specified", async () => {
@@ -187,7 +187,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockCode });
+      expect(body).toEqual({ result: mockCode });
     });
 
     it("should return null when not found", async () => {
@@ -201,7 +201,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when code missing", async () => {
@@ -231,7 +231,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { hasUnused: true } });
+      expect(body).toEqual({ result: { hasUnused: true } });
     });
 
     it("should return hasUnused: false when no unused invites", async () => {
@@ -245,7 +245,7 @@ describe("auth RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { hasUnused: false } });
+      expect(body).toEqual({ result: { hasUnused: false } });
     });
 
     it("should return 400 when userId missing", async () => {

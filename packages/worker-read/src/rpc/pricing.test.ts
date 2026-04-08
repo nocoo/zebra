@@ -72,7 +72,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPlans });
+      expect(body).toEqual({ result: mockPlans });
     });
 
     it("should filter active plans only", async () => {
@@ -114,7 +114,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPlan });
+      expect(body).toEqual({ result: mockPlan });
     });
 
     it("should return null when not found", async () => {
@@ -128,7 +128,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when planId missing", async () => {
@@ -168,7 +168,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPlan });
+      expect(body).toEqual({ result: mockPlan });
     });
 
     it("should return 400 when name missing", async () => {
@@ -207,7 +207,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPricing });
+      expect(body).toEqual({ result: mockPricing });
     });
 
     it("should filter by model", async () => {
@@ -247,7 +247,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockPricing });
+      expect(body).toEqual({ result: mockPricing });
     });
 
     it("should filter by effective date", async () => {
@@ -310,7 +310,7 @@ describe("pricing RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTiers });
+      expect(body).toEqual({ result: mockTiers });
     });
 
     it("should return 400 when planId missing", async () => {

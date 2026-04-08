@@ -217,7 +217,7 @@ async function handleListSeasons(db: D1Database): Promise<Response> {
     )
     .all<SeasonRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonById(
@@ -237,7 +237,7 @@ async function handleGetSeasonById(
     .bind(req.seasonId)
     .first<SeasonDetailRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetSeasonBySlug(
@@ -257,7 +257,7 @@ async function handleGetSeasonBySlug(
     .bind(req.slug)
     .first<SeasonDetailRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetSeasonRegistration(
@@ -280,7 +280,7 @@ async function handleGetSeasonRegistration(
     .bind(req.seasonId, req.teamId)
     .first<SeasonTeamRegistrationRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckSeasonMemberConflict(
@@ -304,7 +304,7 @@ async function handleCheckSeasonMemberConflict(
     .bind(req.seasonId, ...req.userIds)
     .first<{ user_id: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetSeasonSnapshots(
@@ -335,7 +335,7 @@ async function handleGetSeasonSnapshots(
     .bind(req.seasonId)
     .all<SeasonSnapshotRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonMemberSnapshots(
@@ -370,7 +370,7 @@ async function handleGetSeasonMemberSnapshots(
 
   const results = await db.prepare(sql).bind(req.seasonId).all<SeasonMemberSnapshotRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonTeamTokens(
@@ -408,7 +408,7 @@ async function handleGetSeasonTeamTokens(
     .bind(req.fromDate, req.toDate, req.seasonId)
     .all<TeamTokenRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonMemberTokens(
@@ -454,7 +454,7 @@ async function handleGetSeasonMemberTokens(
     .bind(req.fromDate, req.toDate, req.seasonId, ...req.teamIds)
     .all<MemberTokenRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonTeamSessionStats(
@@ -485,7 +485,7 @@ async function handleGetSeasonTeamSessionStats(
     .bind(req.fromDate, req.toDate, req.seasonId, ...req.teamIds)
     .all<TeamSessionStatsRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonMemberSessionStats(
@@ -517,7 +517,7 @@ async function handleGetSeasonMemberSessionStats(
     .bind(req.fromDate, req.toDate, req.seasonId, ...req.teamIds)
     .all<MemberSessionStatsRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSeasonTeamMembers(
@@ -533,7 +533,7 @@ async function handleGetSeasonTeamMembers(
     .bind(req.teamId)
     .all<{ user_id: string }>();
 
-  return Response.json({ data: results.results.map((r) => r.user_id) });
+  return Response.json({ result: results.results.map((r) => r.user_id) });
 }
 
 // ---------------------------------------------------------------------------

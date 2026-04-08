@@ -142,7 +142,7 @@ async function handleListAuditLogs(
 
   const results = await db.prepare(sql).bind(...params).all<AuditLogRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetAuditLog(
@@ -162,7 +162,7 @@ async function handleGetAuditLog(
     .bind(req.logId)
     .first<AuditLogRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetSystemStats(db: D1Database): Promise<Response> {
@@ -176,7 +176,7 @@ async function handleGetSystemStats(db: D1Database): Promise<Response> {
 
   const result = await db.prepare(sql).first<SystemStatsRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleListAdminUsers(
@@ -217,7 +217,7 @@ async function handleListAdminUsers(
 
   const results = await db.prepare(sql).bind(...params).all<AdminUserRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetAdminUser(
@@ -237,7 +237,7 @@ async function handleGetAdminUser(
     .bind(req.userId)
     .first<AdminUserRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCountUsers(
@@ -268,7 +268,7 @@ async function handleCountUsers(
       ? await db.prepare(sql).bind(...params).first<{ count: number }>()
       : await db.prepare(sql).first<{ count: number }>();
 
-  return Response.json({ data: result?.count ?? 0 });
+  return Response.json({ result: result?.count ?? 0 });
 }
 
 // ---------------------------------------------------------------------------

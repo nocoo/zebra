@@ -107,7 +107,7 @@ async function handleListSessions(
 
   const results = await db.prepare(sql).bind(...params).all<SessionRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetSessionStats(
@@ -141,7 +141,7 @@ async function handleGetSessionStats(
 
   const result = await db.prepare(sql).bind(...params).first<SessionStatsRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCountSessions(
@@ -174,7 +174,7 @@ async function handleCountSessions(
 
   const result = await db.prepare(sql).bind(...params).first<{ count: number }>();
 
-  return Response.json({ data: result?.count ?? 0 });
+  return Response.json({ result: result?.count ?? 0 });
 }
 
 // ---------------------------------------------------------------------------

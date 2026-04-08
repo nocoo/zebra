@@ -68,7 +68,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSeasons });
+      expect(body).toEqual({ result: mockSeasons });
     });
   });
 
@@ -98,7 +98,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSeason });
+      expect(body).toEqual({ result: mockSeason });
     });
 
     it("should return null when season not found", async () => {
@@ -112,7 +112,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when seasonId missing", async () => {
@@ -152,7 +152,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSeason });
+      expect(body).toEqual({ result: mockSeason });
     });
 
     it("should return 400 when slug missing", async () => {
@@ -190,7 +190,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockRegistration });
+      expect(body).toEqual({ result: mockRegistration });
     });
 
     it("should return null when not registered", async () => {
@@ -205,7 +205,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -237,7 +237,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { user_id: "u2" } });
+      expect(body).toEqual({ result: { user_id: "u2" } });
     });
 
     it("should return null when no conflict", async () => {
@@ -252,7 +252,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -296,7 +296,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSnapshots });
+      expect(body).toEqual({ result: mockSnapshots });
     });
 
     it("should return 400 when seasonId missing", async () => {
@@ -341,7 +341,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockSnapshots });
+      expect(body).toEqual({ result: mockSnapshots });
     });
 
     it("should return 400 when seasonId missing", async () => {
@@ -385,7 +385,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTokens });
+      expect(body).toEqual({ result: mockTokens });
     });
 
     it("should return 400 when params missing", async () => {
@@ -435,7 +435,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTokens });
+      expect(body).toEqual({ result: mockTokens });
     });
 
     it("should return 400 when params missing", async () => {
@@ -478,7 +478,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
 
     it("should return 400 when params missing", async () => {
@@ -522,7 +522,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockStats });
+      expect(body).toEqual({ result: mockStats });
     });
 
     it("should return 400 when params missing", async () => {
@@ -557,7 +557,7 @@ describe("seasons RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: ["u1", "u2"] });
+      expect(body).toEqual({ result: ["u1", "u2"] });
     });
 
     it("should return 400 when teamId missing", async () => {

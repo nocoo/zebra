@@ -111,7 +111,7 @@ async function handleGetShowcaseById(
     .bind(req.showcaseId)
     .first<ShowcaseRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetShowcaseBySlug(
@@ -132,7 +132,7 @@ async function handleGetShowcaseBySlug(
     .bind(req.slug)
     .first<ShowcaseRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetShowcaseOwner(
@@ -148,7 +148,7 @@ async function handleGetShowcaseOwner(
     .bind(req.showcaseId)
     .first<{ id: string; user_id: string }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleCheckShowcaseExists(
@@ -167,7 +167,7 @@ async function handleCheckShowcaseExists(
     .bind(req.userId, req.githubUrl)
     .first<{ id: string }>();
 
-  return Response.json({ data: { exists: result !== null, id: result?.id } });
+  return Response.json({ result: { exists: result !== null, id: result?.id } });
 }
 
 async function handleCheckUpvoteExists(
@@ -189,7 +189,7 @@ async function handleCheckUpvoteExists(
     .bind(req.showcaseId, req.visitorId)
     .first<{ id: number }>();
 
-  return Response.json({ data: { exists: result !== null } });
+  return Response.json({ result: { exists: result !== null } });
 }
 
 async function handleGetUpvoteCount(
@@ -205,7 +205,7 @@ async function handleGetUpvoteCount(
     .bind(req.showcaseId)
     .first<{ count: number }>();
 
-  return Response.json({ data: result?.count ?? 0 });
+  return Response.json({ result: result?.count ?? 0 });
 }
 
 async function handleListShowcases(
@@ -229,7 +229,7 @@ async function handleListShowcases(
 
   const results = await db.prepare(sql).bind(...params).all<ShowcaseRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleCountShowcases(
@@ -251,7 +251,7 @@ async function handleCountShowcases(
     ? await stmt.bind(...params).first<{ count: number }>()
     : await stmt.first<{ count: number }>();
 
-  return Response.json({ data: result?.count ?? 0 });
+  return Response.json({ result: result?.count ?? 0 });
 }
 
 // ---------------------------------------------------------------------------

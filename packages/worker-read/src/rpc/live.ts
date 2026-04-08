@@ -98,7 +98,7 @@ async function handleGetActiveSessions(
 
   const results = await db.prepare(sql).bind(limit).all<ActiveSessionRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetRecentActivity(
@@ -140,7 +140,7 @@ async function handleGetRecentActivity(
 
   const results = await db.prepare(sql).bind(...params).all<RecentActivityRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetLiveStats(db: D1Database): Promise<Response> {
@@ -154,7 +154,7 @@ async function handleGetLiveStats(db: D1Database): Promise<Response> {
 
   const result = await db.prepare(sql).first<LiveStatsRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetUserLiveStats(
@@ -181,7 +181,7 @@ async function handleGetUserLiveStats(
       requests_last_hour: number;
     }>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 // ---------------------------------------------------------------------------

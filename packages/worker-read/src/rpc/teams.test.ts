@@ -59,7 +59,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { role: "owner" } });
+      expect(body).toEqual({ result: { role: "owner" } });
     });
 
     it("should return null when not a member", async () => {
@@ -74,7 +74,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {
@@ -117,7 +117,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTeams });
+      expect(body).toEqual({ result: mockTeams });
     });
 
     it("should return 400 when userId is missing", async () => {
@@ -147,7 +147,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when slug not found", async () => {
@@ -161,7 +161,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
   });
 
@@ -190,7 +190,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockTeam });
+      expect(body).toEqual({ result: mockTeam });
     });
 
     it("should return null when team not found", async () => {
@@ -204,7 +204,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -244,7 +244,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockMembers });
+      expect(body).toEqual({ result: mockMembers });
     });
   });
 
@@ -264,7 +264,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { count: 5 } });
+      expect(body).toEqual({ result: { count: 5 } });
     });
 
     it("should return 0 when no result", async () => {
@@ -278,7 +278,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { count: 0 } });
+      expect(body).toEqual({ result: { count: 0 } });
     });
   });
 
@@ -298,7 +298,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { logo_url: "https://example.com/logo.png" } });
+      expect(body).toEqual({ result: { logo_url: "https://example.com/logo.png" } });
     });
 
     it("should return null logo when not set", async () => {
@@ -312,7 +312,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { logo_url: null } });
+      expect(body).toEqual({ result: { logo_url: null } });
     });
   });
 
@@ -332,7 +332,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { id: "t1", name: "Team 1", slug: "team-1" } });
+      expect(body).toEqual({ result: { id: "t1", name: "Team 1", slug: "team-1" } });
     });
 
     it("should return null when invite code not found", async () => {
@@ -346,7 +346,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -367,7 +367,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when not a member", async () => {
@@ -382,7 +382,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
   });
 
@@ -402,7 +402,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: "10" });
+      expect(body).toEqual({ result: "10" });
     });
 
     it("should return null when setting not found", async () => {
@@ -416,7 +416,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -438,7 +438,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: ["u1", "u2", "u3"] });
+      expect(body).toEqual({ result: ["u1", "u2", "u3"] });
     });
 
     it("should return empty array when no members", async () => {
@@ -452,7 +452,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: [] });
+      expect(body).toEqual({ result: [] });
     });
   });
 
@@ -472,7 +472,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: "u1" });
+      expect(body).toEqual({ result: "u1" });
     });
 
     it("should return null when no owner (edge case)", async () => {
@@ -486,7 +486,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
   });
 
@@ -507,7 +507,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { shared: true } });
+      expect(body).toEqual({ result: { shared: true } });
     });
 
     it("should return shared: false when users don't share a team", async () => {
@@ -522,7 +522,7 @@ describe("teams RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { shared: false } });
+      expect(body).toEqual({ result: { shared: false } });
     });
   });
 

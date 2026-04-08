@@ -67,7 +67,7 @@ async function handleGetAppSetting(
     .bind(req.key)
     .first<{ value: string }>();
 
-  return Response.json({ data: result?.value ?? null });
+  return Response.json({ result: result?.value ?? null });
 }
 
 async function handleGetAllAppSettings(db: D1Database): Promise<Response> {
@@ -75,7 +75,7 @@ async function handleGetAllAppSettings(db: D1Database): Promise<Response> {
     .prepare(`SELECT key, value FROM app_settings ORDER BY key ASC`)
     .all<AppSettingRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetUserSetting(
@@ -94,7 +94,7 @@ async function handleGetUserSetting(
     .bind(req.userId, req.key)
     .first<{ value: string }>();
 
-  return Response.json({ data: result?.value ?? null });
+  return Response.json({ result: result?.value ?? null });
 }
 
 async function handleGetAllUserSettings(
@@ -110,7 +110,7 @@ async function handleGetAllUserSettings(
     .bind(req.userId)
     .all<UserSettingRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 // ---------------------------------------------------------------------------

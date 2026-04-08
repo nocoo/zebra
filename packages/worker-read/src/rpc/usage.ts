@@ -156,7 +156,7 @@ async function handleGetUsage(
   const stmt = db.prepare(sql);
   const results = await stmt.bind(...params).all<UsageRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetDeviceSummary(
@@ -196,7 +196,7 @@ async function handleGetDeviceSummary(
     .bind(req.userId, req.fromDate, req.toDate)
     .all<DeviceSummaryRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetDeviceCostDetails(
@@ -228,7 +228,7 @@ async function handleGetDeviceCostDetails(
     .bind(req.userId, req.fromDate, req.toDate)
     .all<CostDetailRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetDeviceTimeline(
@@ -261,7 +261,7 @@ async function handleGetDeviceTimeline(
     .bind(req.userId, req.fromDate, req.toDate)
     .all<TimelineRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetModelPricing(db: D1Database): Promise<Response> {
@@ -269,7 +269,7 @@ async function handleGetModelPricing(db: D1Database): Promise<Response> {
     .prepare("SELECT * FROM model_pricing ORDER BY model ASC")
     .all<PricingRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 // ---------------------------------------------------------------------------

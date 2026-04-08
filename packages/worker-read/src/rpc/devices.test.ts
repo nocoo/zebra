@@ -70,7 +70,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: mockDevices });
+      expect(body).toEqual({ result: mockDevices });
     });
 
     it("should return 400 when userId missing", async () => {
@@ -101,7 +101,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: true } });
+      expect(body).toEqual({ result: { exists: true } });
     });
 
     it("should return exists: false when device not found", async () => {
@@ -116,7 +116,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { exists: false } });
+      expect(body).toEqual({ result: { exists: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -149,7 +149,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { duplicate: true } });
+      expect(body).toEqual({ result: { duplicate: true } });
     });
 
     it("should return duplicate: false when alias is unique", async () => {
@@ -165,7 +165,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { duplicate: false } });
+      expect(body).toEqual({ result: { duplicate: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -198,7 +198,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { hasRecords: true } });
+      expect(body).toEqual({ result: { hasRecords: true } });
     });
 
     it("should return hasRecords: false when device has no records", async () => {
@@ -213,7 +213,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { hasRecords: false } });
+      expect(body).toEqual({ result: { hasRecords: false } });
     });
 
     it("should return hasRecords: false when result is null", async () => {
@@ -228,7 +228,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: { hasRecords: false } });
+      expect(body).toEqual({ result: { hasRecords: false } });
     });
 
     it("should return 400 when params missing", async () => {
@@ -260,7 +260,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: "MacBook Pro" });
+      expect(body).toEqual({ result: "MacBook Pro" });
     });
 
     it("should return null when no alias set", async () => {
@@ -275,7 +275,7 @@ describe("devices RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ data: null });
+      expect(body).toEqual({ result: null });
     });
 
     it("should return 400 when params missing", async () => {

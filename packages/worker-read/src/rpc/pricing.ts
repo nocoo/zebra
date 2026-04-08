@@ -102,7 +102,7 @@ async function handleListPricingPlans(
 
   const results = await db.prepare(sql).all<PricingPlanRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetPricingPlan(
@@ -122,7 +122,7 @@ async function handleGetPricingPlan(
     .bind(req.planId)
     .first<PricingPlanRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleGetPricingPlanByName(
@@ -142,7 +142,7 @@ async function handleGetPricingPlanByName(
     .bind(req.name)
     .first<PricingPlanRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleListModelPricing(
@@ -165,7 +165,7 @@ async function handleListModelPricing(
       ? await db.prepare(sql).bind(...params).all<ModelPricingRow>()
       : await db.prepare(sql).all<ModelPricingRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 async function handleGetModelPricing(
@@ -190,7 +190,7 @@ async function handleGetModelPricing(
 
   const result = await db.prepare(sql).bind(...params).first<ModelPricingRow>();
 
-  return Response.json({ data: result });
+  return Response.json({ result: result });
 }
 
 async function handleListUsageTiers(
@@ -211,7 +211,7 @@ async function handleListUsageTiers(
     .bind(req.planId)
     .all<UsageTierRow>();
 
-  return Response.json({ data: results.results });
+  return Response.json({ result: results.results });
 }
 
 // ---------------------------------------------------------------------------
