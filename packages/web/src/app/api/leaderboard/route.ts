@@ -4,14 +4,19 @@
  * Query params:
  *   period — "week" | "month" | "all" (default: "week")
  *   limit  — max entries to return (default: 100, max: 100)
- *   team   — team ID for team-scoped leaderboard (optional)
+ *   team   — team ID for team-scoped leaderboard (optional, mutually exclusive with org)
+ *   org    — organization ID for org-scoped leaderboard (optional, mutually exclusive with team)
  *
- * Returns { period, entries[] } where each entry has user info + total tokens.
+ * Returns { period, scope, scopeId?, entries[] } where each entry has user info + total tokens.
  * Only users with is_public = 1 are included.
+ *
+ * Scoped requests use Cache-Control: private, no-store.
+ * Anonymous requests with scope params are silently downgraded to global.
  */
 
 import { NextResponse } from "next/server";
 import { getDbRead } from "@/lib/db";
+import { resolveUser } from "@/lib/auth-helpers";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -75,12 +80,21 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const period = url.searchParams.get("period") ?? "week";
   const limitParam = url.searchParams.get("limit");
-  const teamId = url.searchParams.get("team");
+  const teamIdParam = url.searchParams.get("team");
+  const orgIdParam = url.searchParams.get("org");
 
   // Validate period
   if (!VALID_PERIODS.has(period)) {
     return NextResponse.json(
       { error: `Invalid period: "${period}". Use week, month, or all.` },
+      { status: 400 },
+    );
+  }
+
+  // Validate: org and team are mutually exclusive
+  if (teamIdParam && orgIdParam) {
+    return NextResponse.json(
+      { error: "Cannot specify both team and org parameters" },
       { status: 400 },
     );
   }
@@ -98,6 +112,19 @@ export async function GET(request: Request) {
     limit = parsed;
   }
 
+  // Check auth for scoped requests — anonymous users silently degrade to global
+  let teamId: string | null = null;
+  let orgId: string | null = null;
+
+  if (teamIdParam || orgIdParam) {
+    const authResult = await resolveUser(request);
+    if (authResult) {
+      teamId = teamIdParam;
+      orgId = orgIdParam;
+    }
+    // else: silently ignore scope params for anonymous users
+  }
+
   const db = await getDbRead();
   const fromDate = periodStartDate(period);
 
@@ -109,12 +136,16 @@ export async function GET(request: Request) {
     params.push(fromDate);
   }
 
-  // Team filter: only include team members (requires teams tables to exist)
-  let teamJoin = "";
+  // Team filter using EXISTS (no fan-out)
   if (teamId) {
-    teamJoin = "JOIN team_members tm ON tm.user_id = ur.user_id";
-    conditions.push("tm.team_id = ?");
+    conditions.push("EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = ur.user_id AND tm.team_id = ?)");
     params.push(teamId);
+  }
+
+  // Organization filter using EXISTS (no fan-out)
+  if (orgId) {
+    conditions.push("EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = ur.user_id AND om.org_id = ?)");
+    params.push(orgId);
   }
 
   // Always filter by is_public = 1 (opt-out respected)
@@ -136,7 +167,6 @@ export async function GET(request: Request) {
       SUM(ur.cached_input_tokens) AS cached_input_tokens
     FROM usage_records ur
     JOIN users u ON u.id = ur.user_id
-    ${teamJoin}
     WHERE ${conditions.join(" AND ")}
     GROUP BY ur.user_id
     HAVING total_tokens > 0
@@ -246,11 +276,18 @@ export async function GET(request: Request) {
       };
     });
 
-    const headers: HeadersInit = teamId
+    // Determine scope for response
+    const scope = orgId ? "org" : teamId ? "team" : "global";
+    const scopeId = orgId ?? teamId ?? undefined;
+
+    const headers: HeadersInit = (teamId || orgId)
       ? { "Cache-Control": "private, no-store" }
       : { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" };
 
-    return NextResponse.json({ period, entries }, { headers });
+    return NextResponse.json(
+      { period, scope, ...(scopeId && { scopeId }), entries },
+      { headers },
+    );
   } catch (err) {
     console.error("Failed to query leaderboard:", err);
     return NextResponse.json(
