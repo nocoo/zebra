@@ -80,7 +80,7 @@ export function InviteDialog({
   const inviteMessage = `Join my team "${teamName}" on pew!
 
 How to join:
-1. Go to pew.dev and sign in
+1. Go to pew.md and sign in
 2. Navigate to Teams
 3. Click "Join Team"
 4. Enter invite code: ${inviteCode}`;
