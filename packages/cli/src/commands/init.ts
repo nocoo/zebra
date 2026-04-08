@@ -11,6 +11,7 @@ import {
   getDriver,
   installAll,
 } from "../notifier/registry.js";
+import { SECURE_DIR_MODE } from "../storage/secure-mkdir.js";
 
 export interface InitOptions {
   stateDir: string;
@@ -63,8 +64,8 @@ export async function executeInit(opts: InitOptions): Promise<InitResult> {
     };
   }
 
-  await mkdirFn(paths.stateDir, { recursive: true });
-  await mkdirFn(paths.binDir, { recursive: true });
+  await mkdirFn(paths.stateDir, { recursive: true, mode: SECURE_DIR_MODE });
+  await mkdirFn(paths.binDir, { recursive: true, mode: SECURE_DIR_MODE });
 
   const notifySource = buildNotifyHandler({
     stateDir: paths.stateDir,

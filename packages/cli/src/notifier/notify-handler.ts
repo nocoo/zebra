@@ -71,7 +71,7 @@ for (let i = 0; i < rawArgs.length; i++) {
 }
 
 try {
-  mkdirSync(STATE_DIR, { recursive: true });
+  mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   appendFileSync(join(STATE_DIR, "notify.signal"), "\\n", "utf8");
 } catch (_) {}
 
