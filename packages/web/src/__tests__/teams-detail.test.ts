@@ -317,14 +317,21 @@ describe("DELETE /api/teams/[teamId]", () => {
       .mockResolvedValueOnce({ cnt: 1 }) // last member
       .mockResolvedValueOnce({ logo_url: null }); // team logo check
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
+    mockDbWrite.batch.mockResolvedValue([]);
 
     const res = await DELETE(makeRequest("DELETE"), makeParams());
 
     expect(res.status).toBe(200);
-    // Should delete membership + team
-    expect(mockDbWrite.execute).toHaveBeenCalledTimes(2);
+    // Should delete membership first
+    expect(mockDbWrite.execute).toHaveBeenCalledTimes(1);
     expect(mockDbWrite.execute.mock.calls[0]![0]).toContain("DELETE FROM team_members");
-    expect(mockDbWrite.execute.mock.calls[1]![0]).toContain("DELETE FROM teams");
+    // Then batch delete season_teams + team (preserving season_roster_snapshots for history)
+    expect(mockDbWrite.batch).toHaveBeenCalledTimes(1);
+    const batchCalls = mockDbWrite.batch.mock.calls[0]![0] as Array<{ sql: string }>;
+    expect(batchCalls.some((s) => s.sql.includes("DELETE FROM season_teams"))).toBe(true);
+    expect(batchCalls.some((s) => s.sql.includes("DELETE FROM teams"))).toBe(true);
+    // Should NOT delete season_roster_snapshots (historical data)
+    expect(batchCalls.some((s) => s.sql.includes("DELETE FROM season_roster_snapshots"))).toBe(false);
   });
 
   it("should return 503 when teams table does not exist (DELETE)", async () => {

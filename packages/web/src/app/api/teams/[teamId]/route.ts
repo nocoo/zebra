@@ -336,7 +336,12 @@ export async function DELETE(
         [teamId],
       );
 
-      await dbWrite.execute("DELETE FROM teams WHERE id = ?", [teamId]);
+      // Clean up season_teams before deleting team
+      // NOTE: season_roster_snapshots are preserved for historical leaderboard data
+      await dbWrite.batch([
+        { sql: "DELETE FROM season_teams WHERE team_id = ?", params: [teamId] },
+        { sql: "DELETE FROM teams WHERE id = ?", params: [teamId] },
+      ]);
 
       // Best-effort logo cleanup — don't fail the request if R2 is unavailable
       if (team?.logo_url) {
