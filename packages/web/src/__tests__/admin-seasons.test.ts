@@ -130,7 +130,7 @@ describe("POST /api/admin/seasons", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
-    autoRegisterTeamsForSeason.mockResolvedValueOnce(0);
+    autoRegisterTeamsForSeason.mockResolvedValueOnce({ registered: 0, skipped: 0, seasonEligible: true });
 
     const res = await POST(
       makeJsonRequest("POST", "/api/admin/seasons", {
@@ -153,7 +153,7 @@ describe("POST /api/admin/seasons", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
-    autoRegisterTeamsForSeason.mockResolvedValueOnce(3);
+    autoRegisterTeamsForSeason.mockResolvedValueOnce({ registered: 3, skipped: 1, seasonEligible: true });
 
     const res = await POST(
       makeJsonRequest("POST", "/api/admin/seasons", {
