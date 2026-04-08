@@ -295,4 +295,34 @@ describe("DELETE /api/admin/invites", () => {
     const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
     expect(res.status).toBe(500);
   });
+
+  it("should return 500 on unexpected error in POST", async () => {
+    resolveAdmin.mockResolvedValueOnce({
+      userId: "admin-1",
+      email: "admin@test.com",
+    });
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB write failed"));
+
+    const res = await POST(
+      makeJsonRequest("POST", "/api/admin/invites", { count: 1 }),
+    );
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("Failed to generate");
+  });
+
+  it("should return 500 on unexpected error in DELETE", async () => {
+    resolveAdmin.mockResolvedValueOnce({
+      userId: "admin-1",
+      email: "admin@test.com",
+    });
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB connection timeout"));
+
+    const res = await DELETE(
+      makeJsonRequest("DELETE", "/api/admin/invites?id=1"),
+    );
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("Failed to delete");
+  });
 });

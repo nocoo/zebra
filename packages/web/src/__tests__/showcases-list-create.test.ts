@@ -590,5 +590,35 @@ describe("POST /api/showcases", () => {
 
       expect(res.status).toBe(201);
     });
+
+    it("continues when rate limit check throws non-table error (logs warning)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockCheckShowcaseRateLimit.mockRejectedValue(new Error("D1 connection timeout"));
+      mockNormalizeGitHubUrl.mockReturnValue({
+        repoKey: "owner/repo2",
+        displayUrl: "https://github.com/owner/repo2",
+        owner: "owner",
+        repo: "repo2",
+      });
+      mockFetchGitHubMetadata.mockResolvedValue({
+        owner: "owner",
+        name: "repo2",
+        title: "repo2",
+        description: null,
+        fullName: "owner/repo2", stars: 0, forks: 0, language: null, license: null, topics: [], homepage: null,
+      });
+      mockBuildOgImageUrl.mockReturnValue("https://og.example.com/image");
+      const mockDbRead = { firstOrNull: vi.fn().mockResolvedValue(null) };
+      const mockDbWrite = { execute: vi.fn().mockResolvedValue({}) };
+      mockGetDbRead.mockResolvedValue(mockDbRead as never);
+      mockGetDbWrite.mockResolvedValue(mockDbWrite as never);
+
+      const res = await POST(createPostRequest({ github_url: "https://github.com/owner/repo2" }));
+
+      // Should still succeed - rate limit errors are non-blocking
+      expect(res.status).toBe(201);
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
   });
 });

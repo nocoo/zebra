@@ -61,4 +61,15 @@ describe("GET /api/auth/invite-required", () => {
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
+
+  it("should handle non-Error thrown values", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFirstOrNull.mockRejectedValue("string error");
+
+    const response = await GET();
+    const data = await response.json();
+
+    expect(data).toEqual({ required: true });
+    consoleSpy.mockRestore();
+  });
 });

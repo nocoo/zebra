@@ -478,4 +478,26 @@ describe("GET /api/usage/by-device", () => {
     const res = await GET(new Request("http://localhost:7020/api/usage/by-device"));
     expect(res.status).toBe(500);
   });
+
+  it("should return 400 for invalid date format in from param", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/usage/by-device?from=not-a-date"),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid date");
+  });
+
+  it("should return 400 for invalid date format in to param", async () => {
+    resolveUser.mockResolvedValueOnce({ userId: "u1", email: "test@test.com" });
+
+    const res = await GET(
+      new Request("http://localhost:7020/api/usage/by-device?from=2026-03-01&to=baddate"),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid date");
+  });
 });
