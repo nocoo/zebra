@@ -599,4 +599,12 @@ describe("GET /api/leaderboard", () => {
       expect(teamsSql).toContain("IN (?)");
     });
   });
+
+  it("should return 500 when error is not Error instance", async () => {
+    mockClient.query.mockRejectedValueOnce("string error");
+
+    const res = await GET(makeGetRequest("/api/leaderboard"));
+
+    expect(res.status).toBe(500);
+  });
 });

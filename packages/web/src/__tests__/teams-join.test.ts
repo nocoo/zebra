@@ -253,4 +253,12 @@ describe("POST /api/teams/join", () => {
     expect(res.status).toBe(403);
     expect((await res.json()).error).toContain("Team is full");
   });
+
+  it("should return 500 when error is not Error instance", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
+
+    const res = await POST(makeJson({ invite_code: "valid-code" }));
+    expect(res.status).toBe(500);
+  });
 });

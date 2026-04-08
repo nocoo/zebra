@@ -535,4 +535,18 @@ describe("PATCH /api/teams/[teamId]", () => {
     expect(res.status).toBe(500);
     expect((await res.json()).error).toContain("Failed to rename");
   });
+
+  it("should return 500 when PATCH error is not Error instance", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "owner-1" });
+    mockDbRead.firstOrNull
+      .mockResolvedValueOnce({ role: "owner" }); // membership check
+    mockDbWrite.execute.mockRejectedValueOnce("string error");
+
+    const res = await PATCH(
+      makeRequest("PATCH", { name: "New Name" }),
+      { params: Promise.resolve({ teamId: "team-1" }) },
+    );
+
+    expect(res.status).toBe(500);
+  });
 });
