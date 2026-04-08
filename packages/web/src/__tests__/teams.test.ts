@@ -221,4 +221,14 @@ describe("POST /api/teams", () => {
 
     expect(res.status).toBe(503);
   });
+
+  it("should return 500 when error is not Error instance in POST", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockRejectedValueOnce("string error");
+
+    const res = await POST(makeJson("POST", { name: "Test" }));
+
+    expect(res.status).toBe(500);
+  });
 });

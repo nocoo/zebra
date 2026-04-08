@@ -433,4 +433,13 @@ describe("PATCH /api/settings", () => {
 
     expect(res.status).toBe(500);
   });
+
+  it("should return 500 when error is not Error instance", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbWrite.execute.mockRejectedValueOnce("string error");
+
+    const res = await PATCH(makeJsonRequest("PATCH", "/api/settings", { nickname: "Bob" }));
+
+    expect(res.status).toBe(500);
+  });
 });

@@ -213,5 +213,13 @@ describe("GET /api/usage", () => {
 
       expect(res.status).toBe(500);
     });
+
+    it("should return 500 when error is not Error instance", async () => {
+      mockClient.query.mockRejectedValueOnce("string error");
+
+      const res = await GET(makeGetRequest("/api/usage"));
+
+      expect(res.status).toBe(500);
+    });
   });
 });
