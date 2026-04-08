@@ -2557,4 +2557,55 @@ describe("executeSync", () => {
     expect(events.some((e) => e.phase === "warn" && e.message?.includes("inode changed"))).toBe(true);
     expect(r2.totalDeltas).toBeGreaterThanOrEqual(1);
   });
+
+  it("should detect file cursor loss and trigger replay with progress events", async () => {
+    // Setup two sources
+    const claudeDir = join(dataDir, ".claude", "projects", "proj-file-loss");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "session.jsonl"),
+      claudeLine("2026-03-07T10:15:00.000Z", 1000, 100) + "\n",
+    );
+
+    const geminiDir = join(dataDir, ".gemini", "tmp", "proj-fl", "chats");
+    await mkdir(geminiDir, { recursive: true });
+    await writeFile(
+      join(geminiDir, "session-fl.json"),
+      geminiSession("2026-03-07T10:15:00.000Z", 2000, 200),
+    );
+
+    // First sync
+    const r1 = await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+    });
+    expect(r1.totalDeltas).toBe(2);
+
+    // Tamper: delete Claude file cursor but keep it in knownFilePaths
+    const cursorsPath = join(stateDir, "cursors.json");
+    const cursorsData = JSON.parse(await readFile(cursorsPath, "utf-8"));
+    const fileKeys = Object.keys(cursorsData.files);
+    for (const key of fileKeys) {
+      if (key.includes("proj-file-loss") && key.includes(".claude")) {
+        delete cursorsData.files[key];
+      }
+    }
+    await writeFile(cursorsPath, JSON.stringify(cursorsData));
+
+    // Second sync with onProgress — should capture cursor loss and replay events
+    const events: Array<{ source: string; phase: string; message?: string }> = [];
+    const r2 = await executeSync({
+      stateDir,
+      claudeDir: join(dataDir, ".claude"),
+      geminiDir: join(dataDir, ".gemini"),
+      onProgress: (e) => events.push(e),
+    });
+
+    // Should detect cursor loss and restart
+    expect(events.some((e) => e.phase === "warn" && e.message?.includes("Cursor entry lost"))).toBe(true);
+    expect(events.some((e) => e.phase === "warn" && e.message?.includes("Replay condition detected"))).toBe(true);
+    // After restart, values should be correct (not inflated)
+    expect(r2.totalDeltas).toBe(2);
+  });
 });
