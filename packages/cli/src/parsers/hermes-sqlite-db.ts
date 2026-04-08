@@ -109,18 +109,17 @@ export function openHermesDb(
 
   const stmt = db.prepare(
     `SELECT
-       session_id,
-       SUM(input_tokens) as input_tokens,
-       SUM(output_tokens) as output_tokens,
-       SUM(cache_write_tokens) as cache_write_tokens,
-       SUM(cache_read_tokens) as cache_read_tokens,
-       MAX(created_at) as created_at,
-       model_id
-     FROM llm_calls
-     WHERE created_at IS NOT NULL
-       AND model_id IS NOT NULL
-     GROUP BY session_id, model_id
-     ORDER BY created_at ASC`,
+       id,
+       model,
+       input_tokens,
+       output_tokens,
+       cache_read_tokens,
+       cache_write_tokens,
+       reasoning_tokens
+     FROM sessions
+     WHERE started_at IS NOT NULL
+       AND model IS NOT NULL
+     ORDER BY started_at ASC`,
   );
 
   return {
