@@ -29,12 +29,9 @@ export async function GET(
     const dbRead = await getDbRead();
 
     // Check membership
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [teamId, authResult.userId],
-    );
+    const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-    if (!membership) {
+    if (!role) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
@@ -150,7 +147,7 @@ export async function GET(
       ...team,
       logo_url: team.logo_url ?? null,
       auto_register_season: !!team.auto_register_season,
-      role: membership.role,
+      role,
       members: members.results.map((m) => ({
         userId: m.user_id,
         name: m.nickname ?? m.name,
@@ -218,15 +215,12 @@ export async function PATCH(
 
     // Only the owner can rename
     const dbWrite = await getDbWrite();
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [teamId, authResult.userId],
-    );
+    const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-    if (!membership) {
+    if (!role) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
-    if (membership.role !== "owner") {
+    if (role !== "owner") {
       return NextResponse.json({ error: "Only the team owner can update settings" }, { status: 403 });
     }
 
@@ -292,19 +286,16 @@ export async function DELETE(
     const dbWrite = await getDbWrite();
 
     // Check membership
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [teamId, authResult.userId],
-    );
+    const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-    if (!membership) {
+    if (!role) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
     // Count remaining members
     const memberCount = await dbRead.countTeamMembers(teamId);
 
-    if (membership.role === "owner" && memberCount > 1) {
+    if (role === "owner" && memberCount > 1) {
       return NextResponse.json(
         { error: "Transfer ownership before leaving (not yet supported — remove other members first)" },
         { status: 400 },

@@ -59,7 +59,7 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return 403 when user is not a member", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no membership
+    mockDbRead.getTeamMembership.mockResolvedValueOnce(null); // no membership
 
     const res = await GET(makeRequest("GET"), makeParams());
 
@@ -69,9 +69,8 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return 404 when team not found", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "member" }) // membership exists
-      .mockResolvedValueOnce(null); // team not found
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member"); // membership exists
+    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // team not found
 
     const res = await GET(makeRequest("GET"), makeParams());
 
@@ -80,15 +79,14 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return team details with members", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({
-        id: "t1",
-        name: "Team Alpha",
-        slug: "team-alpha",
-        invite_code: "abc12345",
-        created_at: "2026-01-01T00:00:00Z",
-      });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team Alpha",
+      slug: "team-alpha",
+      invite_code: "abc12345",
+      created_at: "2026-01-01T00:00:00Z",
+    });
     mockDbRead.query
       .mockResolvedValueOnce({
         results: [
@@ -126,15 +124,14 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should fall back when nickname column does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "member" })
-      .mockResolvedValueOnce({
-        id: "t1",
-        name: "Team",
-        slug: "team",
-        invite_code: "x",
-        created_at: "2026-01-01T00:00:00Z",
-      });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
+    mockDbRead.firstOrNull.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team",
+      slug: "team",
+      invite_code: "x",
+      created_at: "2026-01-01T00:00:00Z",
+    });
     // First query fails (no such column), fallback query succeeds
     mockDbRead.query
       .mockRejectedValueOnce(new Error("no such column: nickname"))
@@ -161,8 +158,8 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should fall back when auto_register_season column does not exist (migration lag)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
     mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "member" })
       // First team query fails (no such column: auto_register_season)
       .mockRejectedValueOnce(new Error("no such column: auto_register_season"))
       // Fallback query without auto_register_season succeeds
@@ -200,8 +197,8 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return 404 when team not found during migration lag fallback", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
     mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "member" })
       // First team query fails (no such column)
       .mockRejectedValueOnce(new Error("no such column: auto_register_season"))
       // Fallback query returns null (team not found)
@@ -214,10 +211,9 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should rethrow non-column errors from team query", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "member" })
-      // Team query fails with unexpected error
-      .mockRejectedValueOnce(new Error("D1 connection failed"));
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
+    // Team query fails with unexpected error
+    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 connection failed"));
 
     const res = await GET(makeRequest("GET"), makeParams());
 
@@ -226,7 +222,7 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return 503 when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce(
+    mockDbRead.getTeamMembership.mockRejectedValueOnce(
       new Error("no such table: team_members"),
     );
 
@@ -237,6 +233,7 @@ describe("GET /api/teams/[teamId]", () => {
 
   it("should return 500 on unexpected error in GET", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
     mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 boom"));
 
     const res = await GET(makeRequest("GET"), makeParams());
@@ -274,7 +271,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should return 403 when user is not a member", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no membership
+    mockDbRead.getTeamMembership.mockResolvedValueOnce(null); // no membership
 
     const res = await DELETE(makeRequest("DELETE"), makeParams());
 
@@ -283,7 +280,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should prevent owner from leaving when other members exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" }); // membership
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner"); // membership
     mockDbRead.countTeamMembers.mockResolvedValueOnce(3); // 3 members
 
     const res = await DELETE(makeRequest("DELETE"), makeParams());
@@ -294,7 +291,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should allow non-owner to leave (team persists)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "member" }); // not owner
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member"); // not owner
     mockDbRead.countTeamMembers.mockResolvedValueOnce(3); // 3 members
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
@@ -310,7 +307,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should delete team when last member leaves", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbRead.countTeamMembers.mockResolvedValueOnce(1); // last member
     mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
@@ -333,7 +330,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should return 503 when teams table does not exist (DELETE)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce(
+    mockDbRead.getTeamMembership.mockRejectedValueOnce(
       new Error("no such table: team_members"),
     );
 
@@ -344,7 +341,7 @@ describe("DELETE /api/teams/[teamId]", () => {
 
   it("should return 500 on unexpected error in DELETE", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 boom"));
+    mockDbRead.getTeamMembership.mockRejectedValueOnce(new Error("D1 boom"));
 
     const res = await DELETE(makeRequest("DELETE"), makeParams());
 
@@ -384,7 +381,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should reject non-owner with 403", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "member" }); // not owner
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member"); // not owner
 
     const res = await PATCH(
       makeRequest("PATCH", { auto_register_season: true }),
@@ -397,7 +394,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should toggle auto_register_season on", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
@@ -417,7 +414,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should toggle auto_register_season off", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
@@ -433,7 +430,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should rename team", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
@@ -451,7 +448,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should update both name and auto_register_season together", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
@@ -485,7 +482,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should return 503 when auto_register_season column does not exist (migration lag)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     // UPDATE fails because column doesn't exist yet
     mockDbWrite.execute.mockRejectedValueOnce(
       new Error("no such column: auto_register_season"),
@@ -503,7 +500,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should still allow name-only updates when auto_register_season column does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await PATCH(
@@ -520,7 +517,7 @@ describe("PATCH /api/teams/[teamId]", () => {
 
   it("should return 500 when UPDATE fails with non-column error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     // UPDATE fails with unexpected error
     mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 connection timeout"));
 

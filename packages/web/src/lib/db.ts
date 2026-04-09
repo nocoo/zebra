@@ -155,6 +155,9 @@ export interface DbRead {
 
   /** Count team members */
   countTeamMembers(teamId: string): Promise<number>;
+
+  /** Get user's role in a team (null if not a member) */
+  getTeamMembership(teamId: string, userId: string): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------

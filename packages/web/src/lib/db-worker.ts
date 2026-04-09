@@ -290,6 +290,18 @@ export function createWorkerDbRead(): DbRead {
     async countTeamMembers(teamId: string): Promise<number> {
       return rpc<number>({ method: "teams.countMembers", teamId });
     },
+
+    async getTeamMembership(
+      teamId: string,
+      userId: string,
+    ): Promise<string | null> {
+      const result = await rpc<{ role: string } | null>({
+        method: "teams.getMembership",
+        teamId,
+        userId,
+      });
+      return result?.role ?? null;
+    },
   };
 
   return reader;
