@@ -98,6 +98,10 @@ export interface SessionSyncResult {
     openclaw: number;
     pi: number;
   };
+  /** Total SQLite databases scanned per source */
+  dbsScanned: {
+    opencode: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +179,7 @@ export async function executeSessionSync(
   const allSnapshots: SessionSnapshot[] = [];
   const sourceCounts = { claude: 0, codex: 0, gemini: 0, kosmos: 0, opencode: 0, openclaw: 0, pi: 0 };
   const filesScanned = { claude: 0, codex: 0, gemini: 0, kosmos: 0, opencode: 0, openclaw: 0, pi: 0 };
+  const dbsScanned = { opencode: 0 };
 
   // Build driver sets from options
   const { fileDrivers, dbDrivers } = createSessionDrivers(opts);
@@ -317,8 +322,8 @@ export async function executeSessionSync(
       message: "Checking OpenCode SQLite database for sessions...",
     });
 
-    // Count DB as 1 file scanned for the source
-    filesScanned[key] += 1;
+    // Count DB as 1 database scanned for the source
+    dbsScanned.opencode += 1;
 
     const prevCursor = cursors.openCodeSqlite as OpenCodeSqliteSessionCursor | undefined;
     const result = await driver.run(prevCursor, {});
@@ -379,5 +384,6 @@ export async function executeSessionSync(
     totalRecords: deduped.length,
     sources: sourceCounts,
     filesScanned,
+    dbsScanned,
   };
 }

@@ -97,6 +97,11 @@ export interface SyncResult {
     copilotCli: number;
     hermes: number;
   };
+  /** Total SQLite databases scanned per source */
+  dbsScanned: {
+    opencode: number;
+    hermes: number;
+  };
 }
 
 /** Internal bucket for aggregating deltas */
@@ -238,6 +243,7 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
   const allDeltas: ParsedDelta[] = [];
   const sourceCounts = { claude: 0, codex: 0, copilotCli: 0, gemini: 0, hermes: 0, kosmos: 0, opencode: 0, openclaw: 0, pi: 0, vscodeCopilot: 0 };
   const filesScanned = { claude: 0, codex: 0, copilotCli: 0, gemini: 0, hermes: 0, kosmos: 0, opencode: 0, openclaw: 0, pi: 0, vscodeCopilot: 0 };
+  const dbsScanned = { opencode: 0, hermes: 0 };
 
   // Collect all discovered file paths (across all drivers) for knownFilePaths
   const discoveredFiles = new Set<string>();
@@ -605,6 +611,9 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
 
     allDeltas.push(...result.deltas);
     sourceCounts[key] += result.deltas.length;
+    if (key === "opencode" || key === "hermes") {
+      dbsScanned[key] += 1;
+    }
 
     const dedupSkipped = result.rowCount - (result.deltas.length > 0 ? result.deltas.length : 0);
     onProgress?.({
@@ -740,5 +749,6 @@ export async function executeSync(opts: SyncOptions): Promise<SyncResult> {
     totalRecords: records.length,
     sources: sourceCounts,
     filesScanned,
+    dbsScanned,
   };
 }

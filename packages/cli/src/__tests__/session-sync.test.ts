@@ -747,7 +747,7 @@ describe("executeSessionSync", () => {
 
     expect(result.totalSnapshots).toBe(1);
     expect(result.sources.opencode).toBe(1);
-    expect(result.filesScanned.opencode).toBe(1);
+    expect(result.dbsScanned.opencode).toBe(1);
 
     const records = await readSessionQueue(stateDir);
     expect(records).toHaveLength(1);
@@ -839,8 +839,9 @@ describe("executeSessionSync", () => {
     // Should have sessions from both JSON and SQLite
     expect(result.sources.opencode).toBe(2);
     expect(result.totalSnapshots).toBe(2);
-    // 1 JSON dir + 1 SQLite DB = 2
-    expect(result.filesScanned.opencode).toBe(2);
+    // 1 JSON dir + 1 SQLite DB
+    expect(result.filesScanned.opencode).toBe(1);
+    expect(result.dbsScanned.opencode).toBe(1);
 
     const records = await readSessionQueue(stateDir);
     const keys = records.map((r) => r.session_key).sort();
