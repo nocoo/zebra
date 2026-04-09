@@ -41,21 +41,6 @@ const MAX_DAYS = 365;
 const DEFAULT_DAYS = 30;
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface UsageRow {
-  source: string;
-  model: string;
-  hour_start: string;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  reasoning_output_tokens: number;
-  total_tokens: number;
-}
-
-// ---------------------------------------------------------------------------
 // Authorization: bypass is_public
 // ---------------------------------------------------------------------------
 
@@ -143,7 +128,7 @@ export async function GET(
 
   // Determine time range: from/to takes precedence over days
   let fromDate: Date;
-  let toDate: Date | null = null;
+  let toDate: Date;
 
   if (fromParam && toParam) {
     // Use exact time range
@@ -170,6 +155,7 @@ export async function GET(
     }
     fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
+    toDate = new Date(); // Default to now
   }
 
   if (sourceFilter && !VALID_SOURCES.has(sourceFilter)) {
@@ -179,39 +165,17 @@ export async function GET(
     );
   }
 
-  // 4. Build query
-  const conditions = ["user_id = ?", "hour_start >= ?"];
-  const queryParams: unknown[] = [user.id, fromDate.toISOString()];
-
-  if (toDate) {
-    conditions.push("hour_start < ?");
-    queryParams.push(toDate.toISOString());
-  }
-
-  if (sourceFilter) {
-    conditions.push("source = ?");
-    queryParams.push(sourceFilter);
-  }
-
-  const sql = `
-    SELECT
-      source,
-      model,
-      date(hour_start) AS hour_start,
-      SUM(input_tokens) AS input_tokens,
-      SUM(cached_input_tokens) AS cached_input_tokens,
-      SUM(output_tokens) AS output_tokens,
-      SUM(reasoning_output_tokens) AS reasoning_output_tokens,
-      SUM(total_tokens) AS total_tokens
-    FROM usage_records
-    WHERE ${conditions.join(" AND ")}
-    GROUP BY date(hour_start), source, model
-    ORDER BY hour_start ASC, source, model
-  `;
-
+  // 4. Execute query via RPC
   try {
-    const result = await db.query<UsageRow>(sql, queryParams);
-    const records = result.results;
+    const records = await db.getUsageRecords(
+      user.id,
+      fromDate.toISOString(),
+      toDate.toISOString(),
+      {
+        ...(sourceFilter && { source: sourceFilter }),
+        granularity: "day",
+      },
+    );
 
     // Compute summary
     const summary = records.reduce(

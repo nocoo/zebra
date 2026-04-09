@@ -4,7 +4,7 @@ import { generateMetadata } from "@/app/u/[slug]/page";
 import * as dbModule from "@/lib/db";
 import * as authHelpersModule from "@/lib/auth-helpers";
 import * as adminModule from "@/lib/admin";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -38,13 +38,13 @@ function makeRequest(
 }
 
 describe("GET /api/users/[slug]", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
+    mockDbRead = createMockDbRead();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
-      mockClient as any,
+      mockDbRead as any,
     );
     // Default: unauthenticated caller (public access)
     vi.mocked(authHelpersModule.resolveUser).mockResolvedValue(null);
@@ -69,7 +69,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should accept valid alphanumeric slug", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
       const [req, ctx] = makeRequest("nocoo");
       const res = await GET(req, ctx);
 
@@ -78,7 +78,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should accept slug with hyphens", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
       const [req, ctx] = makeRequest("some-user-123");
       const res = await GET(req, ctx);
 
@@ -88,7 +88,7 @@ describe("GET /api/users/[slug]", () => {
 
   describe("user lookup", () => {
     it("should return 404 for non-existent user", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
       const [req, ctx] = makeRequest("nobody");
       const res = await GET(req, ctx);
 
@@ -100,7 +100,7 @@ describe("GET /api/users/[slug]", () => {
 
   describe("query params", () => {
     it("should reject invalid days param", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Test",
         image: null,
@@ -117,7 +117,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should reject days > 365", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Test",
         image: null,
@@ -132,7 +132,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should reject invalid source", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Test",
         image: null,
@@ -160,22 +160,20 @@ describe("GET /api/users/[slug]", () => {
     };
 
     it("should return user info and usage data", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
-      mockClient.getUserFirstSeen.mockResolvedValueOnce(null);
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          {
-            source: "claude-code",
-            model: "sonnet-4",
-            hour_start: "2026-03-07",
-            input_tokens: 1000,
-            cached_input_tokens: 200,
-            output_tokens: 500,
-            reasoning_output_tokens: 0,
-            total_tokens: 1700,
-          },
-        ],
-      });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
+      mockDbRead.getUserFirstSeen.mockResolvedValueOnce(null);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([
+        {
+          source: "claude-code",
+          model: "sonnet-4",
+          hour_start: "2026-03-07",
+          input_tokens: 1000,
+          cached_input_tokens: 200,
+          output_tokens: 500,
+          reasoning_output_tokens: 0,
+          total_tokens: 1700,
+        },
+      ]);
 
       const [req, ctx] = makeRequest("testuser");
       const res = await GET(req, ctx);
@@ -197,13 +195,11 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should compute correct summary from multiple records", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { source: "claude-code", model: "a", hour_start: "2026-03-07", input_tokens: 100, cached_input_tokens: 10, output_tokens: 50, reasoning_output_tokens: 0, total_tokens: 160 },
-          { source: "opencode", model: "b", hour_start: "2026-03-07", input_tokens: 200, cached_input_tokens: 20, output_tokens: 100, reasoning_output_tokens: 5, total_tokens: 325 },
-        ],
-      });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([
+        { source: "claude-code", model: "a", hour_start: "2026-03-07", input_tokens: 100, cached_input_tokens: 10, output_tokens: 50, reasoning_output_tokens: 0, total_tokens: 160 },
+        { source: "opencode", model: "b", hour_start: "2026-03-07", input_tokens: 200, cached_input_tokens: 20, output_tokens: 100, reasoning_output_tokens: 5, total_tokens: 325 },
+      ]);
 
       const [req, ctx] = makeRequest("testuser");
       const res = await GET(req, ctx);
@@ -217,20 +213,19 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should filter by source when provided", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
 
       const [req, ctx] = makeRequest("testuser", { source: "opencode" });
       await GET(req, ctx);
 
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("source = ?");
-      expect(sqlCall[1]).toContain("opencode");
+      const [, , , options] = mockDbRead.getUsageRecords.mock.calls[0]!;
+      expect(options.source).toBe("opencode");
     });
 
     it("should filter by 'from' and 'to' date when provided", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
 
       const [req, ctx] = makeRequest("testuser", {
         from: "2026-03-01",
@@ -238,17 +233,26 @@ describe("GET /api/users/[slug]", () => {
       });
       await GET(req, ctx);
 
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("hour_start >= ?");
-      expect(sqlCall[0]).toContain("hour_start < ?");
-      expect(sqlCall[1]).toContainEqual(expect.stringContaining("2026-03-01"));
-      expect(sqlCall[1]).toContainEqual(expect.stringContaining("2026-03-10"));
+      const [, fromDate, toDate] = mockDbRead.getUsageRecords.mock.calls[0]!;
+      expect(fromDate).toContain("2026-03-01");
+      expect(toDate).toContain("2026-03-10");
+    });
+
+    it("should use day granularity", async () => {
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(testUser);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
+
+      const [req, ctx] = makeRequest("testuser");
+      await GET(req, ctx);
+
+      const [, , , options] = mockDbRead.getUsageRecords.mock.calls[0]!;
+      expect(options.granularity).toBe("day");
     });
   });
 
   describe("error handling", () => {
     it("should return 500 on D1 query failure", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Test",
         image: null,
@@ -256,7 +260,7 @@ describe("GET /api/users/[slug]", () => {
         is_public: 1,
         created_at: "2026-01-01",
       });
-      mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
+      mockDbRead.getUsageRecords.mockRejectedValueOnce(new Error("D1 down"));
 
       const [req, ctx] = makeRequest("test");
       const res = await GET(req, ctx);
@@ -269,7 +273,7 @@ describe("GET /api/users/[slug]", () => {
 
   describe("is_public gate", () => {
     it("should return profile when user is_public = 1", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Public User",
         image: null,
@@ -277,7 +281,7 @@ describe("GET /api/users/[slug]", () => {
         is_public: 1,
         created_at: "2026-01-01",
       });
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
 
       const [req, ctx] = makeRequest("pubuser");
       const res = await GET(req, ctx);
@@ -288,7 +292,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should return 404 when user is_public = 0", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
         id: "u1",
         name: "Private User",
         image: null,
@@ -306,7 +310,7 @@ describe("GET /api/users/[slug]", () => {
     });
 
     it("should return 404 when user not found", async () => {
-      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
 
       const [req, ctx] = makeRequest("ghost");
       const res = await GET(req, ctx);
@@ -321,20 +325,20 @@ describe("GET /api/users/[slug]", () => {
 // ---------------------------------------------------------------------------
 
 describe("generateMetadata for /u/[slug]", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
+    mockDbRead = createMockDbRead();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
-      mockClient as any,
+      mockDbRead as any,
     );
     vi.mocked(authHelpersModule.resolveUser).mockResolvedValue(null);
     vi.mocked(adminModule.isAdmin).mockReturnValue(false);
   });
 
   it("should include user name in title when is_public = 1", async () => {
-    mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+    mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
       name: "Alice",
       slug: "alice",
       is_public: 1,
@@ -349,7 +353,7 @@ describe("generateMetadata for /u/[slug]", () => {
   });
 
   it("should return generic title when is_public = 0 (no name leak)", async () => {
-    mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce({
+    mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
       name: "Secret Person",
       slug: "secret",
       is_public: 0,
@@ -364,7 +368,7 @@ describe("generateMetadata for /u/[slug]", () => {
   });
 
   it("should return generic title when user not found", async () => {
-    mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
+    mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
 
     const meta = await generateMetadata({
       params: Promise.resolve({ slug: "nobody" }),
