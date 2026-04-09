@@ -618,8 +618,8 @@ export default function LeaderboardPage() {
         {/* Table header row */}
         <TableHeader />
 
-        {/* Loading — skeleton only on initial load */}
-        {loading && allEntries.length === 0 && <LeaderboardSkeleton />}
+        {/* Loading — skeleton on initial load OR when filter changed (allEntries cleared) */}
+        {(loading || refreshing) && allEntries.length === 0 && <LeaderboardSkeleton />}
 
         {/* Content — stays visible during refreshing with opacity transition */}
         {allEntries.length > 0 && (
@@ -649,8 +649,8 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && allEntries.length === 0 && !error && (
+        {/* Empty state — only show after loading completes with no results */}
+        {!loading && !refreshing && allEntries.length === 0 && !error && (
           <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
             No usage data for this period yet.
           </div>
