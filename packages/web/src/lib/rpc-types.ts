@@ -130,6 +130,48 @@ export interface ProjectTimelineRow {
 }
 
 // ---------------------------------------------------------------------------
+// Seasons domain types
+// ---------------------------------------------------------------------------
+
+/** Season list row with team count */
+export interface SeasonRow {
+  id: string;
+  name: string;
+  slug: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+  team_count: number;
+  has_snapshot: number;
+  allow_late_registration: number;
+  allow_late_withdrawal: number;
+}
+
+/** Season detail row */
+export interface SeasonDetailRow {
+  id: string;
+  name: string;
+  slug: string;
+  start_date: string;
+  end_date: string;
+  snapshot_ready: number;
+  allow_late_registration: number;
+  allow_roster_changes: number;
+  allow_late_withdrawal: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Season team registration row */
+export interface SeasonTeamRegistrationRow {
+  id: string;
+  season_id: string;
+  team_id: string;
+  registered_by: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Showcases domain types
 // ---------------------------------------------------------------------------
 

@@ -16,7 +16,7 @@ vi.mock("@/auth", () => ({
 
 import { GET } from "@/app/api/seasons/[seasonId]/leaderboard/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 function makeRequest(
   url = "http://localhost:7020/api/seasons/season-1/leaderboard"
@@ -61,21 +61,21 @@ const ENDED_SEASON_NO_SNAPSHOT = {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/seasons/[seasonId]/leaderboard", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
+    mockDbRead = createMockDbRead();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
-      mockClient as any
+      mockDbRead as any
     );
   });
 
   it("should return teams ranked by total_tokens", async () => {
     // Season lookup (snapshot_ready=0 → live aggregation)
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
     // Live aggregation: two teams
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -111,13 +111,13 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
   });
 
   it("should only include usage within season date range", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     await GET(makeRequest(), { params: routeParams });
 
     // Verify date params passed to live aggregation query
-    const queryCall = mockClient.query.mock.calls[0]!;
+    const queryCall = mockDbRead.query.mock.calls[0]!;
     const params = queryCall[1] as string[];
     // First param: start_date inclusive — must be ISO 8601 with T separator
     // to match hour_start storage format ("2026-03-01T00:00:00.000Z")
@@ -132,12 +132,12 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       start_date: "2026-03-01T00:00:00Z",
       end_date: "2026-03-15T23:59:00Z",
     };
-    mockClient.firstOrNull.mockResolvedValueOnce(season);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(season);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     await GET(makeRequest(), { params: routeParams });
 
-    const params = mockClient.query.mock.calls[0]![1] as string[];
+    const params = mockDbRead.query.mock.calls[0]![1] as string[];
     // end_date 2026-03-15T23:59:00Z + 1 minute → exclusive bound
     expect(params[1]).toBe("2026-03-16T00:00:00.000Z");
   });
@@ -151,12 +151,12 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       start_date: "2026-03-21T16:00:00Z",
       end_date: "2026-03-28T04:59:00Z",
     };
-    mockClient.firstOrNull.mockResolvedValueOnce(season);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(season);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     await GET(makeRequest(), { params: routeParams });
 
-    const params = mockClient.query.mock.calls[0]![1] as string[];
+    const params = mockDbRead.query.mock.calls[0]![1] as string[];
     // Must contain 'T' separator, not space
     expect(params[0]).toContain("T");
     expect(params[1]).toContain("T");
@@ -169,8 +169,8 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
   });
 
   it("should return empty entries for season with no registered teams", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     const res = await GET(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -181,9 +181,9 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
   });
 
   it("should return member breakdown when expand=members", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
     // Team aggregation
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -197,7 +197,7 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       ],
     });
     // Member breakdown
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -242,8 +242,8 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
   });
 
   it("should NOT return members when expand is not set", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -266,9 +266,9 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
 
   it("should read from snapshot tables when snapshot exists", async () => {
     // ENDED_SEASON has snapshot_ready=1
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON);
     // Snapshot data
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -303,14 +303,14 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
     expect(data.entries[1].rank).toBe(2);
 
     // Verify the snapshot query was used (queries season_snapshots)
-    const sql = mockClient.query.mock.calls[0]![0] as string;
+    const sql = mockDbRead.query.mock.calls[0]![0] as string;
     expect(sql).toContain("season_snapshots");
   });
 
   it("should include user_id in snapshot member breakdown", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON);
     // Snapshot team data
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -325,7 +325,7 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       ],
     });
     // Snapshot member data
-    mockClient.query.mockResolvedValueOnce({
+    mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
           team_id: "team-a",
@@ -357,8 +357,8 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
 
   it("should aggregate live when no snapshot exists", async () => {
     // ENDED_SEASON_NO_SNAPSHOT has snapshot_ready=0
-    mockClient.firstOrNull.mockResolvedValueOnce(ENDED_SEASON_NO_SNAPSHOT);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON_NO_SNAPSHOT);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     const res = await GET(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -367,20 +367,19 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
     expect(data.season.is_snapshot).toBe(false);
 
     // Verify the live aggregation query was used (queries usage_records)
-    const sql = mockClient.query.mock.calls[0]![0] as string;
+    const sql = mockDbRead.query.mock.calls[0]![0] as string;
     expect(sql).toContain("usage_records");
   });
 
-  it("should read snapshot_ready from season row instead of separate COUNT query", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+  it("should use getSeasonById/getSeasonBySlug RPC methods for season lookup", async () => {
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
     await GET(makeRequest(), { params: routeParams });
 
-    // Only one firstOrNull call (season lookup) — no separate COUNT(*) query
-    expect(mockClient.firstOrNull).toHaveBeenCalledTimes(1);
-    const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
-    expect(sql).toContain("snapshot_ready");
+    // Verify RPC method was called (not raw SQL)
+    expect(mockDbRead.getSeasonBySlug).toHaveBeenCalledTimes(1);
+    expect(mockDbRead.getSeasonBySlug).toHaveBeenCalledWith("season-1");
   });
 
   // -------------------------------------------------------------------------
@@ -391,9 +390,9 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
     const UUID_SEASON_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
     const SLUG_SEASON_ID = "s1";
 
-    it("should use WHERE id = ? when seasonId is a UUID", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should use getSeasonById when seasonId is a UUID", async () => {
+      mockDbRead.getSeasonById.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
       const req = makeRequest(
         `http://localhost:7020/api/seasons/${UUID_SEASON_ID}/leaderboard`
@@ -402,16 +401,14 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
         params: Promise.resolve({ seasonId: UUID_SEASON_ID }),
       });
 
-      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
-      const params = mockClient.firstOrNull.mock.calls[0]![1] as string[];
-      expect(sql).toContain("WHERE id = ?");
-      expect(sql).not.toContain("WHERE slug = ?");
-      expect(params[0]).toBe(UUID_SEASON_ID);
+      expect(mockDbRead.getSeasonById).toHaveBeenCalledTimes(1);
+      expect(mockDbRead.getSeasonById).toHaveBeenCalledWith(UUID_SEASON_ID);
+      expect(mockDbRead.getSeasonBySlug).not.toHaveBeenCalled();
     });
 
-    it("should use WHERE slug = ? when seasonId is a slug", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should use getSeasonBySlug when seasonId is a slug", async () => {
+      mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
       const req = makeRequest(
         `http://localhost:7020/api/seasons/${SLUG_SEASON_ID}/leaderboard`
@@ -420,17 +417,15 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
         params: Promise.resolve({ seasonId: SLUG_SEASON_ID }),
       });
 
-      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
-      const params = mockClient.firstOrNull.mock.calls[0]![1] as string[];
-      expect(sql).toContain("WHERE slug = ?");
-      expect(sql).not.toContain("WHERE id = ?");
-      expect(params[0]).toBe(SLUG_SEASON_ID);
+      expect(mockDbRead.getSeasonBySlug).toHaveBeenCalledTimes(1);
+      expect(mockDbRead.getSeasonBySlug).toHaveBeenCalledWith(SLUG_SEASON_ID);
+      expect(mockDbRead.getSeasonById).not.toHaveBeenCalled();
     });
 
     it("should return identical response shape for UUID and slug lookups", async () => {
       // UUID lookup
-      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-      mockClient.query.mockResolvedValueOnce({
+      mockDbRead.getSeasonById.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockDbRead.query.mockResolvedValueOnce({
         results: [
           {
             team_id: "team-a",
@@ -453,14 +448,14 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       const uuidData = await uuidRes.json();
 
       vi.clearAllMocks();
-      mockClient = createMockClient();
+      mockDbRead = createMockDbRead();
       vi.mocked(dbModule.getDbRead).mockResolvedValue(
-        mockClient as any
+        mockDbRead as any
       );
 
       // Slug lookup — same mock data
-      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-      mockClient.query.mockResolvedValueOnce({
+      mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockDbRead.query.mockResolvedValueOnce({
         results: [
           {
             team_id: "team-a",
@@ -498,8 +493,8 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
 
     it("should treat uppercase UUID as UUID (case-insensitive)", async () => {
       const upperUUID = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890";
-      mockClient.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDbRead.getSeasonById.mockResolvedValueOnce(ACTIVE_SEASON);
+      mockDbRead.query.mockResolvedValueOnce({ results: [] });
 
       await GET(
         makeRequest(
@@ -508,13 +503,13 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
         { params: Promise.resolve({ seasonId: upperUUID }) }
       );
 
-      const sql = mockClient.firstOrNull.mock.calls[0]![0] as string;
-      expect(sql).toContain("WHERE id = ?");
+      expect(mockDbRead.getSeasonById).toHaveBeenCalledTimes(1);
+      expect(mockDbRead.getSeasonBySlug).not.toHaveBeenCalled();
     });
   });
 
   it("should return 404 for non-existent season", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(null);
 
     const res = await GET(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -524,7 +519,7 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
   });
 
   it("should handle no-such-table gracefully", async () => {
-    mockClient.firstOrNull.mockRejectedValueOnce(
+    mockDbRead.getSeasonBySlug.mockRejectedValueOnce(
       new Error("no such table: seasons")
     );
 

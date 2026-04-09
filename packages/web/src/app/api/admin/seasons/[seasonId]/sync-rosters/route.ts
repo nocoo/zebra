@@ -28,15 +28,7 @@ export async function POST(
   const dbWrite = await getDbWrite();
 
   try {
-    const season = await dbRead.firstOrNull<{
-      id: string;
-      start_date: string;
-      end_date: string;
-      allow_roster_changes: number;
-    }>(
-      "SELECT id, start_date, end_date, allow_roster_changes FROM seasons WHERE id = ?",
-      [seasonId]
-    );
+    const season = await dbRead.getSeasonById(seasonId);
 
     if (!season) {
       return NextResponse.json(

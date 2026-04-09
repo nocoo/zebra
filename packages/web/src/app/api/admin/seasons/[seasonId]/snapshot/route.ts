@@ -34,12 +34,6 @@ import { deriveSeasonStatus } from "@/lib/seasons";
 // Types
 // ---------------------------------------------------------------------------
 
-interface SeasonRow {
-  id: string;
-  start_date: string;
-  end_date: string;
-}
-
 interface TeamAggRow {
   team_id: string;
   total_tokens: number;
@@ -95,10 +89,7 @@ export async function POST(
 
   try {
     // 1. Fetch season
-    const season = await dbRead.firstOrNull<SeasonRow>(
-      "SELECT id, start_date, end_date FROM seasons WHERE id = ?",
-      [seasonId]
-    );
+    const season = await dbRead.getSeasonById(seasonId);
 
     if (!season) {
       return NextResponse.json(

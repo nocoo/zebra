@@ -74,7 +74,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest(), { params: seasonParams });
     expect(res.status).toBe(404);
@@ -83,7 +83,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
   it("should reject non-active seasons", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Future season → upcoming
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2099-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",
@@ -99,7 +99,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
   it("should reject when allow_roster_changes is disabled", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Active season, but roster changes off
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",
@@ -114,7 +114,7 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
 
   it("should sync rosters and return team count", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T00:00:00Z",

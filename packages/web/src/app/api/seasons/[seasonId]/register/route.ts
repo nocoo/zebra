@@ -45,12 +45,7 @@ export async function POST(
 
   try {
     // Verify season exists
-    const season = await dbRead.firstOrNull<{
-      id: string;
-      start_date: string;
-      end_date: string;
-      allow_late_registration: number;
-    }>("SELECT id, start_date, end_date, allow_late_registration FROM seasons WHERE id = ?", [seasonId]);
+    const season = await dbRead.getSeasonById(seasonId);
 
     if (!season) {
       return NextResponse.json(
@@ -74,12 +69,9 @@ export async function POST(
     }
 
     // Verify user is team owner
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [team_id, user.userId]
-    );
+    const membership = await dbRead.getTeamMembership(team_id, user.userId);
 
-    if (!membership || membership.role !== "owner") {
+    if (!membership || membership !== "owner") {
       return NextResponse.json(
         { error: "Only team owners can register for seasons" },
         { status: 403 }
@@ -87,10 +79,7 @@ export async function POST(
     }
 
     // Check duplicate registration
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM season_teams WHERE season_id = ? AND team_id = ?",
-      [seasonId, team_id]
-    );
+    const existing = await dbRead.getSeasonRegistration(seasonId, team_id);
 
     if (existing) {
       return NextResponse.json(
@@ -109,14 +98,8 @@ export async function POST(
     // via another team (UNIQUE(season_id, user_id) would reject anyway,
     // but checking upfront avoids partial writes)
     if (members.results.length > 0) {
-      const placeholders = members.results.map(() => "?").join(",");
       const userIds = members.results.map((m) => m.user_id);
-      const conflict = await dbRead.firstOrNull<{ user_id: string }>(
-        `SELECT user_id FROM season_team_members
-         WHERE season_id = ? AND user_id IN (${placeholders})
-         LIMIT 1`,
-        [seasonId, ...userIds]
-      );
+      const conflict = await dbRead.checkSeasonMemberConflict(seasonId, userIds);
       if (conflict) {
         return NextResponse.json(
           { error: "A team member is already registered for this season on another team" },
@@ -230,12 +213,7 @@ export async function DELETE(
 
   try {
     // Verify season exists
-    const season = await dbRead.firstOrNull<{
-      id: string;
-      start_date: string;
-      end_date: string;
-      allow_late_withdrawal: number;
-    }>("SELECT id, start_date, end_date, allow_late_withdrawal FROM seasons WHERE id = ?", [seasonId]);
+    const season = await dbRead.getSeasonById(seasonId);
 
     if (!season) {
       return NextResponse.json(
@@ -259,12 +237,9 @@ export async function DELETE(
     }
 
     // Verify user is team owner
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [team_id, user.userId]
-    );
+    const membership = await dbRead.getTeamMembership(team_id, user.userId);
 
-    if (!membership || membership.role !== "owner") {
+    if (!membership || membership !== "owner") {
       return NextResponse.json(
         { error: "Only team owners can withdraw from seasons" },
         { status: 403 }
@@ -272,10 +247,7 @@ export async function DELETE(
     }
 
     // Verify registration exists
-    const registration = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM season_teams WHERE season_id = ? AND team_id = ?",
-      [seasonId, team_id]
-    );
+    const registration = await dbRead.getSeasonRegistration(seasonId, team_id);
 
     if (!registration) {
       return NextResponse.json(

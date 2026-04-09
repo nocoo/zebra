@@ -19,6 +19,9 @@ import type {
   ProjectAliasStatsRow,
   ProjectUnassignedRow,
   ProjectTimelineRow,
+  SeasonRow,
+  SeasonDetailRow,
+  SeasonTeamRegistrationRow,
   ShowcaseRpcRow,
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
@@ -204,6 +207,31 @@ export interface DbRead {
     from: string,
     to: string,
   ): Promise<ProjectTimelineRow[]>;
+
+  // ---------------------------------------------------------------------------
+  // Seasons domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** List all seasons with team counts */
+  listSeasons(): Promise<SeasonRow[]>;
+
+  /** Get season by ID */
+  getSeasonById(seasonId: string): Promise<SeasonDetailRow | null>;
+
+  /** Get season by slug */
+  getSeasonBySlug(slug: string): Promise<SeasonDetailRow | null>;
+
+  /** Get season team registration */
+  getSeasonRegistration(
+    seasonId: string,
+    teamId: string,
+  ): Promise<SeasonTeamRegistrationRow | null>;
+
+  /** Check if user is already registered in season with another team */
+  checkSeasonMemberConflict(
+    seasonId: string,
+    userIds: string[],
+  ): Promise<{ user_id: string } | null>;
 
   // ---------------------------------------------------------------------------
   // Showcases domain RPC methods

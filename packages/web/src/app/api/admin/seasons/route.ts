@@ -160,10 +160,7 @@ export async function POST(request: Request) {
 
   try {
     // Check slug uniqueness
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM seasons WHERE slug = ?",
-      [slug]
-    );
+    const existing = await dbRead.getSeasonBySlug(slug);
     if (existing) {
       return NextResponse.json(
         { error: "A season with this slug already exists" },

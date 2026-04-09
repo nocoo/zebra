@@ -21,15 +21,6 @@ import { deriveSeasonStatus } from "@/lib/seasons";
 // Types
 // ---------------------------------------------------------------------------
 
-interface SeasonRow {
-  id: string;
-  name: string;
-  slug: string;
-  start_date: string;
-  end_date: string;
-  snapshot_ready: number;
-}
-
 interface TeamTokenRow {
   team_id: string;
   team_name: string;
@@ -141,12 +132,9 @@ export async function GET(
   try {
     // Fetch season by UUID or slug
     const isUUID = UUID_RE.test(seasonId);
-    const season = await db.firstOrNull<SeasonRow>(
-      isUUID
-        ? "SELECT id, name, slug, start_date, end_date, snapshot_ready FROM seasons WHERE id = ?"
-        : "SELECT id, name, slug, start_date, end_date, snapshot_ready FROM seasons WHERE slug = ?",
-      [seasonId]
-    );
+    const season = isUUID
+      ? await db.getSeasonById(seasonId)
+      : await db.getSeasonBySlug(seasonId);
 
     if (!season) {
       return NextResponse.json(

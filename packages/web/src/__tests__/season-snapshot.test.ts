@@ -71,7 +71,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
   it("should create snapshots for all registered teams", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     // Season lookup
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     // Team aggregation: two teams
     mockDbRead.query.mockResolvedValueOnce({
       results: [
@@ -147,7 +147,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should pass ISO 8601 date bounds to aggregation queries", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     // Team aggregation
     mockDbRead.query.mockResolvedValueOnce({ results: [] });
     mockDbWrite.batch.mockResolvedValue([]);
@@ -170,7 +170,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
       end_date: "2026-03-21T15:59:00Z",
     };
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(SEASON_WITH_OFFSET);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(SEASON_WITH_OFFSET);
     mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
@@ -204,7 +204,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should create member snapshots for all team members", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     // Team aggregation: one team
     mockDbRead.query.mockResolvedValueOnce({
       results: [
@@ -258,7 +258,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should compute correct ranks by total_tokens DESC", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     // Teams ordered by total_tokens DESC (the route's SQL has ORDER BY total_tokens DESC)
     mockDbRead.query.mockResolvedValueOnce({
       results: [
@@ -310,7 +310,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should be idempotent (upsert overwrites existing data)", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
@@ -352,7 +352,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should clean up stale team and member rows after upsert", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     // Only one team left (team-b was removed)
     mockDbRead.query.mockResolvedValueOnce({
       results: [
@@ -395,7 +395,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should reject non-ended season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ACTIVE_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ACTIVE_SEASON);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -416,7 +416,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest(), { params: routeParams });
     const data = await res.json();
@@ -431,7 +431,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should set snapshot_ready=0 before writes and snapshot_ready=1 after all writes succeed", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
@@ -487,7 +487,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should NOT set snapshot_ready=1 if upsert batch fails", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
@@ -515,7 +515,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should NOT set snapshot_ready=1 if cleanup batch fails", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(ENDED_SEASON);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(ENDED_SEASON);
     mockDbRead.query.mockResolvedValueOnce({
       results: [
         {
@@ -556,7 +556,7 @@ describe("POST /api/admin/seasons/[seasonId]/snapshot", () => {
 
   it("should handle no-such-table gracefully", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(
+    mockDbRead.getSeasonById.mockRejectedValueOnce(
       new Error("no such table: seasons")
     );
 

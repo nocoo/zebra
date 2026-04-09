@@ -50,16 +50,7 @@ export async function PATCH(
 
   try {
     // Fetch existing season
-    const season = await dbRead.firstOrNull<{
-      id: string;
-      name: string;
-      slug: string;
-      start_date: string;
-      end_date: string;
-      allow_roster_changes: number;
-    }>("SELECT id, name, slug, start_date, end_date, allow_roster_changes FROM seasons WHERE id = ?", [
-      seasonId,
-    ]);
+    const season = await dbRead.getSeasonById(seasonId);
 
     if (!season) {
       return NextResponse.json({ error: "Season not found" }, { status: 404 });
@@ -175,23 +166,7 @@ export async function PATCH(
     }
 
     // Return updated season
-    const updated = await dbRead.firstOrNull<{
-      id: string;
-      name: string;
-      slug: string;
-      start_date: string;
-      end_date: string;
-      created_at: string;
-      updated_at: string;
-      allow_late_registration: number;
-      allow_roster_changes: number;
-      allow_late_withdrawal: number;
-    }>(
-      `SELECT id, name, slug, start_date, end_date, created_at, updated_at,
-              allow_late_registration, allow_roster_changes, allow_late_withdrawal
-       FROM seasons WHERE id = ?`,
-      [seasonId]
-    );
+    const updated = await dbRead.getSeasonById(seasonId);
     if (!updated) {
       return NextResponse.json(
         { error: "Season not found after update" },
@@ -200,7 +175,13 @@ export async function PATCH(
     }
 
     return NextResponse.json({
-      ...updated,
+      id: updated.id,
+      name: updated.name,
+      slug: updated.slug,
+      start_date: updated.start_date,
+      end_date: updated.end_date,
+      created_at: updated.created_at,
+      updated_at: updated.updated_at,
       status: deriveSeasonStatus(updated.start_date, updated.end_date),
       allow_late_registration: !!updated.allow_late_registration,
       allow_roster_changes: !!updated.allow_roster_changes,

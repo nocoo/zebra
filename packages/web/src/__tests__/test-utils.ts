@@ -57,6 +57,12 @@ export function createMockDbRead() {
     getProjectAliasStats: vi.fn(),
     getProjectTagList: vi.fn(),
     getProjectTimeline: vi.fn(),
+    // Seasons RPC methods
+    listSeasons: vi.fn(),
+    getSeasonById: vi.fn(),
+    getSeasonBySlug: vi.fn(),
+    getSeasonRegistration: vi.fn(),
+    checkSeasonMemberConflict: vi.fn(),
     // Showcases RPC methods
     getShowcaseById: vi.fn(),
     getShowcaseOwner: vi.fn(),
@@ -131,6 +137,11 @@ export function createMockDbRead() {
     getProjectAliasStats: ReturnType<typeof vi.fn>;
     getProjectTagList: ReturnType<typeof vi.fn>;
     getProjectTimeline: ReturnType<typeof vi.fn>;
+    listSeasons: ReturnType<typeof vi.fn>;
+    getSeasonById: ReturnType<typeof vi.fn>;
+    getSeasonBySlug: ReturnType<typeof vi.fn>;
+    getSeasonRegistration: ReturnType<typeof vi.fn>;
+    checkSeasonMemberConflict: ReturnType<typeof vi.fn>;
     getShowcaseById: ReturnType<typeof vi.fn>;
     getShowcaseOwner: ReturnType<typeof vi.fn>;
     checkShowcaseExists: ReturnType<typeof vi.fn>;

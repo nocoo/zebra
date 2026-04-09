@@ -31,7 +31,10 @@ export interface SeasonDetailRow {
   end_date: string;
   snapshot_ready: number;
   allow_late_registration: number;
+  allow_roster_changes: number;
   allow_late_withdrawal: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SeasonTeamRegistrationRow {
@@ -231,7 +234,8 @@ async function handleGetSeasonById(
   const result = await db
     .prepare(
       `SELECT id, name, slug, start_date, end_date, snapshot_ready,
-              allow_late_registration, allow_late_withdrawal
+              allow_late_registration, allow_roster_changes, allow_late_withdrawal,
+              created_at, updated_at
        FROM seasons WHERE id = ?`
     )
     .bind(req.seasonId)
@@ -251,7 +255,8 @@ async function handleGetSeasonBySlug(
   const result = await db
     .prepare(
       `SELECT id, name, slug, start_date, end_date, snapshot_ready,
-              allow_late_registration, allow_late_withdrawal
+              allow_late_registration, allow_roster_changes, allow_late_withdrawal,
+              created_at, updated_at
        FROM seasons WHERE slug = ?`
     )
     .bind(req.slug)

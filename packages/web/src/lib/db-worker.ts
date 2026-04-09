@@ -20,6 +20,9 @@ import type {
   ProjectAliasStatsRow,
   ProjectUnassignedRow,
   ProjectTimelineRow,
+  SeasonRow,
+  SeasonDetailRow,
+  SeasonTeamRegistrationRow,
   ShowcaseRpcRow,
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
@@ -377,6 +380,44 @@ export function createWorkerDbRead(): DbRead {
         userId,
         from,
         to,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // Seasons domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async listSeasons(): Promise<SeasonRow[]> {
+      return rpc<SeasonRow[]>({ method: "seasons.list" });
+    },
+
+    async getSeasonById(seasonId: string): Promise<SeasonDetailRow | null> {
+      return rpc<SeasonDetailRow | null>({ method: "seasons.getById", seasonId });
+    },
+
+    async getSeasonBySlug(slug: string): Promise<SeasonDetailRow | null> {
+      return rpc<SeasonDetailRow | null>({ method: "seasons.getBySlug", slug });
+    },
+
+    async getSeasonRegistration(
+      seasonId: string,
+      teamId: string,
+    ): Promise<SeasonTeamRegistrationRow | null> {
+      return rpc<SeasonTeamRegistrationRow | null>({
+        method: "seasons.getRegistration",
+        seasonId,
+        teamId,
+      });
+    },
+
+    async checkSeasonMemberConflict(
+      seasonId: string,
+      userIds: string[],
+    ): Promise<{ user_id: string } | null> {
+      return rpc<{ user_id: string } | null>({
+        method: "seasons.checkMemberConflict",
+        seasonId,
+        userIds,
       });
     },
 
