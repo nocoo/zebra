@@ -451,6 +451,7 @@ const MAX_ENTRIES = 100;
 export default function LeaderboardPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
+  const isSessionLoading = status === "loading";
 
   const [period, setPeriod] = useState<LeaderboardPeriod>("week");
   const [scope, setScope] = useState<ScopeSelection>({ type: "global" });
@@ -461,8 +462,10 @@ export default function LeaderboardPage() {
   const teamId = scope.type === "team" ? scope.id ?? null : null;
   const orgId = scope.type === "org" ? scope.id ?? null : null;
 
-  // Delay fetch until scope is initialized (localStorage + orgs/teams loaded)
-  // For unauthenticated users, scopeInitialized is set immediately
+  // Delay fetch until scope is initialized:
+  // - Session loading: wait (don't know if user is authenticated yet)
+  // - Authenticated: wait for orgs/teams + localStorage scope restore
+  // - Unauthenticated: fetch immediately with global scope
   const {
     entries,
     loading,
@@ -476,7 +479,7 @@ export default function LeaderboardPage() {
     teamId,
     orgId,
     limit: PAGE_SIZE,
-    enabled: scopeInitialized,
+    enabled: scopeInitialized && !isSessionLoading,
   });
 
   // Fetch user's organizations and teams
@@ -500,24 +503,30 @@ export default function LeaderboardPage() {
     }
   }, []);
 
-  // Initialize scope from localStorage and fetch orgs/teams (logged-in only)
+  // Initialize scope from localStorage and fetch orgs/teams
+  // Wait for session to resolve before deciding auth state
   /* eslint-disable react-hooks/set-state-in-effect -- async fetch and localStorage read */
   useEffect(() => {
+    // Still loading session - wait
+    if (isSessionLoading) {
+      return;
+    }
+
+    // Unauthenticated - use global scope immediately
     if (!isAuthenticated) {
       setScopeInitialized(true);
       return;
     }
 
+    // Authenticated - fetch orgs/teams and restore scope
     fetchOrgsAndTeams().then(() => {
-      // After fetching orgs/teams, restore scope from localStorage
       const stored = loadScopeFromStorage();
       if (stored) {
-        // Will be validated below after orgs/teams are loaded
         setScope(stored);
       }
       setScopeInitialized(true);
     });
-  }, [isAuthenticated, fetchOrgsAndTeams]);
+  }, [isSessionLoading, isAuthenticated, fetchOrgsAndTeams]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Validate stored scope against available orgs/teams
