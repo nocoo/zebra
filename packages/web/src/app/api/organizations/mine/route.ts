@@ -8,13 +8,6 @@ import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead } from "@/lib/db";
 
-interface OrgRow {
-  id: string;
-  name: string;
-  slug: string;
-  logo_url: string | null;
-}
-
 export async function GET(request: Request) {
   const authResult = await resolveUser(request);
   if (!authResult) {
@@ -23,14 +16,7 @@ export async function GET(request: Request) {
 
   try {
     const dbRead = await getDbRead();
-    const { results } = await dbRead.query<OrgRow>(
-      `SELECT o.id, o.name, o.slug, o.logo_url
-       FROM organizations o
-       JOIN organization_members om ON om.org_id = o.id
-       WHERE om.user_id = ?
-       ORDER BY o.name ASC`,
-      [authResult.userId]
-    );
+    const results = await dbRead.listUserOrganizations(authResult.userId);
 
     const organizations = results.map((r) => ({
       id: r.id,

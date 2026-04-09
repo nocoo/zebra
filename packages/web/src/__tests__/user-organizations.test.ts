@@ -143,16 +143,17 @@ describe("GET /api/organizations/mine", () => {
   it("should return user's organizations", async () => {
     resolveUser.mockResolvedValueOnce(USER);
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "org-1",
-          name: "Anthropic",
-          slug: "anthropic",
-          logo_url: "https://example.com/logo.png",
-        },
-      ],
-    });
+    mockDbRead.listUserOrganizations.mockResolvedValueOnce([
+      {
+        id: "org-1",
+        name: "Anthropic",
+        slug: "anthropic",
+        logo_url: "https://example.com/logo.png",
+        created_by: "admin-1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
@@ -168,7 +169,7 @@ describe("GET /api/organizations/mine", () => {
 
   it("should return empty array if user has no orgs", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.listUserOrganizations.mockResolvedValueOnce([]);
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
@@ -184,7 +185,7 @@ describe("GET /api/organizations/mine", () => {
 
   it("should return empty array if table not migrated", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table"));
+    mockDbRead.listUserOrganizations.mockRejectedValueOnce(new Error("no such table"));
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
