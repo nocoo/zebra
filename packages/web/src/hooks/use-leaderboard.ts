@@ -41,92 +41,162 @@ export interface LeaderboardData {
 interface UseLeaderboardOptions {
   period?: LeaderboardPeriod;
   limit?: number;
-  offset?: number;
   teamId?: string | null;
   orgId?: string | null;
 }
 
 interface UseLeaderboardResult {
-  data: LeaderboardData | null;
+  /** All accumulated entries across pages */
+  entries: LeaderboardEntry[];
+  /** True during initial load (no entries yet) */
   loading: boolean;
-  /** True when refetching with stale data still visible */
-  refreshing: boolean;
+  /** True when loading more pages (entries already visible) */
+  loadingMore: boolean;
+  /** Error message if fetch failed */
   error: string | null;
+  /** Whether more pages are available */
+  hasMore: boolean;
+  /** Load the next page */
+  loadMore: () => void;
+  /** Re-fetch from the beginning */
   refetch: () => void;
+  /** Index where new entries start (for animation) */
+  animationStartIndex: number;
 }
 
 export function useLeaderboard(
   options: UseLeaderboardOptions = {},
 ): UseLeaderboardResult {
-  const { period = "week", limit, offset, teamId, orgId } = options;
-  const [data, setData] = useState<LeaderboardData | null>(null);
+  const { period = "week", limit = 20, teamId, orgId } = options;
+
+  // All accumulated entries
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  // Current offset for pagination
+  const [offset, setOffset] = useState(0);
+  // Loading states
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Error and pagination info
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  // Animation tracking
+  const [animationStartIndex, setAnimationStartIndex] = useState(0);
 
-  // Track scope parameters to detect scope changes (independent of offset)
-  // This ensures data is cleared when switching scopes, even if offset hasn't reset yet
-  const prevScopeRef = useRef({ teamId, orgId, period });
+  // Track current filter params to detect changes
+  const filterKeyRef = useRef({ period, teamId, orgId });
 
-  const fetchData = useCallback(async () => {
-    // Clear data on scope/period change OR when offset is 0 (first page)
-    // This prevents stale entries from accumulating when switching scopes
-    const shouldClearData =
-      offset === 0 ||
-      prevScopeRef.current.teamId !== teamId ||
-      prevScopeRef.current.orgId !== orgId ||
-      prevScopeRef.current.period !== period;
+  // Generate a stable key for current filters
+  const getFilterKey = useCallback(() => {
+    return `${period}|${teamId ?? ""}|${orgId ?? ""}`;
+  }, [period, teamId, orgId]);
 
-    // Update scope ref after comparison
-    prevScopeRef.current = { teamId, orgId, period };
+  // Fetch a single page
+  const fetchPage = useCallback(
+    async (pageOffset: number, isLoadMore: boolean) => {
+      // Set appropriate loading state
+      if (isLoadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        // Clear entries immediately on filter change
+        setEntries([]);
+        setAnimationStartIndex(0);
+      }
+      setError(null);
 
-    if (shouldClearData) {
-      setLoading(true);
-      setData(null); // Clear stale data on filter/scope change
-    } else if (data !== null) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      const params = new URLSearchParams({ period });
-      if (limit !== undefined) {
+      try {
+        const params = new URLSearchParams({ period });
         params.set("limit", String(limit));
-      }
-      if (offset !== undefined && offset > 0) {
-        params.set("offset", String(offset));
-      }
-      if (teamId) {
-        params.set("team", teamId);
-      }
-      if (orgId) {
-        params.set("org", orgId);
-      }
+        if (pageOffset > 0) {
+          params.set("offset", String(pageOffset));
+        }
+        if (teamId) {
+          params.set("team", teamId);
+        }
+        if (orgId) {
+          params.set("org", orgId);
+        }
 
-      const res = await fetch(`/api/leaderboard?${params.toString()}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          (body as { error?: string }).error ?? `HTTP ${res.status}`,
-        );
+        const res = await fetch(`/api/leaderboard?${params.toString()}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(
+            (body as { error?: string }).error ?? `HTTP ${res.status}`,
+          );
+        }
+
+        const json = (await res.json()) as LeaderboardData;
+
+        // Check if filters changed during fetch - if so, discard results
+        const currentKey = getFilterKey();
+        const expectedKey = `${period}|${teamId ?? ""}|${orgId ?? ""}`;
+        if (currentKey !== expectedKey) {
+          return; // Stale response, ignore
+        }
+
+        if (isLoadMore) {
+          // Append to existing entries
+          setEntries((prev) => {
+            setAnimationStartIndex(prev.length);
+            return [...prev, ...json.entries];
+          });
+        } else {
+          // Replace entries
+          setAnimationStartIndex(0);
+          setEntries(json.entries);
+        }
+        setHasMore(json.hasMore);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
+    },
+    [period, limit, teamId, orgId, getFilterKey],
+  );
 
-      const json = (await res.json()) as LeaderboardData;
-      setData(json);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, limit, offset, teamId, orgId]);
-
+  // Reset and fetch when filters change
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const prevKey = `${filterKeyRef.current.period}|${filterKeyRef.current.teamId ?? ""}|${filterKeyRef.current.orgId ?? ""}`;
+    const currentKey = getFilterKey();
 
-  return { data, loading, refreshing, error, refetch: fetchData };
+    if (prevKey !== currentKey) {
+      // Filters changed - reset everything
+      filterKeyRef.current = { period, teamId, orgId };
+      setOffset(0);
+      fetchPage(0, false);
+    }
+  }, [period, teamId, orgId, getFilterKey, fetchPage]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPage(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load more handler
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return;
+    const newOffset = offset + limit;
+    setOffset(newOffset);
+    fetchPage(newOffset, true);
+  }, [loadingMore, loading, hasMore, offset, limit, fetchPage]);
+
+  // Refetch from beginning
+  const refetch = useCallback(() => {
+    setOffset(0);
+    fetchPage(0, false);
+  }, [fetchPage]);
+
+  return {
+    entries,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    refetch,
+    animationStartIndex,
+  };
 }

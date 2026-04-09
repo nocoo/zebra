@@ -457,57 +457,24 @@ export default function LeaderboardPage() {
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [offset, setOffset] = useState(0);
-  const [allEntries, setAllEntries] = useState<LeaderboardEntry[]>([]);
-  // Track the starting index for animation (entries before this don't animate)
-  const [animationStartIndex, setAnimationStartIndex] = useState(0);
 
   const teamId = scope.type === "team" ? scope.id ?? null : null;
   const orgId = scope.type === "org" ? scope.id ?? null : null;
 
-  const { data, loading, refreshing, error } = useLeaderboard({
+  const {
+    entries,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    animationStartIndex,
+  } = useLeaderboard({
     period,
     teamId,
     orgId,
     limit: PAGE_SIZE,
-    offset,
   });
-
-  // Accumulate entries as pages are loaded
-  // Track last processed data to avoid duplicate appends
-  const lastProcessedDataRef = useRef<typeof data>(null);
-  /* eslint-disable react-hooks/set-state-in-effect -- accumulate pages */
-  useEffect(() => {
-    if (data?.entries && data !== lastProcessedDataRef.current) {
-      lastProcessedDataRef.current = data;
-      if (offset === 0) {
-        // First page - replace all entries, animate from start
-        setAnimationStartIndex(0);
-        setAllEntries(data.entries);
-      } else {
-        // Subsequent pages - new entries animate from current length
-        setAllEntries((prev) => {
-          setAnimationStartIndex(prev.length);
-          return [...prev, ...data.entries];
-        });
-      }
-    }
-    // When data becomes null (filter change), clear entries
-    if (data === null && lastProcessedDataRef.current !== null) {
-      lastProcessedDataRef.current = null;
-      setAnimationStartIndex(0);
-      setAllEntries([]);
-    }
-  }, [data, offset]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  // Reset pagination when period or scope changes
-  /* eslint-disable react-hooks/set-state-in-effect -- reset pagination on filter change is intentional */
-  useEffect(() => {
-    setOffset(0);
-    // allEntries will be cleared by the data=null effect above
-  }, [period, scope]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Fetch user's organizations and teams
   const fetchOrgsAndTeams = useCallback(async () => {
@@ -642,13 +609,13 @@ export default function LeaderboardPage() {
         {/* Table header row */}
         <TableHeader />
 
-        {/* Loading — skeleton on initial load OR when filter changed (allEntries cleared) */}
-        {(loading || refreshing) && allEntries.length === 0 && <LeaderboardSkeleton />}
+        {/* Loading — skeleton on initial load */}
+        {loading && <LeaderboardSkeleton />}
 
         {/* Content — no opacity change during pagination */}
-        {allEntries.length > 0 && (
+        {entries.length > 0 && (
           <div className="space-y-2">
-            {allEntries.map((entry, i) => (
+            {entries.map((entry, i) => (
               <LeaderboardRow
                 key={entry.user.id}
                 entry={entry}
@@ -657,20 +624,20 @@ export default function LeaderboardPage() {
               />
             ))}
             {/* Load more button — hide when reached max or no more data */}
-            {data?.hasMore && allEntries.length < MAX_ENTRIES && (
+            {hasMore && entries.length < MAX_ENTRIES && (
               <button
-                onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
-                disabled={loading || refreshing}
+                onClick={loadMore}
+                disabled={loadingMore}
                 className="w-full rounded-[var(--radius-card)] bg-secondary py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
               >
-                {loading || refreshing ? "Loading..." : "Show more"}
+                {loadingMore ? "Loading..." : "Show more"}
               </button>
             )}
           </div>
         )}
 
         {/* Empty state — only show after loading completes with no results */}
-        {!loading && !refreshing && allEntries.length === 0 && !error && (
+        {!loading && entries.length === 0 && !error && (
           <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
             No usage data for this period yet.
           </div>
