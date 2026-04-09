@@ -16,7 +16,7 @@ export interface SessionRow {
   source: string;
   session_key: string;
   started_at: string;
-  ended_at: string | null;
+  last_message_at: string;
   duration_seconds: number;
   total_messages: number;
   kind: string | null;
@@ -122,7 +122,7 @@ async function handleListSessions(
     params.push(req.toDate);
   }
 
-  const sql = `SELECT id, user_id, source, session_key, started_at, ended_at,
+  const sql = `SELECT id, user_id, source, session_key, started_at, last_message_at,
                       duration_seconds, total_messages, kind
                FROM session_records
                WHERE ${conditions.join(" AND ")}
