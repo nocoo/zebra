@@ -121,7 +121,10 @@ export interface ProjectAliasStatsRow {
   project_id: string | null;
   session_count: number;
   last_active: string | null;
+  total_messages: number;
   total_duration_seconds: number;
+  models: string | null;
+  absolute_last_active: string | null;
 }
 
 /** Unassigned ref row */
@@ -130,7 +133,9 @@ export interface ProjectUnassignedRow {
   project_ref: string;
   session_count: number;
   last_active: string | null;
+  total_messages: number;
   total_duration_seconds: number;
+  models: string | null;
 }
 
 /** Timeline row for project activity (per day, per project) */
