@@ -190,3 +190,76 @@ export interface PricingRow {
   updated_at: string;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Devices domain types
+// ---------------------------------------------------------------------------
+
+/** Device record with usage stats */
+export interface DeviceRow {
+  device_id: string;
+  alias: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  total_tokens: number;
+  sources: string | null;
+  model_count: number;
+}
+
+/** Device existence check result */
+export interface DeviceExistsResult {
+  exists: boolean;
+  device_id?: string;
+}
+
+/** Device usage record count */
+export interface DeviceRecordCount {
+  cnt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Auth domain types
+// ---------------------------------------------------------------------------
+
+/** Auth code record */
+export interface AuthCodeRow {
+  user_id: string;
+  expires_at: string;
+  used: number;
+}
+
+/** Invite code record */
+export interface InviteCodeRow {
+  id: number;
+  code: string;
+  created_by: string;
+  used_by: string | null;
+  used_at: string | null;
+  created_at: string;
+  creator_name: string | null;
+  creator_image: string | null;
+  user_name: string | null;
+  user_image: string | null;
+}
+
+/** Simple invite code for validation */
+export interface InviteCodeSimple {
+  id: number;
+  used_by: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Settings domain types
+// ---------------------------------------------------------------------------
+
+/** App setting record */
+export interface AppSettingRow {
+  key: string;
+  value: string;
+}
+
+/** User setting record */
+export interface UserSettingRow {
+  key: string;
+  value: string;
+}

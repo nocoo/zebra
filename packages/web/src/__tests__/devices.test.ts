@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET, PUT } from "@/app/api/devices/route";
+import { GET, PUT, DELETE } from "@/app/api/devices/route";
 import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
 
@@ -34,6 +34,14 @@ function makePutRequest(body: unknown): Request {
   });
 }
 
+function makeDeleteRequest(body: unknown): Request {
+  return new Request("http://localhost:7020/api/devices", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 describe("GET /api/devices", () => {
   let mockDbRead: ReturnType<typeof createMockDbRead>;
 
@@ -61,29 +69,26 @@ describe("GET /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          device_id: "aaaa-1111",
-          alias: "MacBook Pro",
-          first_seen: "2026-03-01T00:00:00Z",
-          last_seen: "2026-03-10T12:00:00Z",
-          total_tokens: 50000,
-          sources: "claude-code,opencode",
-          model_count: 3,
-        },
-        {
-          device_id: "bbbb-2222",
-          alias: null,
-          first_seen: "2026-03-05T00:00:00Z",
-          last_seen: "2026-03-10T10:00:00Z",
-          total_tokens: 20000,
-          sources: "opencode",
-          model_count: 1,
-        },
-      ],
-      meta: {},
-    });
+    mockDbRead.listDevices.mockResolvedValueOnce([
+      {
+        device_id: "aaaa-1111",
+        alias: "MacBook Pro",
+        first_seen: "2026-03-01T00:00:00Z",
+        last_seen: "2026-03-10T12:00:00Z",
+        total_tokens: 50000,
+        sources: "claude-code,opencode",
+        model_count: 3,
+      },
+      {
+        device_id: "bbbb-2222",
+        alias: null,
+        first_seen: "2026-03-05T00:00:00Z",
+        last_seen: "2026-03-10T10:00:00Z",
+        total_tokens: 20000,
+        sources: "opencode",
+        model_count: 1,
+      },
+    ]);
 
     const res = await GET(makeGetRequest());
 
@@ -105,20 +110,17 @@ describe("GET /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          device_id: "default",
-          alias: null,
-          first_seen: "2026-01-15T00:00:00Z",
-          last_seen: "2026-02-28T00:00:00Z",
-          total_tokens: 200000,
-          sources: "claude-code",
-          model_count: 1,
-        },
-      ],
-      meta: {},
-    });
+    mockDbRead.listDevices.mockResolvedValueOnce([
+      {
+        device_id: "default",
+        alias: null,
+        first_seen: "2026-01-15T00:00:00Z",
+        last_seen: "2026-02-28T00:00:00Z",
+        total_tokens: 200000,
+        sources: "claude-code",
+        model_count: 1,
+      },
+    ]);
 
     const res = await GET(makeGetRequest());
     const body = await res.json();
@@ -132,7 +134,7 @@ describe("GET /api/devices", () => {
       userId: "u1",
       email: "test@example.com",
     });
-    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.listDevices.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeGetRequest());
 
@@ -171,9 +173,9 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists check
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(true);
     // Duplicate alias check
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkDuplicateDeviceAlias.mockResolvedValueOnce(false);
     // Upsert
     mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
@@ -192,8 +194,8 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(true);
+    mockDbRead.checkDuplicateDeviceAlias.mockResolvedValueOnce(false);
     mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
@@ -241,11 +243,9 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "bbbb-2222" });
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(true);
     // Duplicate check — another device has this alias
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
-      device_id: "aaaa-1111",
-    });
+    mockDbRead.checkDuplicateDeviceAlias.mockResolvedValueOnce(true);
 
     const res = await PUT(
       makePutRequest({ device_id: "bbbb-2222", alias: "macbook" })
@@ -263,9 +263,9 @@ describe("PUT /api/devices", () => {
     });
 
     // Device exists
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "aaaa-1111" });
-    // Duplicate check — returns same device (self)
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(true);
+    // Duplicate check — no conflict (excludes self)
+    mockDbRead.checkDuplicateDeviceAlias.mockResolvedValueOnce(false);
     // Upsert
     mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
@@ -283,7 +283,7 @@ describe("PUT /api/devices", () => {
     });
 
     // Device NOT found in usage_records
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(false);
 
     const res = await PUT(
       makePutRequest({ device_id: "phantom-9999", alias: "Ghost" })
@@ -300,8 +300,8 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ device_id: "default" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkDeviceExists.mockResolvedValueOnce(true);
+    mockDbRead.checkDuplicateDeviceAlias.mockResolvedValueOnce(false);
     mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
 
     const res = await PUT(
@@ -330,11 +330,91 @@ describe("PUT /api/devices", () => {
       email: "test@example.com",
     });
 
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.checkDeviceExists.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await PUT(
       makePutRequest({ device_id: "aaaa-1111", alias: "Name" })
     );
+
+    expect(res.status).toBe(500);
+  });
+});
+
+describe("DELETE /api/devices", () => {
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+  let mockDbWrite: ReturnType<typeof createMockDbWrite>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDbRead = createMockDbRead();
+    mockDbWrite = createMockDbWrite();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(
+      mockDbRead as unknown as dbModule.DbRead
+    );
+    vi.mocked(dbModule.getDbWrite).mockResolvedValue(
+      mockDbWrite as unknown as dbModule.DbWrite
+    );
+  });
+
+  it("should reject unauthenticated requests", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce(null);
+
+    const res = await DELETE(makeDeleteRequest({ device_id: "x" }));
+
+    expect(res.status).toBe(401);
+  });
+
+  it("should delete device alias with zero records", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockDbRead.checkDeviceHasRecords.mockResolvedValueOnce(false);
+    mockDbWrite.execute.mockResolvedValueOnce({ meta: {} });
+
+    const res = await DELETE(makeDeleteRequest({ device_id: "aaaa-1111" }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+  });
+
+  it("should reject deleting device with usage records", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockDbRead.checkDeviceHasRecords.mockResolvedValueOnce(true);
+
+    const res = await DELETE(makeDeleteRequest({ device_id: "aaaa-1111" }));
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toMatch(/usage records/i);
+  });
+
+  it("should reject missing device_id", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    const res = await DELETE(makeDeleteRequest({}));
+
+    expect(res.status).toBe(400);
+  });
+
+  it("should return 500 on D1 error", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({
+      userId: "u1",
+      email: "test@example.com",
+    });
+
+    mockDbRead.checkDeviceHasRecords.mockRejectedValueOnce(new Error("D1 down"));
+
+    const res = await DELETE(makeDeleteRequest({ device_id: "aaaa-1111" }));
 
     expect(res.status).toBe(500);
   });

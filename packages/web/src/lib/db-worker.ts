@@ -23,6 +23,12 @@ import type {
   TeamDetailRow,
   TeamMemberRow,
   TeamByInviteCode,
+  DeviceRow,
+  AuthCodeRow,
+  InviteCodeRow,
+  InviteCodeSimple,
+  AppSettingRow,
+  UserSettingRow,
 } from "./rpc-types";
 
 export function createWorkerDbRead(): DbRead {
@@ -387,6 +393,82 @@ export function createWorkerDbRead(): DbRead {
         model,
         source,
       });
+    },
+
+    // -------------------------------------------------------------------------
+    // Devices domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async listDevices(userId: string): Promise<DeviceRow[]> {
+      return rpc<DeviceRow[]>({ method: "devices.list", userId });
+    },
+
+    async checkDeviceExists(userId: string, deviceId: string): Promise<boolean> {
+      const result = await rpc<{ exists: boolean }>({
+        method: "devices.exists",
+        userId,
+        deviceId,
+      });
+      return result.exists;
+    },
+
+    async checkDuplicateDeviceAlias(
+      userId: string,
+      alias: string,
+      excludeDeviceId: string,
+    ): Promise<boolean> {
+      const result = await rpc<{ exists: boolean }>({
+        method: "devices.checkDuplicateAlias",
+        userId,
+        alias,
+        excludeDeviceId,
+      });
+      return result.exists;
+    },
+
+    async checkDeviceHasRecords(userId: string, deviceId: string): Promise<boolean> {
+      const result = await rpc<{ hasRecords: boolean }>({
+        method: "devices.hasRecords",
+        userId,
+        deviceId,
+      });
+      return result.hasRecords;
+    },
+
+    // -------------------------------------------------------------------------
+    // Auth domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getAuthCode(code: string): Promise<AuthCodeRow | null> {
+      return rpc<AuthCodeRow | null>({ method: "auth.getCode", code });
+    },
+
+    async listInviteCodes(): Promise<InviteCodeRow[]> {
+      return rpc<InviteCodeRow[]>({ method: "auth.listInviteCodes" });
+    },
+
+    async checkInviteCodeExists(code: string): Promise<InviteCodeSimple | null> {
+      return rpc<InviteCodeSimple | null>({ method: "auth.checkInviteCode", code });
+    },
+
+    async checkUserHasUnusedInvite(userId: string): Promise<boolean> {
+      const result = await rpc<{ hasUnused: boolean }>({
+        method: "auth.userHasUnusedInvite",
+        userId,
+      });
+      return result.hasUnused;
+    },
+
+    // -------------------------------------------------------------------------
+    // Settings domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getAllAppSettings(): Promise<AppSettingRow[]> {
+      return rpc<AppSettingRow[]>({ method: "settings.getAllApp" });
+    },
+
+    async getAllUserSettings(userId: string): Promise<UserSettingRow[]> {
+      return rpc<UserSettingRow[]>({ method: "settings.getAllUser", userId });
     },
   };
 

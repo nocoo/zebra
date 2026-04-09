@@ -66,6 +66,19 @@ export function createMockDbRead() {
     listModelPricing: vi.fn(),
     getModelPricingById: vi.fn(),
     getModelPricingByModelSource: vi.fn(),
+    // Devices RPC methods
+    listDevices: vi.fn(),
+    checkDeviceExists: vi.fn(),
+    checkDuplicateDeviceAlias: vi.fn(),
+    checkDeviceHasRecords: vi.fn(),
+    // Auth RPC methods
+    getAuthCode: vi.fn(),
+    listInviteCodes: vi.fn(),
+    checkInviteCodeExists: vi.fn(),
+    checkUserHasUnusedInvite: vi.fn(),
+    // Settings RPC methods
+    getAllAppSettings: vi.fn(),
+    getAllUserSettings: vi.fn(),
   } as unknown as DbRead & {
     query: ReturnType<typeof vi.fn>;
     firstOrNull: ReturnType<typeof vi.fn>;
@@ -108,6 +121,16 @@ export function createMockDbRead() {
     listModelPricing: ReturnType<typeof vi.fn>;
     getModelPricingById: ReturnType<typeof vi.fn>;
     getModelPricingByModelSource: ReturnType<typeof vi.fn>;
+    listDevices: ReturnType<typeof vi.fn>;
+    checkDeviceExists: ReturnType<typeof vi.fn>;
+    checkDuplicateDeviceAlias: ReturnType<typeof vi.fn>;
+    checkDeviceHasRecords: ReturnType<typeof vi.fn>;
+    getAuthCode: ReturnType<typeof vi.fn>;
+    listInviteCodes: ReturnType<typeof vi.fn>;
+    checkInviteCodeExists: ReturnType<typeof vi.fn>;
+    checkUserHasUnusedInvite: ReturnType<typeof vi.fn>;
+    getAllAppSettings: ReturnType<typeof vi.fn>;
+    getAllUserSettings: ReturnType<typeof vi.fn>;
   };
 }
 

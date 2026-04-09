@@ -22,6 +22,12 @@ import type {
   TeamDetailRow,
   TeamMemberRow,
   TeamByInviteCode,
+  DeviceRow,
+  AuthCodeRow,
+  InviteCodeRow,
+  InviteCodeSimple,
+  AppSettingRow,
+  UserSettingRow,
 } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
@@ -207,6 +213,52 @@ export interface DbRead {
     model: string,
     source: string | null,
   ): Promise<PricingRow | null>;
+
+  // ---------------------------------------------------------------------------
+  // Devices domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** List devices with usage stats for a user */
+  listDevices(userId: string): Promise<DeviceRow[]>;
+
+  /** Check if a device exists for user (in usage_records or device_aliases) */
+  checkDeviceExists(userId: string, deviceId: string): Promise<boolean>;
+
+  /** Check for duplicate alias (case-insensitive, different device) */
+  checkDuplicateDeviceAlias(
+    userId: string,
+    alias: string,
+    excludeDeviceId: string,
+  ): Promise<boolean>;
+
+  /** Check if device has usage records */
+  checkDeviceHasRecords(userId: string, deviceId: string): Promise<boolean>;
+
+  // ---------------------------------------------------------------------------
+  // Auth domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get auth code by code string */
+  getAuthCode(code: string): Promise<AuthCodeRow | null>;
+
+  /** List all invite codes with user info */
+  listInviteCodes(): Promise<InviteCodeRow[]>;
+
+  /** Check if invite code exists and get its status */
+  checkInviteCodeExists(code: string): Promise<InviteCodeSimple | null>;
+
+  /** Check if user has unused invite codes */
+  checkUserHasUnusedInvite(userId: string): Promise<boolean>;
+
+  // ---------------------------------------------------------------------------
+  // Settings domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get all app settings */
+  getAllAppSettings(): Promise<AppSettingRow[]>;
+
+  /** Get all user settings */
+  getAllUserSettings(userId: string): Promise<UserSettingRow[]>;
 }
 
 // ---------------------------------------------------------------------------
