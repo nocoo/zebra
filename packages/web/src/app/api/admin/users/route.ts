@@ -35,19 +35,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const searchPattern = `%${query.trim()}%`;
-    const { results } = await dbRead.query<{
-      id: string;
-      name: string | null;
-      email: string;
-      image: string | null;
-    }>(
-      `SELECT id, name, email, image FROM users
-       WHERE name LIKE ? OR email LIKE ?
-       ORDER BY name ASC
-       LIMIT ?`,
-      [searchPattern, searchPattern, limit]
-    );
+    const results = await dbRead.searchUsers(query.trim(), limit);
 
     return NextResponse.json({ users: results });
   } catch (err) {
