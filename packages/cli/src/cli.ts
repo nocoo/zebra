@@ -48,6 +48,7 @@ function isSource(value: string): value is Source {
     "opencode",
     "openclaw",
     "pi",
+    "pmstudio",
     "vscode-copilot",
     "copilot-cli",
     "hermes",
@@ -190,7 +191,8 @@ const syncCommand = defineCommand({
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
-      kosmosDataDirs: paths.kosmosDataDirs,
+      kosmosDataDir: paths.kosmosDataDir,
+      pmstudioDataDir: paths.pmstudioDataDir,
       openCodeMessageDir: paths.openCodeMessageDir,
       openCodeDbPath: paths.openCodeDbPath,
       openMessageDb,
@@ -223,6 +225,7 @@ const syncCommand = defineCommand({
       if (result.sources.opencode > 0) deltaParts.push(`OpenCode: ${result.sources.opencode}`);
       if (result.sources.openclaw > 0) deltaParts.push(`OpenClaw: ${result.sources.openclaw}`);
       if (result.sources.pi > 0) deltaParts.push(`Pi: ${result.sources.pi}`);
+      if (result.sources.pmstudio > 0) deltaParts.push(`PM Studio: ${result.sources.pmstudio}`);
       if (result.sources.vscodeCopilot > 0) deltaParts.push(`VSCode Copilot: ${result.sources.vscodeCopilot}`);
       if (result.sources.copilotCli > 0) deltaParts.push(`Copilot CLI: ${result.sources.copilotCli}`);
       if (result.sources.hermes > 0) deltaParts.push(`Hermes: ${result.sources.hermes}`);
@@ -241,6 +244,7 @@ const syncCommand = defineCommand({
     if (fs.opencode > 0) scanParts.push(`OpenCode: ${fs.opencode}`);
     if (fs.openclaw > 0) scanParts.push(`OpenClaw: ${fs.openclaw}`);
     if (fs.pi > 0) scanParts.push(`Pi: ${fs.pi}`);
+    if (fs.pmstudio > 0) scanParts.push(`PM Studio: ${fs.pmstudio}`);
     if (fs.vscodeCopilot > 0) scanParts.push(`VSCode Copilot: ${fs.vscodeCopilot}`);
     if (fs.copilotCli > 0) scanParts.push(`Copilot CLI: ${fs.copilotCli}`);
     if (fs.hermes > 0) scanParts.push(`Hermes: ${fs.hermes}`);
@@ -258,7 +262,8 @@ const syncCommand = defineCommand({
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
-      kosmosDataDirs: paths.kosmosDataDirs,
+      kosmosDataDir: paths.kosmosDataDir,
+      pmstudioDataDir: paths.pmstudioDataDir,
       openCodeMessageDir: paths.openCodeMessageDir,
       openCodeDbPath: paths.openCodeDbPath,
       openSessionDb,
@@ -286,6 +291,7 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.opencode > 0) sessParts.push(`OpenCode: ${sessionResult.sources.opencode}`);
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
       if (sessionResult.sources.pi > 0) sessParts.push(`Pi: ${sessionResult.sources.pi}`);
+      if (sessionResult.sources.pmstudio > 0) sessParts.push(`PM Studio: ${sessionResult.sources.pmstudio}`);
       if (sessParts.length > 0) {
         log.text(pc.dim(sessParts.join("  |  ")));
       }
@@ -301,6 +307,7 @@ const syncCommand = defineCommand({
     if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
     if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
     if (sfs.pi > 0) sessScanParts.push(`Pi: ${sfs.pi}`);
+    if (sfs.pmstudio > 0) sessScanParts.push(`PM Studio: ${sfs.pmstudio}`);
     if (sessScanParts.length > 0) {
       log.text(`Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
     }
@@ -330,7 +337,8 @@ const statusCommand = defineCommand({
         claudeDir: paths.claudeDir,
         codexSessionsDir: paths.codexSessionsDir,
         geminiDir: paths.geminiDir,
-        kosmosDataDirs: paths.kosmosDataDirs,
+        kosmosDataDir: paths.kosmosDataDir,
+      pmstudioDataDir: paths.pmstudioDataDir,
         openCodeMessageDir: paths.openCodeMessageDir,
         openclawDir: paths.openclawDir,
         piSessionsDir: paths.piSessionsDir,
@@ -499,7 +507,8 @@ const notifyCommand = defineCommand({
       claudeDir: paths.claudeDir,
       codexSessionsDir: paths.codexSessionsDir,
       geminiDir: paths.geminiDir,
-      kosmosDataDirs: paths.kosmosDataDirs,
+      kosmosDataDir: paths.kosmosDataDir,
+      pmstudioDataDir: paths.pmstudioDataDir,
       openCodeMessageDir: paths.openCodeMessageDir,
       openCodeDbPath: paths.openCodeDbPath,
       openMessageDb: openMessageDb2,
