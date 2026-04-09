@@ -32,6 +32,7 @@ import type {
   ShowcaseExistsResult,
   SessionRecordRow,
   PricingRow,
+  AdminStorageUserRow,
   UsageRecordRow,
   UsageDeviceSummaryRow,
   UsageCostDetailRow,
@@ -655,6 +656,14 @@ export function createWorkerDbRead(): DbRead {
 
     async getAppSetting(key: string): Promise<string | null> {
       return rpc<string | null>({ method: "teams.getAppSetting", key });
+    },
+
+    // -------------------------------------------------------------------------
+    // Admin domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getAdminStorageStats(): Promise<AdminStorageUserRow[]> {
+      return rpc<AdminStorageUserRow[]>({ method: "admin.getStorageStats" });
     },
 
     // -------------------------------------------------------------------------

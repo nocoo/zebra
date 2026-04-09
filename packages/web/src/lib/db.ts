@@ -31,6 +31,7 @@ import type {
   ShowcaseExistsResult,
   SessionRecordRow,
   PricingRow,
+  AdminStorageUserRow,
   UsageRecordRow,
   UsageDeviceSummaryRow,
   UsageCostDetailRow,
@@ -355,6 +356,13 @@ export interface DbRead {
 
   /** Get app setting by key */
   getAppSetting(key: string): Promise<string | null>;
+
+  // ---------------------------------------------------------------------------
+  // Admin domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get per-user storage stats for admin page */
+  getAdminStorageStats(): Promise<AdminStorageUserRow[]>;
 
   // ---------------------------------------------------------------------------
   // Sessions domain RPC methods

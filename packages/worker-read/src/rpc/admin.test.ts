@@ -7,6 +7,7 @@ import {
   type ListAdminUsersRequest,
   type GetAdminUserRequest,
   type CountUsersRequest,
+  type GetStorageStatsRequest,
 } from "./admin";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -380,6 +381,76 @@ describe("admin RPC handlers", () => {
 
       expect(response.status).toBe(200);
       expect(body).toEqual({ result: 0 });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // admin.getStorageStats
+  // -------------------------------------------------------------------------
+
+  describe("admin.getStorageStats", () => {
+    it("should return per-user storage stats", async () => {
+      const mockUsers = [
+        {
+          user_id: "u1",
+          slug: "alice",
+          email: "alice@example.com",
+          name: "Alice",
+          image: null,
+          team_count: 2,
+          device_count: 3,
+          total_tokens: 1000000,
+          tokens_7d: 100000,
+          tokens_30d: 500000,
+          usage_row_count: 100,
+          session_count: 50,
+          total_messages: 200,
+          total_duration_seconds: 3600,
+          first_seen: "2026-01-01T00:00:00Z",
+          last_seen: "2026-04-06T00:00:00Z",
+        },
+        {
+          user_id: "u2",
+          slug: "bob",
+          email: "bob@example.com",
+          name: "Bob",
+          image: null,
+          team_count: 1,
+          device_count: 1,
+          total_tokens: 500000,
+          tokens_7d: 50000,
+          tokens_30d: 200000,
+          usage_row_count: 50,
+          session_count: 25,
+          total_messages: 100,
+          total_duration_seconds: 1800,
+          first_seen: "2026-02-01T00:00:00Z",
+          last_seen: "2026-04-05T00:00:00Z",
+        },
+      ];
+      db.all.mockResolvedValue({ results: mockUsers });
+
+      const request: GetStorageStatsRequest = {
+        method: "admin.getStorageStats",
+      };
+      const response = await handleAdminRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: mockUsers });
+    });
+
+    it("should return empty array when no users with data", async () => {
+      db.all.mockResolvedValue({ results: [] });
+
+      const request: GetStorageStatsRequest = {
+        method: "admin.getStorageStats",
+      };
+      const response = await handleAdminRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: [] });
     });
   });
 

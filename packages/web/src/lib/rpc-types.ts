@@ -308,6 +308,30 @@ export interface PricingRow {
 }
 
 // ---------------------------------------------------------------------------
+// Admin domain types
+// ---------------------------------------------------------------------------
+
+/** Per-user storage stats row */
+export interface AdminStorageUserRow {
+  user_id: string;
+  slug: string | null;
+  email: string | null;
+  name: string | null;
+  image: string | null;
+  team_count: number;
+  device_count: number;
+  total_tokens: number;
+  tokens_7d: number;
+  tokens_30d: number;
+  usage_row_count: number;
+  session_count: number;
+  total_messages: number;
+  total_duration_seconds: number;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Sessions domain types
 // ---------------------------------------------------------------------------
 
