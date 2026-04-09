@@ -10,16 +10,6 @@ import { resolveAdmin } from "@/lib/admin";
 import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SettingRow {
-  key: string;
-  value: string;
-  updated_at: string;
-}
-
-// ---------------------------------------------------------------------------
 // GET — list all settings
 // ---------------------------------------------------------------------------
 
@@ -32,9 +22,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const { results } = await dbRead.query<SettingRow>(
-      "SELECT key, value, updated_at FROM app_settings ORDER BY key ASC",
-    );
+    const results = await dbRead.getAllAppSettings();
     return NextResponse.json({ settings: results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";

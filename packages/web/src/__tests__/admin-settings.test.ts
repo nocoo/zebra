@@ -57,11 +57,9 @@ describe("GET /api/admin/settings", () => {
 
   it("should return settings list", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        { key: "max_team_members", value: "5", updated_at: "2026-01-01T00:00:00Z" },
-      ],
-    });
+    mockDbRead.getAllAppSettings.mockResolvedValueOnce([
+      { key: "max_team_members", value: "5", updated_at: "2026-01-01T00:00:00Z" },
+    ]);
 
     const res = await GET(makeGet());
     const body = await res.json();
@@ -73,7 +71,7 @@ describe("GET /api/admin/settings", () => {
 
   it("should return empty array when table does not exist", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: app_settings"));
+    mockDbRead.getAllAppSettings.mockRejectedValueOnce(new Error("no such table: app_settings"));
 
     const res = await GET(makeGet());
     const body = await res.json();
@@ -84,7 +82,7 @@ describe("GET /api/admin/settings", () => {
 
   it("should return 500 on unexpected error", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.getAllAppSettings.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeGet());
     expect(res.status).toBe(500);

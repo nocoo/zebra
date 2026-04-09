@@ -259,6 +259,7 @@ export interface InviteCodeById {
 export interface AppSettingRow {
   key: string;
   value: string;
+  updated_at: string;
 }
 
 /** User setting record */
