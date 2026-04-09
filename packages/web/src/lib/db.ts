@@ -47,6 +47,14 @@ import type {
   InviteCodeById,
   AppSettingRow,
   UserSettingRow,
+  AchievementUsageAggregates,
+  AchievementDailyUsageRow,
+  AchievementDailyCostRow,
+  AchievementDiversityCounts,
+  AchievementSessionAggregates,
+  AchievementHourlyUsageRow,
+  AchievementCostByModelSourceRow,
+  AchievementEarnerRow,
 } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
@@ -479,6 +487,47 @@ export interface DbRead {
 
   /** Get all user settings */
   getAllUserSettings(userId: string): Promise<UserSettingRow[]>;
+
+  // ---------------------------------------------------------------------------
+  // Achievements domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get usage aggregates for achievements computation */
+  getAchievementUsageAggregates(userId: string): Promise<AchievementUsageAggregates | null>;
+
+  /** Get daily usage for achievements (streak, big-day, veteran) */
+  getAchievementDailyUsage(userId: string): Promise<AchievementDailyUsageRow[]>;
+
+  /** Get daily cost breakdown for achievements (daily-burn) */
+  getAchievementDailyCostBreakdown(userId: string): Promise<AchievementDailyCostRow[]>;
+
+  /** Get diversity counts for achievements */
+  getAchievementDiversityCounts(userId: string): Promise<AchievementDiversityCounts | null>;
+
+  /** Get session aggregates for achievements */
+  getAchievementSessionAggregates(userId: string): Promise<AchievementSessionAggregates | null>;
+
+  /** Get hourly usage for timezone-dependent achievements */
+  getAchievementHourlyUsage(userId: string): Promise<AchievementHourlyUsageRow[]>;
+
+  /** Get cost by model/source for big-spender achievement */
+  getAchievementCostByModelSource(userId: string): Promise<AchievementCostByModelSourceRow[]>;
+
+  /** Get achievement earners using a dynamic SQL query */
+  getAchievementEarners(
+    achievementId: string,
+    sql: string,
+    threshold: number,
+    limit: number,
+    offset: number,
+  ): Promise<AchievementEarnerRow[]>;
+
+  /** Get achievement earners count using a dynamic SQL query */
+  getAchievementEarnersCount(
+    achievementId: string,
+    sql: string,
+    threshold: number,
+  ): Promise<number>;
 
   // ---------------------------------------------------------------------------
   // Live domain RPC methods
