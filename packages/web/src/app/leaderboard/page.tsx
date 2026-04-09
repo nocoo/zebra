@@ -434,6 +434,7 @@ function LeaderboardRow({
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 20;
+const MAX_ENTRIES = 100;
 
 // ---------------------------------------------------------------------------
 // Page
@@ -629,14 +630,9 @@ export default function LeaderboardPage() {
         {/* Loading — skeleton on initial load OR when filter changed (allEntries cleared) */}
         {(loading || refreshing) && allEntries.length === 0 && <LeaderboardSkeleton />}
 
-        {/* Content — stays visible during refreshing with opacity transition */}
+        {/* Content — no opacity change during pagination */}
         {allEntries.length > 0 && (
-          <div
-            className={cn(
-              "space-y-2 transition-opacity duration-200",
-              refreshing && "opacity-60",
-            )}
-          >
+          <div className="space-y-2">
             {allEntries.map((entry, i) => (
               <LeaderboardRow
                 key={entry.user.id}
@@ -644,14 +640,14 @@ export default function LeaderboardPage() {
                 index={i}
               />
             ))}
-            {/* Load more button */}
-            {data?.hasMore && (
+            {/* Load more button — hide when reached max or no more data */}
+            {data?.hasMore && allEntries.length < MAX_ENTRIES && (
               <button
                 onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
-                disabled={loading}
+                disabled={loading || refreshing}
                 className="w-full rounded-[var(--radius-card)] bg-secondary py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
               >
-                {loading ? "Loading..." : "Show more"}
+                {loading || refreshing ? "Loading..." : "Show more"}
               </button>
             )}
           </div>
