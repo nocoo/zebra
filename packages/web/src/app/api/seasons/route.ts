@@ -14,19 +14,6 @@ import { deriveSeasonStatus } from "@/lib/seasons";
 
 const VALID_STATUSES = new Set<SeasonStatus>(["upcoming", "active", "ended"]);
 
-interface SeasonRow {
-  id: string;
-  name: string;
-  slug: string;
-  start_date: string;
-  end_date: string;
-  created_at: string;
-  team_count: number;
-  has_snapshot: number; // 0 or 1 from SQLite
-  allow_late_registration: number; // 0 or 1
-  allow_late_withdrawal: number; // 0 or 1
-}
-
 // Sort priority: active=0, upcoming=1, ended=2
 const STATUS_ORDER: Record<SeasonStatus, number> = {
   active: 0,
@@ -49,17 +36,7 @@ export async function GET(request: Request) {
   const db = await getDbRead();
 
   try {
-    const { results } = await db.query<SeasonRow>(
-      `SELECT
-         s.id, s.name, s.slug, s.start_date, s.end_date, s.created_at,
-         s.allow_late_registration, s.allow_late_withdrawal,
-         COUNT(st.id) AS team_count,
-         s.snapshot_ready AS has_snapshot
-       FROM seasons s
-       LEFT JOIN season_teams st ON st.season_id = s.id
-       GROUP BY s.id
-       ORDER BY s.start_date DESC`
-    );
+    const results = await db.listSeasons();
 
     let seasons = results.map((r) => ({
       id: r.id,

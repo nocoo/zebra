@@ -22,7 +22,7 @@ vi.mock("@/auth", () => ({
 
 import { GET } from "@/app/api/seasons/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 function makeRequest(
   url = "http://localhost:7020/api/seasons"
@@ -78,15 +78,15 @@ const ENDED_SEASON_ROW = {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/seasons", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    mockClient = createMockClient();
+    mockDbRead = createMockDbRead();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
-      mockClient as any
+      mockDbRead as any
     );
   });
 
@@ -95,9 +95,9 @@ describe("GET /api/seasons", () => {
   });
 
   it("should return all seasons with computed status", async () => {
-    mockClient.query.mockResolvedValueOnce({
-      results: [ACTIVE_SEASON_ROW, UPCOMING_SEASON_ROW, ENDED_SEASON_ROW],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      ACTIVE_SEASON_ROW, UPCOMING_SEASON_ROW, ENDED_SEASON_ROW,
+    ]);
 
     const res = await GET(makeRequest());
     const data = await res.json();
@@ -115,9 +115,9 @@ describe("GET /api/seasons", () => {
   });
 
   it("should filter by status parameter", async () => {
-    mockClient.query.mockResolvedValueOnce({
-      results: [ACTIVE_SEASON_ROW, UPCOMING_SEASON_ROW, ENDED_SEASON_ROW],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      ACTIVE_SEASON_ROW, UPCOMING_SEASON_ROW, ENDED_SEASON_ROW,
+    ]);
 
     const res = await GET(
       makeRequest("http://localhost:7020/api/seasons?status=active")
@@ -131,9 +131,9 @@ describe("GET /api/seasons", () => {
   });
 
   it("should include team_count and has_snapshot", async () => {
-    mockClient.query.mockResolvedValueOnce({
-      results: [ACTIVE_SEASON_ROW, ENDED_SEASON_ROW],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      ACTIVE_SEASON_ROW, ENDED_SEASON_ROW,
+    ]);
 
     const res = await GET(makeRequest());
     const data = await res.json();
@@ -157,9 +157,9 @@ describe("GET /api/seasons", () => {
 
   it("should sort active > upcoming > ended", async () => {
     // Return them in "wrong" order: ended, upcoming, active
-    mockClient.query.mockResolvedValueOnce({
-      results: [ENDED_SEASON_ROW, UPCOMING_SEASON_ROW, ACTIVE_SEASON_ROW],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      ENDED_SEASON_ROW, UPCOMING_SEASON_ROW, ACTIVE_SEASON_ROW,
+    ]);
 
     const res = await GET(makeRequest());
     const data = await res.json();
@@ -173,7 +173,7 @@ describe("GET /api/seasons", () => {
   });
 
   it("should handle no-such-table gracefully", async () => {
-    mockClient.query.mockRejectedValueOnce(
+    mockDbRead.listSeasons.mockRejectedValueOnce(
       new Error("no such table: seasons")
     );
 
@@ -196,7 +196,7 @@ describe("GET /api/seasons", () => {
   });
 
   it("should return empty seasons array when no seasons exist", async () => {
-    mockClient.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.listSeasons.mockResolvedValueOnce([]);
 
     const res = await GET(makeRequest());
     const data = await res.json();
@@ -211,9 +211,9 @@ describe("GET /api/seasons", () => {
       allow_late_registration: 1,
       allow_late_withdrawal: 1,
     };
-    mockClient.query.mockResolvedValueOnce({
-      results: [withLateReg, UPCOMING_SEASON_ROW],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      withLateReg, UPCOMING_SEASON_ROW,
+    ]);
 
     const res = await GET(makeRequest());
     const data = await res.json();
