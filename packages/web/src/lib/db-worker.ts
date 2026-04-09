@@ -27,6 +27,12 @@ import type {
   SeasonTeamRegistrationRow,
   TeamAggRow,
   MemberAggRow,
+  SeasonSnapshotRow,
+  SeasonMemberSnapshotRow,
+  SeasonTeamTokenRow,
+  SeasonMemberTokenRow,
+  SeasonTeamSessionStatsRow,
+  SeasonMemberSessionStatsRow,
   ShowcaseRpcRow,
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
@@ -501,6 +507,84 @@ export function createWorkerDbRead(): DbRead {
         fromDate,
         toDate,
         teamIds,
+      });
+    },
+
+    async getSeasonSnapshots(seasonId: string): Promise<SeasonSnapshotRow[]> {
+      return rpc<SeasonSnapshotRow[]>({
+        method: "seasons.getSnapshots",
+        seasonId,
+      });
+    },
+
+    async getSeasonMemberSnapshots(
+      seasonId: string,
+      publicOnly?: boolean,
+    ): Promise<SeasonMemberSnapshotRow[]> {
+      return rpc<SeasonMemberSnapshotRow[]>({
+        method: "seasons.getMemberSnapshots",
+        seasonId,
+        publicOnly,
+      });
+    },
+
+    async getSeasonTeamTokens(
+      seasonId: string,
+      fromDate: string,
+      toDate: string,
+    ): Promise<SeasonTeamTokenRow[]> {
+      return rpc<SeasonTeamTokenRow[]>({
+        method: "seasons.getTeamTokens",
+        seasonId,
+        fromDate,
+        toDate,
+      });
+    },
+
+    async getSeasonMemberTokens(
+      seasonId: string,
+      teamIds: string[],
+      fromDate: string,
+      toDate: string,
+      publicOnly?: boolean,
+    ): Promise<SeasonMemberTokenRow[]> {
+      return rpc<SeasonMemberTokenRow[]>({
+        method: "seasons.getMemberTokens",
+        seasonId,
+        teamIds,
+        fromDate,
+        toDate,
+        publicOnly,
+      });
+    },
+
+    async getSeasonTeamSessionStats(
+      seasonId: string,
+      teamIds: string[],
+      fromDate: string,
+      toDate: string,
+    ): Promise<SeasonTeamSessionStatsRow[]> {
+      return rpc<SeasonTeamSessionStatsRow[]>({
+        method: "seasons.getTeamSessionStats",
+        seasonId,
+        teamIds,
+        fromDate,
+        toDate,
+      });
+    },
+
+    async getSeasonMemberSessionStats(
+      seasonId: string,
+      teamIds: string[],
+      fromDate: string,
+      toDate: string,
+    ): Promise<SeasonMemberSessionStatsRow[]> {
+      return rpc<SeasonMemberSessionStatsRow[]>({
+        method: "seasons.getMemberSessionStats",
+        seasonId,
+        teamIds,
+        fromDate,
+        toDate,
       });
     },
 

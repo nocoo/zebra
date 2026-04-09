@@ -202,6 +202,76 @@ export interface MemberAggRow {
   cached_input_tokens: number;
 }
 
+/** Season snapshot row (frozen leaderboard data) */
+export interface SeasonSnapshotRow {
+  team_id: string;
+  team_name: string;
+  team_slug: string;
+  team_logo_url: string | null;
+  rank: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+/** Season member snapshot row (frozen member data) */
+export interface SeasonMemberSnapshotRow {
+  team_id: string;
+  user_id: string;
+  slug: string | null;
+  name: string | null;
+  nickname: string | null;
+  image: string | null;
+  is_public: number | null;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+/** Team token row for real-time leaderboard */
+export interface SeasonTeamTokenRow {
+  team_id: string;
+  team_name: string;
+  team_slug: string;
+  team_logo_url: string | null;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+/** Member token row for real-time leaderboard */
+export interface SeasonMemberTokenRow {
+  team_id: string;
+  user_id: string;
+  slug: string | null;
+  name: string | null;
+  nickname: string | null;
+  image: string | null;
+  is_public: number | null;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+/** Team session stats for leaderboard */
+export interface SeasonTeamSessionStatsRow {
+  team_id: string;
+  session_count: number;
+  total_duration_seconds: number;
+}
+
+/** Member session stats for leaderboard */
+export interface SeasonMemberSessionStatsRow {
+  team_id: string;
+  user_id: string;
+  session_count: number;
+  total_duration_seconds: number;
+}
+
 // ---------------------------------------------------------------------------
 // Showcases domain types
 // ---------------------------------------------------------------------------

@@ -71,6 +71,12 @@ export function createMockDbRead() {
     checkSeasonMemberConflict: vi.fn(),
     aggregateSeasonTeamTokens: vi.fn(),
     aggregateSeasonMemberTokens: vi.fn(),
+    getSeasonSnapshots: vi.fn(),
+    getSeasonMemberSnapshots: vi.fn(),
+    getSeasonTeamTokens: vi.fn(),
+    getSeasonMemberTokens: vi.fn(),
+    getSeasonTeamSessionStats: vi.fn(),
+    getSeasonMemberSessionStats: vi.fn(),
     // Showcases RPC methods
     getShowcaseById: vi.fn(),
     getShowcaseOwner: vi.fn(),
@@ -183,6 +189,12 @@ export function createMockDbRead() {
     checkSeasonMemberConflict: ReturnType<typeof vi.fn>;
     aggregateSeasonTeamTokens: ReturnType<typeof vi.fn>;
     aggregateSeasonMemberTokens: ReturnType<typeof vi.fn>;
+    getSeasonSnapshots: ReturnType<typeof vi.fn>;
+    getSeasonMemberSnapshots: ReturnType<typeof vi.fn>;
+    getSeasonTeamTokens: ReturnType<typeof vi.fn>;
+    getSeasonMemberTokens: ReturnType<typeof vi.fn>;
+    getSeasonTeamSessionStats: ReturnType<typeof vi.fn>;
+    getSeasonMemberSessionStats: ReturnType<typeof vi.fn>;
     getShowcaseById: ReturnType<typeof vi.fn>;
     getShowcaseOwner: ReturnType<typeof vi.fn>;
     checkShowcaseExists: ReturnType<typeof vi.fn>;

@@ -26,6 +26,12 @@ import type {
   SeasonTeamRegistrationRow,
   TeamAggRow,
   MemberAggRow,
+  SeasonSnapshotRow,
+  SeasonMemberSnapshotRow,
+  SeasonTeamTokenRow,
+  SeasonMemberTokenRow,
+  SeasonTeamSessionStatsRow,
+  SeasonMemberSessionStatsRow,
   ShowcaseRpcRow,
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
@@ -286,6 +292,47 @@ export interface DbRead {
     toDate: string,
     teamIds: string[],
   ): Promise<MemberAggRow[]>;
+
+  /** Get frozen season snapshots (leaderboard with snapshot_ready=1) */
+  getSeasonSnapshots(seasonId: string): Promise<SeasonSnapshotRow[]>;
+
+  /** Get frozen season member snapshots */
+  getSeasonMemberSnapshots(
+    seasonId: string,
+    publicOnly?: boolean,
+  ): Promise<SeasonMemberSnapshotRow[]>;
+
+  /** Get real-time team tokens for leaderboard */
+  getSeasonTeamTokens(
+    seasonId: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<SeasonTeamTokenRow[]>;
+
+  /** Get real-time member tokens for leaderboard */
+  getSeasonMemberTokens(
+    seasonId: string,
+    teamIds: string[],
+    fromDate: string,
+    toDate: string,
+    publicOnly?: boolean,
+  ): Promise<SeasonMemberTokenRow[]>;
+
+  /** Get team session stats for leaderboard */
+  getSeasonTeamSessionStats(
+    seasonId: string,
+    teamIds: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<SeasonTeamSessionStatsRow[]>;
+
+  /** Get member session stats for leaderboard */
+  getSeasonMemberSessionStats(
+    seasonId: string,
+    teamIds: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<SeasonMemberSessionStatsRow[]>;
 
   // ---------------------------------------------------------------------------
   // Showcases domain RPC methods
