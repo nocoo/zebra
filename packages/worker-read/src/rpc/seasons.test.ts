@@ -177,7 +177,7 @@ describe("seasons RPC handlers", () => {
         season_id: "s1",
         team_id: "t1",
         registered_by: "u1",
-        created_at: "2026-01-01T00:00:00Z",
+        registered_at: "2026-01-01T00:00:00Z",
       };
       db.first.mockResolvedValue(mockRegistration);
 

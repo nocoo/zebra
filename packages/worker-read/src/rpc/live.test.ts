@@ -43,7 +43,7 @@ describe("live RPC handlers", () => {
         {
           id: "s1",
           user_id: "u1",
-          username: "alice",
+          name: "alice",
           source: "claude-code",
           started_at: "2026-01-01T00:00:00Z",
           total_messages: 10,
@@ -85,7 +85,7 @@ describe("live RPC handlers", () => {
         {
           id: "ur1",
           user_id: "u1",
-          username: "alice",
+          name: "alice",
           source: "claude-code",
           model: "claude-3-opus",
           input_tokens: 1000,

@@ -31,12 +31,9 @@ export interface SystemStatsRow {
 
 export interface AdminUserRow {
   id: string;
-  username: string;
+  name: string | null;
   email: string;
-  role: string;
-  is_active: boolean;
   created_at: string;
-  last_login_at: string | null;
 }
 
 /** Per-user storage stats row */
@@ -85,8 +82,6 @@ export interface GetSystemStatsRequest {
 
 export interface ListAdminUsersRequest {
   method: "admin.listUsers";
-  role?: string;
-  isActive?: boolean;
   query?: string;
   limit?: number;
   offset?: number;
@@ -99,8 +94,6 @@ export interface GetAdminUserRequest {
 
 export interface CountUsersRequest {
   method: "admin.countUsers";
-  role?: string;
-  isActive?: boolean;
 }
 
 export interface GetStorageStatsRequest {
@@ -121,73 +114,24 @@ export type AdminRpcRequest =
 // ---------------------------------------------------------------------------
 
 async function handleListAuditLogs(
-  req: ListAuditLogsRequest,
-  db: D1Database
+  _req: ListAuditLogsRequest,
+  _db: D1Database
 ): Promise<Response> {
-  const limit = req.limit ?? 50;
-  const offset = req.offset ?? 0;
-
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-
-  if (req.userId) {
-    conditions.push("user_id = ?");
-    params.push(req.userId);
-  }
-
-  if (req.action) {
-    conditions.push("action = ?");
-    params.push(req.action);
-  }
-
-  if (req.resourceType) {
-    conditions.push("resource_type = ?");
-    params.push(req.resourceType);
-  }
-
-  if (req.fromDate) {
-    conditions.push("created_at >= ?");
-    params.push(req.fromDate);
-  }
-
-  if (req.toDate) {
-    conditions.push("created_at < ?");
-    params.push(req.toDate);
-  }
-
-  let sql = `SELECT id, user_id, action, resource_type, resource_id, details, ip_address, user_agent, created_at
-             FROM audit_logs`;
-
-  if (conditions.length > 0) {
-    sql += ` WHERE ${conditions.join(" AND ")}`;
-  }
-
-  sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-  params.push(limit, offset);
-
-  const results = await db.prepare(sql).bind(...params).all<AuditLogRow>();
-
-  return Response.json({ result: results.results });
+  // audit_logs table does not exist in the current schema
+  // Return empty results until the table is created via migration
+  return Response.json({ result: [] });
 }
 
 async function handleGetAuditLog(
   req: GetAuditLogRequest,
-  db: D1Database
+  _db: D1Database
 ): Promise<Response> {
   if (!req.logId) {
     return Response.json({ error: "logId is required" }, { status: 400 });
   }
 
-  const result = await db
-    .prepare(
-      `SELECT id, user_id, action, resource_type, resource_id, details, ip_address, user_agent, created_at
-       FROM audit_logs
-       WHERE id = ?`
-    )
-    .bind(req.logId)
-    .first<AuditLogRow>();
-
-  return Response.json({ result: result });
+  // audit_logs table does not exist in the current schema
+  return Response.json({ result: null });
 }
 
 async function handleGetSystemStats(db: D1Database): Promise<Response> {
@@ -214,23 +158,13 @@ async function handleListAdminUsers(
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (req.role) {
-    conditions.push("role = ?");
-    params.push(req.role);
-  }
-
-  if (req.isActive !== undefined) {
-    conditions.push("is_active = ?");
-    params.push(req.isActive ? 1 : 0);
-  }
-
   if (req.query) {
-    conditions.push("(username LIKE ? OR email LIKE ?)");
+    conditions.push("(name LIKE ? OR email LIKE ?)");
     const pattern = `%${req.query}%`;
     params.push(pattern, pattern);
   }
 
-  let sql = `SELECT id, username, email, role, is_active, created_at, last_login_at
+  let sql = `SELECT id, name, email, created_at
              FROM users`;
 
   if (conditions.length > 0) {
@@ -255,7 +189,7 @@ async function handleGetAdminUser(
 
   const result = await db
     .prepare(
-      `SELECT id, username, email, role, is_active, created_at, last_login_at
+      `SELECT id, name, email, created_at
        FROM users
        WHERE id = ?`
     )
@@ -266,32 +200,11 @@ async function handleGetAdminUser(
 }
 
 async function handleCountUsers(
-  req: CountUsersRequest,
+  _req: CountUsersRequest,
   db: D1Database
 ): Promise<Response> {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-
-  if (req.role) {
-    conditions.push("role = ?");
-    params.push(req.role);
-  }
-
-  if (req.isActive !== undefined) {
-    conditions.push("is_active = ?");
-    params.push(req.isActive ? 1 : 0);
-  }
-
-  let sql = `SELECT COUNT(*) AS count FROM users`;
-
-  if (conditions.length > 0) {
-    sql += ` WHERE ${conditions.join(" AND ")}`;
-  }
-
-  const result =
-    params.length > 0
-      ? await db.prepare(sql).bind(...params).first<{ count: number }>()
-      : await db.prepare(sql).first<{ count: number }>();
+  const sql = `SELECT COUNT(*) AS count FROM users`;
+  const result = await db.prepare(sql).first<{ count: number }>();
 
   return Response.json({ result: result?.count ?? 0 });
 }

@@ -41,22 +41,7 @@ describe("admin RPC handlers", () => {
   // -------------------------------------------------------------------------
 
   describe("admin.listAuditLogs", () => {
-    it("should return list of audit logs", async () => {
-      const mockLogs = [
-        {
-          id: "al1",
-          user_id: "u1",
-          action: "login",
-          resource_type: "user",
-          resource_id: "u1",
-          details: null,
-          ip_address: "192.168.1.1",
-          user_agent: "Mozilla/5.0",
-          created_at: "2026-01-01T00:00:00Z",
-        },
-      ];
-      db.all.mockResolvedValue({ results: mockLogs });
-
+    it("should return empty array (audit_logs table does not exist)", async () => {
       const request: ListAuditLogsRequest = {
         method: "admin.listAuditLogs",
       };
@@ -64,69 +49,9 @@ describe("admin RPC handlers", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ result: mockLogs });
-    });
-
-    it("should filter by userId", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAuditLogsRequest = {
-        method: "admin.listAuditLogs",
-        userId: "u1",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should filter by action", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAuditLogsRequest = {
-        method: "admin.listAuditLogs",
-        action: "login",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should filter by resourceType", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAuditLogsRequest = {
-        method: "admin.listAuditLogs",
-        resourceType: "user",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should filter by date range", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAuditLogsRequest = {
-        method: "admin.listAuditLogs",
-        fromDate: "2026-01-01T00:00:00Z",
-        toDate: "2026-01-31T00:00:00Z",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should support pagination", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAuditLogsRequest = {
-        method: "admin.listAuditLogs",
-        limit: 10,
-        offset: 20,
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
+      expect(body).toEqual({ result: [] });
+      // Should NOT query DB since table doesn't exist
+      expect(db.prepare).not.toHaveBeenCalled();
     });
   });
 
@@ -135,37 +60,10 @@ describe("admin RPC handlers", () => {
   // -------------------------------------------------------------------------
 
   describe("admin.getAuditLog", () => {
-    it("should return audit log by ID", async () => {
-      const mockLog = {
-        id: "al1",
-        user_id: "u1",
-        action: "login",
-        resource_type: "user",
-        resource_id: "u1",
-        details: '{"ip": "192.168.1.1"}',
-        ip_address: "192.168.1.1",
-        user_agent: "Mozilla/5.0",
-        created_at: "2026-01-01T00:00:00Z",
-      };
-      db.first.mockResolvedValue(mockLog);
-
+    it("should return null (audit_logs table does not exist)", async () => {
       const request: GetAuditLogRequest = {
         method: "admin.getAuditLog",
         logId: "al1",
-      };
-      const response = await handleAdminRpc(request, db);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body).toEqual({ result: mockLog });
-    });
-
-    it("should return null when not found", async () => {
-      db.first.mockResolvedValue(null);
-
-      const request: GetAuditLogRequest = {
-        method: "admin.getAuditLog",
-        logId: "nonexistent",
       };
       const response = await handleAdminRpc(request, db);
       const body = await response.json();
@@ -219,12 +117,9 @@ describe("admin RPC handlers", () => {
       const mockUsers = [
         {
           id: "u1",
-          username: "alice",
+          name: "alice",
           email: "alice@example.com",
-          role: "user",
-          is_active: true,
           created_at: "2026-01-01T00:00:00Z",
-          last_login_at: "2026-01-15T00:00:00Z",
         },
       ];
       db.all.mockResolvedValue({ results: mockUsers });
@@ -237,30 +132,6 @@ describe("admin RPC handlers", () => {
 
       expect(response.status).toBe(200);
       expect(body).toEqual({ result: mockUsers });
-    });
-
-    it("should filter by role", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAdminUsersRequest = {
-        method: "admin.listUsers",
-        role: "admin",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should filter by isActive", async () => {
-      db.all.mockResolvedValue({ results: [] });
-
-      const request: ListAdminUsersRequest = {
-        method: "admin.listUsers",
-        isActive: true,
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
     });
 
     it("should filter by query", async () => {
@@ -297,12 +168,9 @@ describe("admin RPC handlers", () => {
     it("should return user by ID", async () => {
       const mockUser = {
         id: "u1",
-        username: "alice",
+        name: "alice",
         email: "alice@example.com",
-        role: "user",
-        is_active: true,
         created_at: "2026-01-01T00:00:00Z",
-        last_login_at: "2026-01-15T00:00:00Z",
       };
       db.first.mockResolvedValue(mockUser);
 
@@ -344,30 +212,6 @@ describe("admin RPC handlers", () => {
 
       expect(response.status).toBe(200);
       expect(body).toEqual({ result: 1000 });
-    });
-
-    it("should filter by role", async () => {
-      db.first.mockResolvedValue({ count: 10 });
-
-      const request: CountUsersRequest = {
-        method: "admin.countUsers",
-        role: "admin",
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
-    });
-
-    it("should filter by isActive", async () => {
-      db.first.mockResolvedValue({ count: 950 });
-
-      const request: CountUsersRequest = {
-        method: "admin.countUsers",
-        isActive: true,
-      };
-      await handleAdminRpc(request, db);
-
-      expect(db.prepare).toHaveBeenCalled();
     });
 
     it("should return 0 when no result", async () => {

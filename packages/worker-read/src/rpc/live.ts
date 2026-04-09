@@ -13,7 +13,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 export interface ActiveSessionRow {
   id: string;
   user_id: string;
-  username: string;
+  name: string | null;
   source: string;
   started_at: string;
   total_messages: number;
@@ -23,7 +23,7 @@ export interface ActiveSessionRow {
 export interface RecentActivityRow {
   id: string;
   user_id: string;
-  username: string;
+  name: string | null;
   source: string;
   model: string;
   input_tokens: number;
@@ -84,20 +84,21 @@ async function handleGetActiveSessions(
 ): Promise<Response> {
   const limit = req.limit ?? 50;
 
+  // session_records has last_message_at instead of ended_at
+  // "Active" sessions are those with recent activity (within 30 min)
   const sql = `
     SELECT
       sr.id,
       sr.user_id,
-      u.username,
+      u.name,
       sr.source,
       sr.started_at,
       sr.total_messages,
-      COALESCE(sr.ended_at, sr.started_at) AS last_activity_at
+      sr.last_message_at AS last_activity_at
     FROM session_records sr
     JOIN users u ON u.id = sr.user_id
-    WHERE sr.ended_at IS NULL
-      OR sr.ended_at >= datetime('now', '-30 minutes')
-    ORDER BY last_activity_at DESC
+    WHERE sr.last_message_at >= datetime('now', '-30 minutes')
+    ORDER BY sr.last_message_at DESC
     LIMIT ?
   `;
 
@@ -111,7 +112,7 @@ async function handleGetRecentActivity(
   db: D1Database
 ): Promise<Response> {
   const limit = req.limit ?? 50;
-  const conditions = ["ur.created_at >= datetime('now', '-1 hour')"];
+  const conditions = ["ur.hour_start >= datetime('now', '-1 hour')"];
   const params: unknown[] = [];
 
   if (req.userId) {
@@ -128,16 +129,16 @@ async function handleGetRecentActivity(
     SELECT
       ur.id,
       ur.user_id,
-      u.username,
+      u.name,
       ur.source,
       ur.model,
       ur.input_tokens,
       ur.output_tokens,
-      ur.created_at
+      ur.hour_start AS created_at
     FROM usage_records ur
     JOIN users u ON u.id = ur.user_id
     WHERE ${conditions.join(" AND ")}
-    ORDER BY ur.created_at DESC
+    ORDER BY ur.hour_start DESC
     LIMIT ?
   `;
 
@@ -149,12 +150,13 @@ async function handleGetRecentActivity(
 }
 
 async function handleGetLiveStats(db: D1Database): Promise<Response> {
+  // session_records uses last_message_at instead of ended_at
   const sql = `
     SELECT
-      (SELECT COUNT(*) FROM session_records WHERE ended_at IS NULL OR ended_at >= datetime('now', '-30 minutes')) AS active_sessions,
-      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM usage_records WHERE created_at >= datetime('now', '-1 hour')) AS tokens_last_hour,
-      (SELECT COUNT(*) FROM usage_records WHERE created_at >= datetime('now', '-1 hour')) AS requests_last_hour,
-      (SELECT COUNT(DISTINCT user_id) FROM usage_records WHERE created_at >= datetime('now', '-1 hour')) AS unique_users_last_hour
+      (SELECT COUNT(*) FROM session_records WHERE last_message_at >= datetime('now', '-30 minutes')) AS active_sessions,
+      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM usage_records WHERE hour_start >= datetime('now', '-1 hour')) AS tokens_last_hour,
+      (SELECT COUNT(*) FROM usage_records WHERE hour_start >= datetime('now', '-1 hour')) AS requests_last_hour,
+      (SELECT COUNT(DISTINCT user_id) FROM usage_records WHERE hour_start >= datetime('now', '-1 hour')) AS unique_users_last_hour
   `;
 
   const result = await db.prepare(sql).first<LiveStatsRow>();
@@ -170,11 +172,12 @@ async function handleGetUserLiveStats(
     return Response.json({ error: "userId is required" }, { status: 400 });
   }
 
+  // session_records uses last_message_at instead of ended_at
   const sql = `
     SELECT
-      (SELECT COUNT(*) FROM session_records WHERE user_id = ? AND (ended_at IS NULL OR ended_at >= datetime('now', '-30 minutes'))) AS active_sessions,
-      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM usage_records WHERE user_id = ? AND created_at >= datetime('now', '-1 hour')) AS tokens_last_hour,
-      (SELECT COUNT(*) FROM usage_records WHERE user_id = ? AND created_at >= datetime('now', '-1 hour')) AS requests_last_hour
+      (SELECT COUNT(*) FROM session_records WHERE user_id = ? AND last_message_at >= datetime('now', '-30 minutes')) AS active_sessions,
+      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM usage_records WHERE user_id = ? AND hour_start >= datetime('now', '-1 hour')) AS tokens_last_hour,
+      (SELECT COUNT(*) FROM usage_records WHERE user_id = ? AND hour_start >= datetime('now', '-1 hour')) AS requests_last_hour
   `;
 
   const result = await db

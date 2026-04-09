@@ -43,7 +43,7 @@ export interface SeasonTeamRegistrationRow {
   season_id: string;
   team_id: string;
   registered_by: string;
-  created_at: string;
+  registered_at: string;
 }
 
 export interface SeasonSnapshotRow {
@@ -313,7 +313,7 @@ async function handleGetSeasonRegistration(
 
   const result = await db
     .prepare(
-      `SELECT id, season_id, team_id, registered_by, created_at
+      `SELECT id, season_id, team_id, registered_by, registered_at
        FROM season_teams
        WHERE season_id = ? AND team_id = ?`
     )

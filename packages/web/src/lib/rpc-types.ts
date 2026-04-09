@@ -180,7 +180,7 @@ export interface SeasonTeamRegistrationRow {
   season_id: string;
   team_id: string;
   registered_by: string;
-  created_at: string;
+  registered_at: string;
 }
 
 /** Aggregated team token data for snapshot generation */

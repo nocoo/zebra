@@ -12,8 +12,8 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 export interface LeaderboardEntryRow {
   user_id: string;
-  username: string;
-  avatar_url: string | null;
+  name: string | null;
+  image: string | null;
   total_tokens: number;
   rank: number;
 }
@@ -21,7 +21,7 @@ export interface LeaderboardEntryRow {
 export interface TeamLeaderboardEntryRow {
   team_id: string;
   team_name: string;
-  team_avatar_url: string | null;
+  logo_url: string | null;
   total_tokens: number;
   rank: number;
 }
@@ -134,8 +134,8 @@ async function handleGetUserLeaderboard(
   const sql = `
     SELECT
       ss.user_id,
-      u.username,
-      u.avatar_url,
+      u.name,
+      u.image,
       ss.total_tokens,
       RANK() OVER (ORDER BY ss.total_tokens DESC) AS rank
     FROM season_snapshots ss
@@ -168,13 +168,13 @@ async function handleGetTeamLeaderboard(
     SELECT
       t.id AS team_id,
       t.name AS team_name,
-      t.avatar_url AS team_avatar_url,
+      t.logo_url,
       SUM(ss.total_tokens) AS total_tokens,
       RANK() OVER (ORDER BY SUM(ss.total_tokens) DESC) AS rank
     FROM season_snapshots ss
     JOIN teams t ON t.id = ss.team_id
     WHERE ss.season_id = ? AND ss.team_id IS NOT NULL
-    GROUP BY t.id, t.name, t.avatar_url
+    GROUP BY t.id, t.name, t.logo_url
     ORDER BY total_tokens DESC
     LIMIT ? OFFSET ?
   `;
