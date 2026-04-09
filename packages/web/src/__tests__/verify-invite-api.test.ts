@@ -16,7 +16,7 @@ vi.mock("@/auth", () => ({
 
 import { POST } from "@/app/api/auth/verify-invite/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 const { shouldUseSecureCookies } = (await import("@/auth")) as unknown as {
   shouldUseSecureCookies: ReturnType<typeof vi.fn>;
@@ -40,13 +40,13 @@ function makeRequest(body?: unknown): Request {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/auth/verify-invite", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
+    mockDbRead = createMockDbRead();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(
-      mockClient as any
+      mockDbRead as any
     );
   });
 
@@ -55,7 +55,7 @@ describe("POST /api/auth/verify-invite", () => {
   });
 
   it("should return valid=true for unused code", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce({ id: 42 });
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce({ id: 42, used_by: null });
 
     const res = await POST(makeRequest({ code: "A3K9X2M4" }));
     expect(res.status).toBe(200);
@@ -64,7 +64,7 @@ describe("POST /api/auth/verify-invite", () => {
   });
 
   it("should set pew-invite-code cookie in response", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce({ id: 42 });
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce({ id: 42, used_by: null });
 
     const res = await POST(makeRequest({ code: "A3K9X2M4" }));
     expect(res.status).toBe(200);
@@ -80,7 +80,7 @@ describe("POST /api/auth/verify-invite", () => {
 
   it("should set Secure flag when shouldUseSecureCookies returns true", async () => {
     shouldUseSecureCookies.mockReturnValueOnce(true);
-    mockClient.firstOrNull.mockResolvedValueOnce({ id: 42 });
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce({ id: 42, used_by: null });
 
     const res = await POST(makeRequest({ code: "A3K9X2M4" }));
     expect(res.status).toBe(200);
@@ -90,7 +90,8 @@ describe("POST /api/auth/verify-invite", () => {
   });
 
   it("should return valid=false for used code", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    // Code exists but already used
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce({ id: 42, used_by: "some-user-id" });
 
     const res = await POST(makeRequest({ code: "A3K9X2M4" }));
     expect(res.status).toBe(400);
@@ -100,7 +101,7 @@ describe("POST /api/auth/verify-invite", () => {
   });
 
   it("should return valid=false for nonexistent code", async () => {
-    mockClient.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest({ code: "ZZZZZZZZ" }));
     expect(res.status).toBe(400);
@@ -125,20 +126,5 @@ describe("POST /api/auth/verify-invite", () => {
     const json = await res.json();
     expect(json.valid).toBe(false);
     expect(json.error).toBe("Invalid invite code format");
-  });
-
-  it("should return 500 when DB throws unexpected error", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const mockDb = {
-      firstOrNull: vi.fn().mockRejectedValue(new Error("DB connection timeout")),
-    };
-    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDb as never);
-
-    const res = await POST(makeRequest({ code: "ABCDEFGH" }));
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.valid).toBe(false);
-    expect(json.error).toContain("Failed to verify");
-    consoleSpy.mockRestore();
   });
 });

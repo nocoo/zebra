@@ -8,21 +8,6 @@ import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface TeamRow {
-  id: string;
-  name: string;
-  slug: string;
-  invite_code: string;
-  created_by: string;
-  created_at: string;
-  member_count: number;
-  logo_url: string | null;
-}
-
-// ---------------------------------------------------------------------------
 // GET — list user's teams
 // ---------------------------------------------------------------------------
 
@@ -34,18 +19,10 @@ export async function GET(request: Request) {
 
   try {
     const dbRead = await getDbRead();
-    const result = await dbRead.query<TeamRow>(
-      `SELECT t.id, t.name, t.slug, t.invite_code, t.created_by, t.created_at, t.logo_url,
-         (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) AS member_count
-       FROM teams t
-       JOIN team_members tm ON tm.team_id = t.id
-       WHERE tm.user_id = ?
-       ORDER BY t.created_at DESC`,
-      [authResult.userId],
-    );
+    const teams = await dbRead.listTeamsForUser(authResult.userId);
 
     return NextResponse.json({
-      teams: result.results.map((t) => ({
+      teams: teams.map((t) => ({
         ...t,
         logo_url: t.logo_url ?? null,
       })),
@@ -100,10 +77,7 @@ export async function POST(request: Request) {
     const dbWrite = await getDbWrite();
 
     // Ensure unique slug
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM teams WHERE slug = ?",
-      [slug],
-    );
+    const existing = await dbRead.checkTeamSlugExists(slug);
 
     const finalSlug = existing
       ? `${slug}-${crypto.randomUUID().slice(0, 6)}`

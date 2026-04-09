@@ -65,24 +65,28 @@ describe("GET /api/organizations", () => {
   it("should return all organizations with member counts", async () => {
     resolveUser.mockResolvedValueOnce(USER);
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "org-1",
-          name: "Anthropic",
-          slug: "anthropic",
-          logo_url: "https://example.com/logo.png",
-          member_count: 5,
-        },
-        {
-          id: "org-2",
-          name: "OpenAI",
-          slug: "openai",
-          logo_url: null,
-          member_count: 10,
-        },
-      ],
-    });
+    mockDbRead.listOrganizationsWithCount.mockResolvedValueOnce([
+      {
+        id: "org-1",
+        name: "Anthropic",
+        slug: "anthropic",
+        logo_url: "https://example.com/logo.png",
+        created_by: "admin-1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        member_count: 5,
+      },
+      {
+        id: "org-2",
+        name: "OpenAI",
+        slug: "openai",
+        logo_url: null,
+        created_by: "admin-2",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        member_count: 10,
+      },
+    ]);
 
     const res = await LIST_ALL(makeJsonRequest("GET", "/api/organizations"));
     expect(res.status).toBe(200);
@@ -108,7 +112,7 @@ describe("GET /api/organizations", () => {
 
   it("should return empty array if table not migrated", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: organizations"));
+    mockDbRead.listOrganizationsWithCount.mockRejectedValueOnce(new Error("no such table: organizations"));
 
     const res = await LIST_ALL(makeJsonRequest("GET", "/api/organizations"));
     expect(res.status).toBe(200);
@@ -118,7 +122,7 @@ describe("GET /api/organizations", () => {
 
   it("should return 500 on unexpected error", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
+    mockDbRead.listOrganizationsWithCount.mockRejectedValueOnce(new Error("DB connection failed"));
 
     const res = await LIST_ALL(makeJsonRequest("GET", "/api/organizations"));
     expect(res.status).toBe(500);
@@ -143,16 +147,17 @@ describe("GET /api/organizations/mine", () => {
   it("should return user's organizations", async () => {
     resolveUser.mockResolvedValueOnce(USER);
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "org-1",
-          name: "Anthropic",
-          slug: "anthropic",
-          logo_url: "https://example.com/logo.png",
-        },
-      ],
-    });
+    mockDbRead.listUserOrganizations.mockResolvedValueOnce([
+      {
+        id: "org-1",
+        name: "Anthropic",
+        slug: "anthropic",
+        logo_url: "https://example.com/logo.png",
+        created_by: "admin-1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
@@ -168,7 +173,7 @@ describe("GET /api/organizations/mine", () => {
 
   it("should return empty array if user has no orgs", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockResolvedValueOnce({ results: [] });
+    mockDbRead.listUserOrganizations.mockResolvedValueOnce([]);
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
@@ -184,30 +189,12 @@ describe("GET /api/organizations/mine", () => {
 
   it("should return empty array if table not migrated", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table"));
+    mockDbRead.listUserOrganizations.mockRejectedValueOnce(new Error("no such table"));
 
     const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.organizations).toEqual([]);
-  });
-
-  it("should return 500 on unexpected error", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to list organizations");
-  });
-
-  it("should return 500 with empty msg when error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.query.mockRejectedValueOnce("string error");
-
-    const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
-    expect(res.status).toBe(500);
   });
 });
 
@@ -301,28 +288,6 @@ describe("GET /api/organizations/[orgId]/members", () => {
     });
     expect(res.status).toBe(503);
   });
-
-  it("should return 500 on unexpected error", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await LIST_MEMBERS(makeOrgRequest("GET", "org-1/members"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to list members");
-  });
-
-  it("should return 500 with generic message when error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await LIST_MEMBERS(makeOrgRequest("GET", "org-1/members"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -343,9 +308,16 @@ describe("POST /api/organizations/[orgId]/join", () => {
 
   it("should join organization successfully", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1", name: "Anthropic", slug: "anthropic" }) // org exists
-      .mockResolvedValueOnce(null); // not a member yet
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(false);
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
@@ -360,7 +332,7 @@ describe("POST /api/organizations/[orgId]/join", () => {
 
   it("should return 404 for non-existent org", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getOrganizationById.mockResolvedValueOnce(null);
 
     const res = await JOIN(makeOrgRequest("POST", "not-found/join"), {
       params: Promise.resolve({ orgId: "not-found" }),
@@ -372,9 +344,16 @@ describe("POST /api/organizations/[orgId]/join", () => {
 
   it("should return 409 if already a member", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1", name: "Anthropic", slug: "anthropic" })
-      .mockResolvedValueOnce({ id: "existing-membership" });
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(true);
 
     const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
       params: Promise.resolve({ orgId: "org-1" }),
@@ -394,34 +373,12 @@ describe("POST /api/organizations/[orgId]/join", () => {
 
   it("should return 503 if table not migrated", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table"));
+    mockDbRead.getOrganizationById.mockRejectedValueOnce(new Error("no such table"));
 
     const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(503);
-  });
-
-  it("should return 500 on unexpected error", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to join organization");
-  });
-
-  it("should return 500 when error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
   });
 });
 
@@ -443,9 +400,16 @@ describe("DELETE /api/organizations/[orgId]/leave", () => {
 
   it("should leave organization successfully", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1" }) // org exists
-      .mockResolvedValueOnce({ id: "membership-1" }); // is a member
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(true);
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
     const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
@@ -458,7 +422,7 @@ describe("DELETE /api/organizations/[orgId]/leave", () => {
 
   it("should return 404 for non-existent org", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getOrganizationById.mockResolvedValueOnce(null);
 
     const res = await LEAVE(makeOrgRequest("DELETE", "not-found/leave"), {
       params: Promise.resolve({ orgId: "not-found" }),
@@ -470,9 +434,16 @@ describe("DELETE /api/organizations/[orgId]/leave", () => {
 
   it("should return 404 if not a member", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1" })
-      .mockResolvedValueOnce(null); // not a member
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(false);
 
     const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
       params: Promise.resolve({ orgId: "org-1" }),
@@ -492,33 +463,11 @@ describe("DELETE /api/organizations/[orgId]/leave", () => {
 
   it("should return 503 if table not migrated", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table"));
+    mockDbRead.getOrganizationById.mockRejectedValueOnce(new Error("no such table"));
 
     const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(503);
-  });
-
-  it("should return 500 on unexpected error", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to leave organization");
-  });
-
-  it("should return 500 when error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
   });
 });

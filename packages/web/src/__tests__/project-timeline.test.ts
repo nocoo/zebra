@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -20,12 +20,12 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
 
 describe("GET /api/projects/timeline", () => {
   let GET: (req: Request) => Promise<Response>;
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockClient as any);
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as any);
     const mod = await import("@/app/api/projects/timeline/route");
     GET = mod.GET;
   });
@@ -58,19 +58,20 @@ describe("GET /api/projects/timeline", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
+    mockDbRead.getProjectTimeline.mockResolvedValueOnce([]);
 
     const res = await GET(
       new Request("http://localhost:7020/api/projects/timeline?from=2026-03-01"),
     );
     expect(res.status).toBe(200);
 
-    // Verify the `to` param was defaulted (tomorrow)
-    const [, params] = mockClient.query.mock.calls[0]!;
-    expect(params[0]).toBe("u1");
-    expect(params[1]).toBe("2026-03-01");
+    // Verify getProjectTimeline was called with correct params
+    expect(mockDbRead.getProjectTimeline).toHaveBeenCalledTimes(1);
+    const [userId, from, to] = mockDbRead.getProjectTimeline.mock.calls[0]!;
+    expect(userId).toBe("u1");
+    expect(from).toBe("2026-03-01");
     // to should be a date string (tomorrow), not undefined
-    expect(params[2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("should return timeline grouped by date and project", async () => {
@@ -79,15 +80,12 @@ describe("GET /api/projects/timeline", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({
-      results: [
-        { date: "2026-03-01", project_name: "pew", session_count: 5 },
-        { date: "2026-03-01", project_name: "work-api", session_count: 3 },
-        { date: "2026-03-01", project_name: "Unassigned", session_count: 2 },
-        { date: "2026-03-02", project_name: "pew", session_count: 8 },
-      ],
-      meta: {},
-    });
+    mockDbRead.getProjectTimeline.mockResolvedValueOnce([
+      { date: "2026-03-01", project_name: "pew", session_count: 5 },
+      { date: "2026-03-01", project_name: "work-api", session_count: 3 },
+      { date: "2026-03-01", project_name: "Unassigned", session_count: 2 },
+      { date: "2026-03-02", project_name: "pew", session_count: 8 },
+    ]);
 
     const res = await GET(
       new Request(
@@ -108,13 +106,13 @@ describe("GET /api/projects/timeline", () => {
     });
   });
 
-  it("should pass correct params to SQL query", async () => {
+  it("should call getProjectTimeline with correct params", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({
       userId: "u1",
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
+    mockDbRead.getProjectTimeline.mockResolvedValueOnce([]);
 
     await GET(
       new Request(
@@ -122,12 +120,12 @@ describe("GET /api/projects/timeline", () => {
       ),
     );
 
-    expect(mockClient.query).toHaveBeenCalledTimes(1);
-    const [sql, params] = mockClient.query.mock.calls[0]!;
-    expect(params).toEqual(["u1", "2026-03-01", "2026-03-14"]);
-    expect(sql).toContain("COALESCE(p.name, 'Unassigned')");
-    expect(sql).toContain("DATE(sr.started_at)");
-    expect(sql).toContain("GROUP BY date, project_name");
+    expect(mockDbRead.getProjectTimeline).toHaveBeenCalledTimes(1);
+    expect(mockDbRead.getProjectTimeline).toHaveBeenCalledWith(
+      "u1",
+      "2026-03-01",
+      "2026-03-14",
+    );
   });
 
   it("should return empty timeline when no sessions in range", async () => {
@@ -136,7 +134,7 @@ describe("GET /api/projects/timeline", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockResolvedValueOnce({ results: [], meta: {} });
+    mockDbRead.getProjectTimeline.mockResolvedValueOnce([]);
 
     const res = await GET(
       new Request(
@@ -155,7 +153,7 @@ describe("GET /api/projects/timeline", () => {
       email: "test@example.com",
     });
 
-    mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.getProjectTimeline.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(
       new Request(

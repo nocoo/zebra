@@ -13,12 +13,10 @@ export async function GET() {
   const dbRead = await getDbRead();
 
   try {
-    const row = await dbRead.firstOrNull<{ value: string }>(
-      "SELECT value FROM app_settings WHERE key = 'require_invite_code'"
-    );
+    const value = await dbRead.getAppSetting("require_invite_code");
 
     // Default to true if setting doesn't exist
-    const required = row?.value !== "false";
+    const required = value !== "false";
 
     return NextResponse.json(
       { required },

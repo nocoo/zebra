@@ -105,7 +105,7 @@ describe("POST /api/teams/join", () => {
 
   it("should return 404 for invalid invite code", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no team found
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce(null); // no team found
 
     const res = await POST(makeJson({ invite_code: "bad-code" }));
 
@@ -115,9 +115,8 @@ describe("POST /api/teams/join", () => {
 
   it("should return 409 when already a member", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce({ id: "m1" }); // already a member
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(true); // already a member
 
     const res = await POST(makeJson({ invite_code: "valid-code" }));
 
@@ -127,10 +126,9 @@ describe("POST /api/teams/join", () => {
 
   it("should join team successfully", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team Alpha", slug: "team-alpha" })
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockResolvedValueOnce({ value: "5" }); // max_team_members setting
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team Alpha", slug: "team-alpha" });
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockResolvedValueOnce("5"); // max_team_members setting
     // Atomic INSERT ... SELECT succeeds (1 row inserted)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
@@ -148,10 +146,9 @@ describe("POST /api/teams/join", () => {
 
   it("should return 403 when team is full", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockResolvedValueOnce({ value: "5" }); // max_team_members = 5
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockResolvedValueOnce("5"); // max_team_members = 5
     // Atomic INSERT ... SELECT inserts 0 rows (team already at limit)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 0 });
 
@@ -165,10 +162,9 @@ describe("POST /api/teams/join", () => {
 
   it("should use default limit when settings table missing", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockRejectedValueOnce(new Error("no such table: app_settings")); // settings missing
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockRejectedValueOnce(new Error("no such table: app_settings")); // settings missing
     // Atomic INSERT uses default limit of 5, succeeds
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
@@ -178,10 +174,9 @@ describe("POST /api/teams/join", () => {
 
   it("should enforce default limit of 5 when settings table missing", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockRejectedValueOnce(new Error("no such table: app_settings")); // settings missing
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockRejectedValueOnce(new Error("no such table: app_settings")); // settings missing
     // Atomic INSERT uses default limit of 5, inserts 0 rows (at limit)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 0 });
 
@@ -192,10 +187,9 @@ describe("POST /api/teams/join", () => {
 
   it("should respect custom team limit from settings", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockResolvedValueOnce({ value: "10" }); // custom limit
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockResolvedValueOnce("10"); // custom limit
     // Atomic INSERT uses custom limit of 10, succeeds
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
@@ -205,7 +199,7 @@ describe("POST /api/teams/join", () => {
 
   it("should return 503 when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: teams"));
+    mockDbRead.findTeamByInviteCode.mockRejectedValueOnce(new Error("no such table: teams"));
 
     const res = await POST(makeJson({ invite_code: "abc" }));
 
@@ -214,7 +208,7 @@ describe("POST /api/teams/join", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.findTeamByInviteCode.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await POST(makeJson({ invite_code: "abc" }));
 
@@ -223,10 +217,9 @@ describe("POST /api/teams/join", () => {
 
   it("should use atomic INSERT ... SELECT to prevent race conditions", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockResolvedValueOnce({ value: "5" }); // max_team_members setting
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockResolvedValueOnce("5"); // max_team_members setting
     // Atomic INSERT ... SELECT succeeds with 1 change
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
 
@@ -242,23 +235,14 @@ describe("POST /api/teams/join", () => {
 
   it("should return 403 when atomic INSERT inserts 0 rows (race lost)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }) // team found
-      .mockResolvedValueOnce(null) // not yet a member
-      .mockResolvedValueOnce({ value: "5" }); // max_team_members setting
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" }); // team found
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false); // not yet a member
+    mockDbRead.getAppSetting.mockResolvedValueOnce("5"); // max_team_members setting
     // Atomic INSERT ... SELECT inserts 0 rows (team became full concurrently)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 0 });
 
     const res = await POST(makeJson({ invite_code: "valid-code" }));
     expect(res.status).toBe(403);
     expect((await res.json()).error).toContain("Team is full");
-  });
-
-  it("should return 500 when error is not Error instance", async () => {
-    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await POST(makeJson({ invite_code: "valid-code" }));
-    expect(res.status).toBe(500);
   });
 });

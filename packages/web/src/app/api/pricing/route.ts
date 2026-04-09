@@ -11,7 +11,6 @@ import { getDbRead } from "@/lib/db";
 import {
   getDefaultPricingMap,
   buildPricingMap,
-  type DbPricingRow,
 } from "@/lib/pricing";
 
 export async function GET(request: Request) {
@@ -23,9 +22,7 @@ export async function GET(request: Request) {
   const db = await getDbRead();
 
   try {
-    const { results } = await db.query<DbPricingRow>(
-      "SELECT * FROM model_pricing ORDER BY model ASC"
-    );
+    const results = await db.listModelPricing();
     const pricingMap = buildPricingMap(results);
     return NextResponse.json(pricingMap);
   } catch (err) {

@@ -9,20 +9,6 @@ import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface DeviceRow {
-  device_id: string;
-  alias: string | null;
-  first_seen: string | null;
-  last_seen: string | null;
-  total_tokens: number;
-  sources: string | null; // GROUP_CONCAT result
-  model_count: number;
-}
-
-// ---------------------------------------------------------------------------
 // GET /api/devices
 // ---------------------------------------------------------------------------
 
@@ -36,49 +22,9 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    // Use a UNION to include devices that only exist in device_aliases
-    // (i.e. user set an alias but device has no usage records yet/anymore).
-    const result = await dbRead.query<DeviceRow>(
-      `SELECT
-        d.device_id,
-        da.alias,
-        d.first_seen,
-        d.last_seen,
-        d.total_tokens,
-        d.sources,
-        d.model_count
-      FROM (
-        SELECT
-          device_id,
-          MIN(hour_start) AS first_seen,
-          MAX(hour_start) AS last_seen,
-          SUM(total_tokens) AS total_tokens,
-          GROUP_CONCAT(DISTINCT source) AS sources,
-          COUNT(DISTINCT model) AS model_count
-        FROM usage_records
-        WHERE user_id = ?
-        GROUP BY device_id
-        UNION ALL
-        SELECT
-          da2.device_id,
-          NULL AS first_seen,
-          NULL AS last_seen,
-          0 AS total_tokens,
-          NULL AS sources,
-          0 AS model_count
-        FROM device_aliases da2
-        WHERE da2.user_id = ?
-          AND da2.device_id NOT IN (
-            SELECT DISTINCT device_id FROM usage_records WHERE user_id = ?
-          )
-      ) d
-      LEFT JOIN device_aliases da
-        ON da.user_id = ? AND da.device_id = d.device_id
-      ORDER BY d.total_tokens DESC, d.device_id`,
-      [userId, userId, userId, userId]
-    );
+    const results = await dbRead.listDevices(userId);
 
-    const devices = result.results.map((row) => ({
+    const devices = results.map((row) => ({
       device_id: row.device_id,
       alias: row.alias,
       first_seen: row.first_seen ?? null,
@@ -145,16 +91,7 @@ export async function PUT(request: Request) {
 
   try {
     // 1. Verify device exists in user's usage_records OR device_aliases
-    const deviceExists = await dbRead.firstOrNull<{ device_id: string }>(
-      `SELECT device_id FROM (
-        SELECT DISTINCT device_id FROM usage_records
-        WHERE user_id = ? AND device_id = ?
-        UNION
-        SELECT device_id FROM device_aliases
-        WHERE user_id = ? AND device_id = ?
-      ) LIMIT 1`,
-      [userId, deviceId, userId, deviceId]
-    );
+    const deviceExists = await dbRead.checkDeviceExists(userId, deviceId);
 
     if (!deviceExists) {
       return NextResponse.json(
@@ -164,12 +101,7 @@ export async function PUT(request: Request) {
     }
 
     // 2. Check for duplicate alias (case-insensitive, different device)
-    const duplicate = await dbRead.firstOrNull<{ device_id: string }>(
-      `SELECT device_id FROM device_aliases
-       WHERE user_id = ? AND LOWER(TRIM(alias)) = LOWER(TRIM(?)) AND device_id != ?
-       LIMIT 1`,
-      [userId, alias, deviceId]
-    );
+    const duplicate = await dbRead.checkDuplicateDeviceAlias(userId, alias, deviceId);
 
     if (duplicate) {
       return NextResponse.json(
@@ -228,13 +160,9 @@ export async function DELETE(request: Request) {
 
   try {
     // 1. Ensure device has zero usage records — refuse to delete otherwise
-    const hasRecords = await dbRead.firstOrNull<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM usage_records
-       WHERE user_id = ? AND device_id = ?`,
-      [userId, deviceId]
-    );
+    const hasRecords = await dbRead.checkDeviceHasRecords(userId, deviceId);
 
-    if (hasRecords && hasRecords.cnt > 0) {
+    if (hasRecords) {
       return NextResponse.json(
         { error: "Cannot delete a device that has usage records" },
         { status: 409 }

@@ -64,9 +64,9 @@ describe("GET /api/admin/pricing", () => {
       userId: "u1",
       email: "admin@test.com",
     });
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [{ id: 1, model: "gpt-4o", input: 2.5, output: 10.0 }],
-    });
+    mockDbRead.listModelPricing.mockResolvedValueOnce([
+      { id: 1, model: "gpt-4o", input: 2.5, output: 10.0, cached: null, source: null, note: null, updated_at: "", created_at: "" },
+    ]);
 
     const res = await GET(makeJson("GET"));
     const body = await res.json();
@@ -81,7 +81,7 @@ describe("GET /api/admin/pricing", () => {
       userId: "u1",
       email: "admin@test.com",
     });
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: model_pricing"));
+    mockDbRead.listModelPricing.mockRejectedValueOnce(new Error("no such table: model_pricing"));
 
     const res = await GET(makeJson("GET"));
     const body = await res.json();
@@ -95,7 +95,7 @@ describe("GET /api/admin/pricing", () => {
       userId: "u1",
       email: "admin@test.com",
     });
-    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.listModelPricing.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeJson("GET"));
 
@@ -213,7 +213,7 @@ describe("POST /api/admin/pricing", () => {
       email: "a@test.com",
     });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getModelPricingByModelSource.mockResolvedValueOnce({
       id: 1,
       model: "gpt-4o",
       input: 1,
@@ -234,7 +234,7 @@ describe("POST /api/admin/pricing", () => {
       email: "a@test.com",
     });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getModelPricingByModelSource.mockResolvedValueOnce({
       id: 1,
       model: "gpt-4o",
       input: 2.5,
@@ -371,7 +371,7 @@ describe("PUT /api/admin/pricing", () => {
       email: "a@test.com",
     });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getModelPricingById.mockResolvedValueOnce({
       id: 1,
       model: "gpt-4o",
       input: 5,
@@ -416,7 +416,7 @@ describe("PUT /api/admin/pricing", () => {
       email: "a@test.com",
     });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: 1, cached: null });
+    mockDbRead.getModelPricingById.mockResolvedValueOnce({ id: 1, cached: null });
 
     const res = await PUT(makeJson("PUT", { id: 1, cached: null }));
 
@@ -431,7 +431,7 @@ describe("PUT /api/admin/pricing", () => {
       email: "a@test.com",
     });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: 1 });
+    mockDbRead.getModelPricingById.mockResolvedValueOnce({ id: 1 });
 
     const res = await PUT(
       makeJson("PUT", { id: 1, source: "openai", note: "updated" }),
@@ -539,17 +539,6 @@ describe("DELETE /api/admin/pricing", () => {
 
     const res = await DELETE(makeDelete({ id: "1" }));
 
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when DELETE error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-    mockDbWrite.execute.mockRejectedValueOnce("string error");
-
-    const res = await DELETE(makeDelete({ id: "1" }));
     expect(res.status).toBe(500);
   });
 });

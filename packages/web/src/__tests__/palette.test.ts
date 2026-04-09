@@ -30,6 +30,7 @@ describe("palette", () => {
     expect(chart.magenta).toBe("hsl(var(--chart-2))");
     expect(chart.acid).toBe("hsl(var(--chart-8))");
     expect(chart.teal).toBe("hsl(var(--chart-9))");
+    expect(chart.sky).toBe("hsl(var(--chart-10))");
   });
 
   it("should export semantic aliases", () => {

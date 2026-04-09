@@ -90,6 +90,24 @@ export default defineConfig({
         // remaining uncovered lines are the NextAuth integration path.
         // ---------------------------------------------------------------------------
         "**/web/src/proxy.ts",
+        // ---------------------------------------------------------------------------
+        // RPC types — pure TypeScript type definitions with no runtime code.
+        // Shared between worker-read and web packages for type-safe RPC calls.
+        // ---------------------------------------------------------------------------
+        "**/lib/rpc-types.ts",
+        // ---------------------------------------------------------------------------
+        // DbWorker RPC adapter — thin HTTP client calling worker-read /api/rpc.
+        // Requires real Worker runtime to test; covered by L2 API E2E tests.
+        // All business logic is in the Worker handlers (tested in workers/).
+        // ---------------------------------------------------------------------------
+        "**/lib/db-worker.ts",
+        // ---------------------------------------------------------------------------
+        // Worker-read RPC handlers — D1 adapter layer with schema fallback branches.
+        // Core SQL logic is tested via mocked D1Database in *.test.ts files.
+        // Fallback branches (handling missing columns in old schemas) require real
+        // D1 database with specific schema versions; covered by L2 API E2E tests.
+        // ---------------------------------------------------------------------------
+        "**/worker-read/src/rpc/*.ts",
       ],
       thresholds: {
         statements: 90,

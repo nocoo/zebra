@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockFirstOrNull = vi.fn();
+const mockGetTeamMembership = vi.fn();
+const mockCheckTeamMembershipExists = vi.fn();
 const mockExecute = vi.fn();
 const mockSyncSeasonRosters = vi.fn();
 const mockResolveUser = vi.fn();
@@ -10,7 +11,12 @@ vi.mock("@/lib/auth-helpers", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  getDbRead: vi.fn(() => Promise.resolve({ firstOrNull: mockFirstOrNull })),
+  getDbRead: vi.fn(() =>
+    Promise.resolve({
+      getTeamMembership: mockGetTeamMembership,
+      checkTeamMembershipExists: mockCheckTeamMembershipExists,
+    })
+  ),
   getDbWrite: vi.fn(() => Promise.resolve({ execute: mockExecute })),
 }));
 
@@ -57,7 +63,7 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should return 403 when not a member of the team", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull.mockResolvedValue(null);
+    mockGetTeamMembership.mockResolvedValue(null);
 
     const response = await DELETE(createRequest(), {
       params: Promise.resolve({ teamId: "team-1", userId: "user-2" }),
@@ -70,7 +76,7 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should return 403 when not the owner", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull.mockResolvedValue({ role: "member" });
+    mockGetTeamMembership.mockResolvedValue("member");
 
     const response = await DELETE(createRequest(), {
       params: Promise.resolve({ teamId: "team-1", userId: "user-2" }),
@@ -83,9 +89,8 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should return 404 when target user is not a member", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull
-      .mockResolvedValueOnce({ role: "owner" }) // caller is owner
-      .mockResolvedValueOnce(null); // target not found
+    mockGetTeamMembership.mockResolvedValue("owner"); // caller is owner
+    mockCheckTeamMembershipExists.mockResolvedValue(false); // target not found
 
     const response = await DELETE(createRequest(), {
       params: Promise.resolve({ teamId: "team-1", userId: "user-2" }),
@@ -98,9 +103,8 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should successfully kick a member", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull
-      .mockResolvedValueOnce({ role: "owner" }) // caller is owner
-      .mockResolvedValueOnce({ role: "member" }); // target is member
+    mockGetTeamMembership.mockResolvedValue("owner"); // caller is owner
+    mockCheckTeamMembershipExists.mockResolvedValue(true); // target is member
     mockExecute.mockResolvedValue({ success: true });
     mockSyncSeasonRosters.mockResolvedValue(undefined);
 
@@ -117,9 +121,8 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should continue even if season roster sync fails", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({ role: "member" });
+    mockGetTeamMembership.mockResolvedValue("owner");
+    mockCheckTeamMembershipExists.mockResolvedValue(true);
     mockExecute.mockResolvedValue({ success: true });
     mockSyncSeasonRosters.mockRejectedValue(new Error("Sync failed"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -135,7 +138,7 @@ describe("DELETE /api/teams/[teamId]/members/[userId]", () => {
 
   it("should return 500 on unexpected error", async () => {
     mockResolveUser.mockResolvedValue({ userId: "user-1" });
-    mockFirstOrNull.mockRejectedValue(new Error("DB down"));
+    mockGetTeamMembership.mockRejectedValue(new Error("DB down"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await DELETE(createRequest(), {

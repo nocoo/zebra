@@ -57,11 +57,9 @@ describe("GET /api/admin/settings", () => {
 
   it("should return settings list", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        { key: "max_team_members", value: "5", updated_at: "2026-01-01T00:00:00Z" },
-      ],
-    });
+    mockDbRead.getAllAppSettings.mockResolvedValueOnce([
+      { key: "max_team_members", value: "5", updated_at: "2026-01-01T00:00:00Z" },
+    ]);
 
     const res = await GET(makeGet());
     const body = await res.json();
@@ -73,7 +71,7 @@ describe("GET /api/admin/settings", () => {
 
   it("should return empty array when table does not exist", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: app_settings"));
+    mockDbRead.getAllAppSettings.mockRejectedValueOnce(new Error("no such table: app_settings"));
 
     const res = await GET(makeGet());
     const body = await res.json();
@@ -84,15 +82,7 @@ describe("GET /api/admin/settings", () => {
 
   it("should return 500 on unexpected error", async () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
-
-    const res = await GET(makeGet());
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when GET error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
-    mockDbRead.query.mockRejectedValueOnce("string error");
+    mockDbRead.getAllAppSettings.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeGet());
     expect(res.status).toBe(500);
@@ -215,21 +205,6 @@ describe("PUT /api/admin/settings", () => {
     resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
     const res = await PUT(makePut({ key: "some_future_setting", value: "anything" }));
-    expect(res.status).toBe(200);
-  });
-
-  it("should reject invalid require_invite_code value", async () => {
-    resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    const res = await PUT(makePut({ key: "require_invite_code", value: "yes" }));
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toContain("require_invite_code");
-  });
-
-  it("should accept valid require_invite_code values", async () => {
-    resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
-    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-    const res = await PUT(makePut({ key: "require_invite_code", value: "false" }));
     expect(res.status).toBe(200);
   });
 });

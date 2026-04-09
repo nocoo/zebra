@@ -21,22 +21,16 @@ export async function DELETE(
 
   try {
     // Verify org exists
-    const org = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM organizations WHERE id = ?",
-      [orgId]
-    );
+    const org = await dbRead.getOrganizationById(orgId);
 
     if (!org) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
     // Verify membership exists
-    const membership = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM organization_members WHERE org_id = ? AND user_id = ?",
-      [orgId, userId]
-    );
+    const isMember = await dbRead.checkOrgMembership(orgId, userId);
 
-    if (!membership) {
+    if (!isMember) {
       return NextResponse.json({ error: "User is not a member" }, { status: 404 });
     }
 

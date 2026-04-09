@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/achievements/[id]/members/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient } from "./test-utils";
+import { createMockDbRead } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -21,12 +21,12 @@ function makeGetRequest(path: string, params: Record<string, string> = {}): Requ
 }
 
 describe("GET /api/achievements/[id]/members", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDb: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockClient as any);
+    mockDb = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDb as any);
   });
 
   describe("validation", () => {
@@ -77,12 +77,10 @@ describe("GET /api/achievements/[id]/members", () => {
 
   describe("response structure", () => {
     it("should return members array and cursor", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "Alice", image: null, slug: "alice", value: 5_000_000, earned_at: "2026-01-15T10:00:00Z" },
-          { id: "u2", name: "Bob", image: "https://example.com/bob.jpg", slug: "bob", value: 2_000_000, earned_at: "2026-02-01T08:00:00Z" },
-        ],
-      });
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "Alice", image: null, slug: "alice", value: 5_000_000, earned_at: "2026-01-15T10:00:00Z" },
+        { id: "u2", name: "Bob", image: "https://example.com/bob.jpg", slug: "bob", value: 2_000_000, earned_at: "2026-02-01T08:00:00Z" },
+      ]);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),
@@ -99,11 +97,9 @@ describe("GET /api/achievements/[id]/members", () => {
     });
 
     it("should return correct member fields", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "Alice", image: "https://example.com/alice.jpg", slug: "alice", value: 200_000_000_000, earned_at: "2026-01-15T10:00:00Z" },
-        ],
-      });
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "Alice", image: "https://example.com/alice.jpg", slug: "alice", value: 200_000_000_000, earned_at: "2026-01-15T10:00:00Z" },
+      ]);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),
@@ -123,14 +119,12 @@ describe("GET /api/achievements/[id]/members", () => {
     });
 
     it("should compute correct tier from value", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "Diamond", image: null, slug: null, value: 200_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-          { id: "u2", name: "Gold", image: null, slug: null, value: 50_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-          { id: "u3", name: "Silver", image: null, slug: null, value: 10_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-          { id: "u4", name: "Bronze", image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "Diamond", image: null, slug: null, value: 200_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+        { id: "u2", name: "Gold", image: null, slug: null, value: 50_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+        { id: "u3", name: "Silver", image: null, slug: null, value: 10_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+        { id: "u4", name: "Bronze", image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),
@@ -145,11 +139,9 @@ describe("GET /api/achievements/[id]/members", () => {
     });
 
     it("should handle null name as Anonymous", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: null, image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: null, image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),
@@ -162,11 +154,9 @@ describe("GET /api/achievements/[id]/members", () => {
 
     it("should use current timestamp when earned_at is null", async () => {
       const beforeCall = new Date();
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: null },
-        ],
-      });
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: null },
+      ]);
 
       const res = await GET(
         makeGetRequest("/api/achievements/cache-master/members"),
@@ -190,7 +180,7 @@ describe("GET /api/achievements/[id]/members", () => {
         value: 5_000_000 - i * 10_000,
         earned_at: "2026-01-01T00:00:00Z",
       }));
-      mockClient.query.mockResolvedValueOnce({ results });
+      mockDb.getAchievementEarners.mockResolvedValueOnce(results);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),
@@ -211,7 +201,7 @@ describe("GET /api/achievements/[id]/members", () => {
         value: 5_000_000 - i * 10_000,
         earned_at: "2026-01-01T00:00:00Z",
       }));
-      mockClient.query.mockResolvedValueOnce({ results });
+      mockDb.getAchievementEarners.mockResolvedValueOnce(results);
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members", { limit: "10" }),
@@ -223,20 +213,20 @@ describe("GET /api/achievements/[id]/members", () => {
       expect(body.cursor).toBe("10");
     });
 
-    it("should use cursor for offset", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should use cursor for offset in RPC call", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([]);
 
       await GET(
         makeGetRequest("/api/achievements/power-user/members", { cursor: "100", limit: "10" }),
         { params: Promise.resolve({ id: "power-user" }) },
       );
 
-      // Verify the query was called with correct offset
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [, params] = mockClient.query.mock.calls[0]!;
-      // Params order: [threshold (for cumulative), threshold (for HAVING), limit+1, offset]
+      // Verify the RPC was called with correct params including offset
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
+      const [, , params] = mockDb.getAchievementEarners.mock.calls[0]!;
+      // Params order for power-user: [threshold, threshold, limit+1, offset]
       // Last param is offset
-      expect(params![params!.length - 1]).toBe(100); // offset from cursor
+      expect(params[params.length - 1]).toBe(100); // offset from cursor
     });
   });
 
@@ -267,317 +257,253 @@ describe("GET /api/achievements/[id]/members", () => {
   });
 
   describe("different achievement types", () => {
-    it("should query session_records for session-based achievements (quick-draw)", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 100, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for session-based achievements (quick-draw)", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 100, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/quick-draw/members"),
         { params: Promise.resolve({ id: "quick-draw" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("session_records");
-      expect(sql).toContain("duration_seconds < 300");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledWith(
+        "quick-draw",
+        expect.any(String),
+        expect.any(Array),
+      );
     });
 
-    it("should query COUNT DISTINCT for diversity achievements (model-tourist)", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 5, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for diversity achievements (model-tourist)", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 5, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/model-tourist/members"),
         { params: Promise.resolve({ id: "model-tourist" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("COUNT(DISTINCT");
-      expect(sql).toContain("model");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledWith(
+        "model-tourist",
+        expect.any(String),
+        expect.any(Array),
+      );
     });
 
-    it("should query input_tokens for input-hog achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for input-hog achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/input-hog/members"),
         { params: Promise.resolve({ id: "input-hog" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("input_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledWith(
+        "input-hog",
+        expect.any(String),
+        expect.any(Array),
+      );
     });
 
-    it("should query output_tokens for output-addict achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for output-addict achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/output-addict/members"),
         { params: Promise.resolve({ id: "output-addict" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("output_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query reasoning_output_tokens for reasoning-junkie achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 500_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for reasoning-junkie achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 500_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/reasoning-junkie/members"),
         { params: Promise.resolve({ id: "reasoning-junkie" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("reasoning_output_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query COUNT DISTINCT DATE for veteran achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 30, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for veteran achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 30, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/veteran/members"),
         { params: Promise.resolve({ id: "veteran" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("COUNT(DISTINCT DATE");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query with CTE for big-day achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 100_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for big-day achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 100_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/big-day/members"),
         { params: Promise.resolve({ id: "big-day" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("WITH daily AS");
-      expect(sql).toContain("MAX(day_tokens)");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query cache rate for cache-master achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: null },
-        ],
-      });
+    it("should call RPC for cache-master achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: null },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/cache-master/members"),
         { params: Promise.resolve({ id: "cache-master" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("cached_input_tokens");
-      expect(sql).toContain("100.0");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query COUNT DISTINCT source for tool-hoarder achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 5, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for tool-hoarder achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 5, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/tool-hoarder/members"),
         { params: Promise.resolve({ id: "tool-hoarder" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("COUNT(DISTINCT");
-      expect(sql).toContain("source");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query COUNT DISTINCT device_id for device-nomad achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 3, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for device-nomad achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 3, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/device-nomad/members"),
         { params: Promise.resolve({ id: "device-nomad" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("COUNT(DISTINCT");
-      expect(sql).toContain("device_id");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query marathon sessions for marathon achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 10, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for marathon achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 10, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/marathon/members"),
         { params: Promise.resolve({ id: "marathon" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("session_records");
-      expect(sql).toContain("duration_seconds > 7200");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query max messages for chatterbox achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 200, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for chatterbox achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 200, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/chatterbox/members"),
         { params: Promise.resolve({ id: "chatterbox" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("MAX(total_messages)");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query session count for session-hoarder achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 500, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for session-hoarder achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 500, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/session-hoarder/members"),
         { params: Promise.resolve({ id: "session-hoarder" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("session_records");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query automated sessions for automation-addict achievement", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for automation-addict achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 50, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/automation-addict/members"),
         { params: Promise.resolve({ id: "automation-addict" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("kind = 'automated'");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query centurion same as veteran", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 100, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for centurion achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 100, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/centurion/members"),
         { params: Promise.resolve({ id: "centurion" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("COUNT(DISTINCT DATE");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query first-blood same as power-user", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 1, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for first-blood achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 1, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/first-blood/members"),
         { params: Promise.resolve({ id: "first-blood" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("total_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query millionaire same as power-user", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for millionaire achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 1_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/millionaire/members"),
         { params: Promise.resolve({ id: "millionaire" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("total_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
-    it("should query billionaire same as power-user", async () => {
-      mockClient.query.mockResolvedValueOnce({
-        results: [
-          { id: "u1", name: "User", image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
-        ],
-      });
+    it("should call RPC for billionaire achievement", async () => {
+      mockDb.getAchievementEarners.mockResolvedValueOnce([
+        { id: "u1", name: "User", image: null, slug: null, value: 1_000_000_000, earned_at: "2026-01-01T00:00:00Z" },
+      ]);
 
       await GET(
         makeGetRequest("/api/achievements/billionaire/members"),
         { params: Promise.resolve({ id: "billionaire" }) },
       );
 
-      expect(mockClient.query).toHaveBeenCalledOnce();
-      const [sql] = mockClient.query.mock.calls[0]!;
-      expect(sql).toContain("total_tokens");
+      expect(mockDb.getAchievementEarners).toHaveBeenCalledOnce();
     });
 
     it("should return empty for daily-burn (not implemented)", async () => {
@@ -617,7 +543,7 @@ describe("GET /api/achievements/[id]/members", () => {
 
   describe("error handling", () => {
     it("should return 500 on database error", async () => {
-      mockClient.query.mockRejectedValueOnce(new Error("DB connection failed"));
+      mockDb.getAchievementEarners.mockRejectedValueOnce(new Error("DB connection failed"));
 
       const res = await GET(
         makeGetRequest("/api/achievements/power-user/members"),

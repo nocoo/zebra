@@ -10,7 +10,6 @@
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
 import { getDbRead, getDbWrite } from "@/lib/db";
-import type { DbPricingRow } from "@/lib/pricing";
 
 // ---------------------------------------------------------------------------
 // GET — list all DB pricing rows
@@ -25,9 +24,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const { results } = await dbRead.query<DbPricingRow>(
-      "SELECT * FROM model_pricing ORDER BY model ASC, source ASC"
-    );
+    const results = await dbRead.listModelPricing();
     return NextResponse.json({ rows: results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
@@ -100,10 +97,7 @@ export async function POST(request: Request) {
       [model.trim(), input, output, cached ?? null, source ?? null, note ?? null]
     );
 
-    const row = await dbRead.firstOrNull<DbPricingRow>(
-      "SELECT * FROM model_pricing WHERE model = ? AND (source = ? OR (source IS NULL AND ? IS NULL))",
-      [model.trim(), source ?? null, source ?? null]
-    );
+    const row = await dbRead.getModelPricingByModelSource(model.trim(), source ?? null);
 
     return NextResponse.json(row, { status: 201 });
   } catch (err) {
@@ -213,10 +207,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Entry not found" }, { status: 404 });
     }
 
-    const row = await dbRead.firstOrNull<DbPricingRow>(
-      "SELECT * FROM model_pricing WHERE id = ?",
-      [id]
-    );
+    const row = await dbRead.getModelPricingById(id);
 
     return NextResponse.json(row);
   } catch (err) {

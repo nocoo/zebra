@@ -147,6 +147,11 @@ function sourceKey(source: Source): keyof SessionSyncResult["sources"] | null {
     case "vscode-copilot": return null;
     case "copilot-cli": return null;
     case "hermes": return null;
+    default: {
+      // Exhaustiveness check — if Source adds a new value, this will fail to compile
+      const _exhaustive: never = source;
+      throw new Error(`Unknown source: ${_exhaustive}`);
+    }
   }
 }
 

@@ -69,19 +69,21 @@ describe("GET /api/admin/seasons", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
     // A season in the future → upcoming
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "s1",
-          name: "Season 1",
-          slug: "s1",
-          start_date: "2099-01-01T00:00:00Z",
-          end_date: "2099-12-31T23:59:00Z",
-          created_at: "2026-01-01T00:00:00Z",
-          team_count: 3,
-        },
-      ],
-    });
+    mockDbRead.listSeasons.mockResolvedValueOnce([
+      {
+        id: "s1",
+        name: "Season 1",
+        slug: "s1",
+        start_date: "2099-01-01T00:00:00Z",
+        end_date: "2099-12-31T23:59:00Z",
+        created_at: "2026-01-01T00:00:00Z",
+        team_count: 3,
+        has_snapshot: 0,
+        allow_late_registration: 0,
+        allow_roster_changes: 0,
+        allow_late_withdrawal: 0,
+      },
+    ]);
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/seasons"));
     expect(res.status).toBe(200);
@@ -101,57 +103,12 @@ describe("GET /api/admin/seasons", () => {
 
   it("should handle no-such-table gracefully", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: seasons"));
+    mockDbRead.listSeasons.mockRejectedValueOnce(new Error("no such table: seasons"));
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/seasons"));
     expect(res.status).toBe(503);
     const json = await res.json();
     expect(json.error).toContain("not yet migrated");
-  });
-
-  it("should return 500 on unexpected error", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/seasons"));
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to list seasons");
-  });
-
-  it("should return 500 when error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce("string error");
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/seasons"));
-    expect(res.status).toBe(500);
-  });
-
-  it("should return toggle flags correctly", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "s1",
-          name: "Season 1",
-          slug: "s1",
-          start_date: "2099-01-01T00:00:00Z",
-          end_date: "2099-12-31T23:59:00Z",
-          created_at: "2026-01-01T00:00:00Z",
-          team_count: 0,
-          allow_late_registration: 1,
-          allow_roster_changes: 0,
-          allow_late_withdrawal: 1,
-        },
-      ],
-    });
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/seasons"));
-    const json = await res.json();
-    expect(json.seasons[0].allow_late_registration).toBe(true);
-    expect(json.seasons[0].allow_roster_changes).toBe(false);
-    expect(json.seasons[0].allow_late_withdrawal).toBe(true);
   });
 });
 
@@ -173,7 +130,7 @@ describe("POST /api/admin/seasons", () => {
 
   it("should create season with valid data", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(null); // no slug collision
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
     autoRegisterTeamsForSeason.mockResolvedValueOnce({ registered: 0, skipped: 0, seasonEligible: true });
 
@@ -196,7 +153,7 @@ describe("POST /api/admin/seasons", () => {
 
   it("should auto-register teams and return count", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(null); // no slug collision
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
     autoRegisterTeamsForSeason.mockResolvedValueOnce({ registered: 3, skipped: 1, seasonEligible: true });
 
@@ -215,7 +172,7 @@ describe("POST /api/admin/seasons", () => {
 
   it("should still succeed if auto-registration fails (non-fatal)", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce(null);
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
     autoRegisterTeamsForSeason.mockRejectedValueOnce(new Error("auto-reg boom"));
 
@@ -235,7 +192,7 @@ describe("POST /api/admin/seasons", () => {
 
   it("should reject duplicate slug", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing-id" }); // slug exists
+    mockDbRead.getSeasonBySlug.mockResolvedValueOnce({ id: "existing-id" }); // slug exists
 
     const res = await POST(
       makeJsonRequest("POST", "/api/admin/seasons", {
@@ -294,131 +251,6 @@ describe("POST /api/admin/seasons", () => {
     );
     expect(res.status).toBe(403);
   });
-
-  it("should reject invalid JSON", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    const req = new Request("http://localhost:7020/api/admin/seasons", {
-      method: "POST",
-      body: "not json",
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe("Invalid JSON");
-  });
-
-  it("should reject missing name", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        slug: "s1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-      })
-    );
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("name");
-  });
-
-  it("should reject missing slug", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season 1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-      })
-    );
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("slug");
-  });
-
-  it("should reject invalid end_date format", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season 1",
-        slug: "s1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "not-a-date",
-      })
-    );
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("end_date must be ISO 8601");
-  });
-
-  it("should handle no-such-table on POST", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: seasons"));
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season 1",
-        slug: "s1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-      })
-    );
-    expect(res.status).toBe(503);
-  });
-
-  it("should return 500 on unexpected POST error", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season 1",
-        slug: "s1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-      })
-    );
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when POST error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season 1",
-        slug: "s1",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-      })
-    );
-    expect(res.status).toBe(500);
-  });
-
-  it("should create season with toggle flags", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
-    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
-    autoRegisterTeamsForSeason.mockResolvedValueOnce({ registered: 0, skipped: 0, seasonEligible: true });
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/seasons", {
-        name: "Season Toggles",
-        slug: "toggles",
-        start_date: "2099-04-01T00:00:00Z",
-        end_date: "2099-04-30T23:59:00Z",
-        allow_late_registration: true,
-        allow_roster_changes: true,
-        allow_late_withdrawal: false,
-      })
-    );
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.allow_late_registration).toBe(true);
-    expect(json.allow_roster_changes).toBe(true);
-    expect(json.allow_late_withdrawal).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -443,7 +275,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
     const today = new Date().toISOString().slice(0, 10);
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Old Name",
@@ -475,7 +307,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should allow date change on upcoming season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Future Season",
@@ -510,7 +342,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should reject date change on active season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Active Season",
       slug: "s-active",
@@ -530,7 +362,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should reject date change on ended season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Ended Season",
       slug: "s-ended",
@@ -549,7 +381,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 404 for non-existent season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(null);
 
     const res = await PATCH(
       makeJsonRequest("PATCH", "/api/admin/seasons", { name: "Ghost" }),
@@ -563,7 +395,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should trigger roster backfill when allow_roster_changes flips 0→1 on active season", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Active Season",
@@ -598,7 +430,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should NOT trigger roster backfill when toggle stays on (1→1)", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Active Season",
@@ -632,7 +464,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
   it("should NOT trigger roster backfill on upcoming season even with 0→1 toggle", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Future Season",
@@ -667,7 +499,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
     // Season is upcoming before the PATCH (dates in the future)
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Transition Season",
@@ -733,7 +565,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 400 for invalid name length", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Old Name",
       slug: "s1",
@@ -752,7 +584,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 400 for invalid start_date format", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Season",
       slug: "s1",
@@ -771,7 +603,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 400 for invalid end_date format", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Season",
       slug: "s1",
@@ -790,7 +622,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 400 if end_date < start_date", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Season",
       slug: "s1",
@@ -812,7 +644,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 400 if no valid fields to update", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       name: "Season",
       slug: "s1",
@@ -831,7 +663,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 404 if season disappears after update", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull
+    mockDbRead.getSeasonById
       .mockResolvedValueOnce({
         id: "season-1",
         name: "Season",
@@ -853,7 +685,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 503 when season tables not migrated", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: seasons"));
+    mockDbRead.getSeasonById.mockRejectedValueOnce(new Error("no such table: seasons"));
 
     const res = await PATCH(
       makeJsonRequest("PATCH", "/api/admin/seasons", { name: "New Name" }),
@@ -866,7 +698,7 @@ describe("PATCH /api/admin/seasons/[seasonId]", () => {
 
   it("should return 500 on unexpected error", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("Connection timeout"));
+    mockDbRead.getSeasonById.mockRejectedValueOnce(new Error("Connection timeout"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await PATCH(

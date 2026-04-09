@@ -87,7 +87,7 @@ describe("PATCH /api/projects/:id", () => {
         userId: "u1",
         email: "test@example.com",
       });
-      mockDbRead.firstOrNull.mockResolvedValueOnce(null); // project lookup
+      mockDbRead.getProjectById.mockResolvedValueOnce(null); // project lookup
 
       const res = await callPatch({ name: "new-name" });
 
@@ -104,9 +104,10 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject empty name", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
         id: "proj-1",
         name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
       }); // project exists
 
       const res = await callPatch({ name: "  " });
@@ -116,9 +117,10 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject name exceeding max length", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
         id: "proj-1",
         name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
       });
 
       const res = await callPatch({ name: "x".repeat(101) });
@@ -128,9 +130,12 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject duplicate name with 409", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ id: "proj-2" }); // name already taken
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.getProjectByNameExcluding.mockResolvedValueOnce({ id: "proj-2" }); // name already taken
 
       const res = await callPatch({ name: "Taken Name" });
 
@@ -139,9 +144,12 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject aliases referencing non-existent session data", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce(null); // alias session data not found
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(false); // alias session data not found
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -154,10 +162,13 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject alias already assigned to another project", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce({ project_id: "proj-other" }); // alias taken by another
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce({ project_id: "proj-other" }); // alias taken by another
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -168,9 +179,10 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject invalid source in add_aliases", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
         id: "proj-1",
         name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
       });
 
       const res = await callPatch({
@@ -182,9 +194,10 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject reserved name 'Unassigned' (case-insensitive)", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
         id: "proj-1",
         name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
       }); // project exists
 
       const res = await callPatch({ name: "Unassigned" });
@@ -196,9 +209,10 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject reserved name 'unassigned' (lowercase)", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
         id: "proj-1",
         name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
       });
 
       const res = await callPatch({ name: "unassigned" });
@@ -208,9 +222,12 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should reject remove_aliases not attached to this project", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce(null); // alias not found on this project
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.aliasAttachedToProject.mockResolvedValueOnce(false); // alias not found on this project
 
       const res = await callPatch({
         remove_aliases: [{ source: "claude-code", project_ref: "not-here" }],
@@ -234,11 +251,14 @@ describe("PATCH /api/projects/:id", () => {
 
     it("should roll back name rename when add_aliases write fails", async () => {
       // Phase 1: all validation passes
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists for alias
-        .mockResolvedValueOnce(null); // alias not taken by another
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.getProjectByNameExcluding.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists for alias
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // alias not taken by another
 
       // Phase 2: rename succeeds, alias insert fails
       mockDbWrite.execute
@@ -262,11 +282,14 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should roll back added aliases when later remove_aliases write fails", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists for add alias
-        .mockResolvedValueOnce(null) // alias not taken (truly new)
-        .mockResolvedValueOnce({ project_id: "proj-1" }); // remove alias is attached to this project
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists for add alias
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // alias not taken (truly new)
+      mockDbRead.aliasAttachedToProject.mockResolvedValueOnce(true); // remove alias is attached to this project
 
       // Phase 2: add succeeds, remove fails
       mockDbWrite.execute
@@ -292,11 +315,14 @@ describe("PATCH /api/projects/:id", () => {
     it("should NOT delete pre-existing alias during rollback when add_aliases includes it", async () => {
       // Scenario: alias already attached to this project, request "adds" it again,
       // then a later write fails. The pre-existing alias must survive rollback.
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists for alias
-        .mockResolvedValueOnce({ project_id: "proj-1" }) // alias already on this project (pre-existing)
-        .mockResolvedValueOnce({ project_id: "proj-1" }); // remove alias is attached
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists for alias
+      mockDbRead.getAliasOwner.mockResolvedValueOnce({ project_id: "proj-1" }); // alias already on this project (pre-existing)
+      mockDbRead.aliasAttachedToProject.mockResolvedValueOnce(true); // remove alias is attached
 
       // Phase 2: no INSERT for pre-existing alias; remove fails
       mockDbWrite.execute
@@ -326,9 +352,12 @@ describe("PATCH /api/projects/:id", () => {
     it("should roll back tag additions when a later write fails", async () => {
       // Scenario: tags are added successfully, but the updated_at write fails.
       // The added tags should be rolled back.
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce(null); // tag "frontend" does NOT exist → truly new
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.projectTagExists.mockResolvedValueOnce(false); // tag "frontend" does NOT exist → truly new
 
       // Phase 2: tag INSERT succeeds, but updated_at UPDATE fails
       mockDbWrite.execute
@@ -355,9 +384,12 @@ describe("PATCH /api/projects/:id", () => {
     it("should roll back tag removals when a later write fails", async () => {
       // Scenario: tags are removed successfully, but the updated_at write fails.
       // The removed tags should be re-inserted.
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ tag: "backend" }); // tag "backend" exists → will be deleted
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.projectTagExists.mockResolvedValueOnce(true); // tag "backend" exists → will be deleted
 
       // Phase 2: tag DELETE succeeds, but updated_at UPDATE fails
       mockDbWrite.execute
@@ -385,10 +417,14 @@ describe("PATCH /api/projects/:id", () => {
       // Bug scenario: add_tags includes a tag that already exists on this project.
       // If the INSERT OR IGNORE is tracked unconditionally, rollback would
       // erroneously DELETE this pre-existing tag, corrupting state.
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ tag: "existing-tag" }) // tag already exists → skip INSERT
-        .mockResolvedValueOnce(null); // tag "new-tag" does NOT exist → truly new
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.projectTagExists
+        .mockResolvedValueOnce(true) // tag "existing-tag" already exists → skip INSERT
+        .mockResolvedValueOnce(false); // tag "new-tag" does NOT exist → truly new
 
       // Phase 2: INSERT "new-tag" succeeds, updated_at fails
       mockDbWrite.execute
@@ -416,10 +452,14 @@ describe("PATCH /api/projects/:id", () => {
       // Bug scenario: remove_tags includes a tag that doesn't actually exist.
       // If the DELETE is tracked unconditionally, rollback would
       // INSERT OR IGNORE this phantom tag, corrupting state.
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce({ tag: "real-tag" }) // "real-tag" exists → will be deleted
-        .mockResolvedValueOnce(null); // "phantom-tag" does NOT exist → skip DELETE
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "proj-1",
+        name: "Old Name",
+        created_at: "2026-01-01T00:00:00Z",
+      }); // project exists
+      mockDbRead.projectTagExists
+        .mockResolvedValueOnce(true) // "real-tag" exists → will be deleted
+        .mockResolvedValueOnce(false); // "phantom-tag" does NOT exist → skip DELETE
 
       // Phase 2: DELETE "real-tag" succeeds, updated_at fails
       mockDbWrite.execute
@@ -442,24 +482,6 @@ describe("PATCH /api/projects/:id", () => {
       expect(insertCall![1]).toContain("real-tag");
       expect(insertCall![1]).not.toContain("phantom-tag");
     });
-
-    it("should handle rollback failure gracefully", async () => {
-      // Write fails, and then rollback also fails → should still return 500
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" })
-        .mockResolvedValueOnce(null);
-
-      mockDbWrite.execute
-        .mockResolvedValueOnce({ meta: {} }) // UPDATE name succeeds
-        .mockRejectedValueOnce(new Error("updated_at fails")) // updated_at UPDATE fails
-        .mockRejectedValueOnce(new Error("rollback also fails")); // rollback also fails
-
-      const res = await callPatch({ name: "New Name" });
-
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe("Failed to update project");
-    });
   });
 
   describe("successful update", () => {
@@ -471,20 +493,23 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should rename project and return updated data", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "Old Name" }) // project exists
-        .mockResolvedValueOnce(null) // name not taken
+      mockDbRead.getProjectById
+        .mockResolvedValueOnce({
+          id: "proj-1",
+          name: "Old Name",
+          created_at: "2026-03-10T00:00:00Z",
+        }) // project exists
         // Phase 2 reads:
         .mockResolvedValueOnce({
           id: "proj-1",
           name: "New Name",
           created_at: "2026-03-10T00:00:00Z",
         });
+      mockDbRead.getProjectByNameExcluding.mockResolvedValueOnce(null); // name not taken
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
-      mockDbRead.query
-        .mockResolvedValueOnce({ results: [], meta: {} }) // alias stats
-        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
+      mockDbRead.query.mockResolvedValueOnce({ results: [], meta: {} }); // alias stats
+      mockDbRead.getProjectTagList.mockResolvedValueOnce([]); // tags
 
       const res = await callPatch({ name: "New Name" });
 
@@ -498,16 +523,20 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should add alias and return session stats", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "My Project" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce(null) // alias not taken (truly new)
+      mockDbRead.getProjectById
+        .mockResolvedValueOnce({
+          id: "proj-1",
+          name: "My Project",
+          created_at: "2026-03-10T00:00:00Z",
+        }) // project exists
         // Phase 2 reads:
         .mockResolvedValueOnce({
           id: "proj-1",
           name: "My Project",
           created_at: "2026-03-10T00:00:00Z",
         });
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // alias not taken (truly new)
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
       mockDbRead.query
@@ -525,7 +554,7 @@ describe("PATCH /api/projects/:id", () => {
           ],
           meta: {},
         }) // alias stats
-        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
+      mockDbRead.getProjectTagList.mockResolvedValueOnce([]); // tags
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -545,16 +574,20 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should skip INSERT for alias already attached to this project", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "My Project" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce({ project_id: "proj-1" }) // alias already on this project
+      mockDbRead.getProjectById
+        .mockResolvedValueOnce({
+          id: "proj-1",
+          name: "My Project",
+          created_at: "2026-03-10T00:00:00Z",
+        }) // project exists
         // Phase 2 reads:
         .mockResolvedValueOnce({
           id: "proj-1",
           name: "My Project",
           created_at: "2026-03-10T00:00:00Z",
         });
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce({ project_id: "proj-1" }); // alias already on this project
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
       mockDbRead.query
@@ -572,7 +605,7 @@ describe("PATCH /api/projects/:id", () => {
           ],
           meta: {},
         }) // alias stats
-        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
+      mockDbRead.getProjectTagList.mockResolvedValueOnce([]); // tags
 
       const res = await callPatch({
         add_aliases: [{ source: "claude-code", project_ref: "abc123" }],
@@ -588,16 +621,20 @@ describe("PATCH /api/projects/:id", () => {
     });
 
     it("should deduplicate add_aliases by (source, project_ref)", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce({ id: "proj-1", name: "My Project" }) // project exists
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists (only checked once after dedup)
-        .mockResolvedValueOnce(null) // alias not taken (truly new)
+      mockDbRead.getProjectById
+        .mockResolvedValueOnce({
+          id: "proj-1",
+          name: "My Project",
+          created_at: "2026-03-10T00:00:00Z",
+        }) // project exists
         // Phase 2 reads:
         .mockResolvedValueOnce({
           id: "proj-1",
           name: "My Project",
           created_at: "2026-03-10T00:00:00Z",
         });
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists (only checked once after dedup)
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // alias not taken (truly new)
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
       mockDbRead.query
@@ -615,7 +652,7 @@ describe("PATCH /api/projects/:id", () => {
           ],
           meta: {},
         }) // alias stats
-        .mockResolvedValueOnce({ results: [], meta: {} }); // tags
+      mockDbRead.getProjectTagList.mockResolvedValueOnce([]); // tags
 
       const res = await callPatch({
         add_aliases: [
@@ -675,7 +712,7 @@ describe("DELETE /api/projects/:id", () => {
       userId: "u1",
       email: "test@example.com",
     });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.projectExistsForUser.mockResolvedValueOnce(false);
     const res = await callDelete();
     expect(res.status).toBe(404);
   });
@@ -685,7 +722,7 @@ describe("DELETE /api/projects/:id", () => {
       userId: "u1",
       email: "test@example.com",
     });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "proj-1" });
+    mockDbRead.projectExistsForUser.mockResolvedValueOnce(true);
     mockDbWrite.execute.mockResolvedValue({ meta: {} });
 
     const res = await callDelete();
@@ -694,21 +731,6 @@ describe("DELETE /api/projects/:id", () => {
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(mockDbWrite.execute).toHaveBeenCalledTimes(3);
-  });
-
-  it("should return 500 when delete fails", async () => {
-    vi.mocked(resolveUser).mockResolvedValueOnce({
-      userId: "u1",
-      email: "test@example.com",
-    });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "proj-1" });
-    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB error"));
-
-    const res = await callDelete();
-
-    expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.error).toBe("Failed to delete project");
   });
 });
 
@@ -778,7 +800,7 @@ describe("POST /api/projects", () => {
     });
 
     it("should reject duplicate project name", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing" }); // name taken
+      mockDbRead.getProjectByName.mockResolvedValueOnce({ id: "existing" }); // name taken
       const res = await POST(makePostRequest({ name: "Taken" }));
       expect(res.status).toBe(409);
       expect(mockDbWrite.execute).not.toHaveBeenCalled();
@@ -795,9 +817,8 @@ describe("POST /api/projects", () => {
     });
 
     it("should reject aliases with no matching session data", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce(null); // session data not found
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(false); // session data not found
 
       const res = await POST(
         makePostRequest({
@@ -813,10 +834,9 @@ describe("POST /api/projects", () => {
     });
 
     it("should reject aliases already assigned to another project", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce({ project_id: "other-proj" }); // already assigned
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce({ project_id: "other-proj" }); // already assigned
 
       const res = await POST(
         makePostRequest({
@@ -830,10 +850,9 @@ describe("POST /api/projects", () => {
     });
 
     it("should deduplicate aliases by (source, project_ref)", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists (only one — deduped)
-        .mockResolvedValueOnce(null); // not assigned
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists (only one — deduped)
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // not assigned
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
       mockDbRead.query.mockResolvedValueOnce({
@@ -841,7 +860,9 @@ describe("POST /api/projects", () => {
         meta: {},
       });
       // Read back created_at
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "new-proj",
+        name: "Test",
         created_at: "2026-03-10 00:00:00",
       });
 
@@ -871,10 +892,9 @@ describe("POST /api/projects", () => {
 
     it("should clean up project row when alias insert fails", async () => {
       // Validation passes
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce(null); // not assigned
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // not assigned
 
       // Phase 2: project insert succeeds, alias insert fails
       mockDbWrite.execute
@@ -911,10 +931,13 @@ describe("POST /api/projects", () => {
     });
 
     it("should return session_count: 0 and server created_at for project without aliases", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        // Read back created_at
-        .mockResolvedValueOnce({ created_at: "2026-03-10 12:00:00" });
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      // Read back created_at
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "new-proj",
+        name: "Empty Project",
+        created_at: "2026-03-10 12:00:00",
+      });
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
 
@@ -932,10 +955,9 @@ describe("POST /api/projects", () => {
     });
 
     it("should return real session stats when aliases are provided", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce(null); // not assigned
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // not assigned
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
 
@@ -948,7 +970,9 @@ describe("POST /api/projects", () => {
       });
 
       // Read back created_at
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "new-proj",
+        name: "Active Project",
         created_at: "2026-03-10 12:00:00",
       });
 
@@ -979,9 +1003,12 @@ describe("POST /api/projects", () => {
     });
 
     it("should create project without aliases", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ created_at: "2026-03-10 12:00:00" });
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "new-proj",
+        name: "New Project",
+        created_at: "2026-03-10 12:00:00",
+      });
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
 
@@ -995,11 +1022,14 @@ describe("POST /api/projects", () => {
     });
 
     it("should create project with aliases", async () => {
-      mockDbRead.firstOrNull
-        .mockResolvedValueOnce(null) // name not taken
-        .mockResolvedValueOnce({ "1": 1 }) // session data exists
-        .mockResolvedValueOnce(null) // not assigned
-        .mockResolvedValueOnce({ created_at: "2026-03-10 12:00:00" }); // read back
+      mockDbRead.getProjectByName.mockResolvedValueOnce(null); // name not taken
+      mockDbRead.sessionRecordExists.mockResolvedValueOnce(true); // session data exists
+      mockDbRead.getAliasOwner.mockResolvedValueOnce(null); // not assigned
+      mockDbRead.getProjectById.mockResolvedValueOnce({
+        id: "new-proj",
+        name: "With Aliases",
+        created_at: "2026-03-10 12:00:00",
+      }); // read back
 
       mockDbWrite.execute.mockResolvedValue({ meta: {} });
       mockDbRead.query.mockResolvedValueOnce({

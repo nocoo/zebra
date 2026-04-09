@@ -18,44 +18,7 @@ import {
   buildPricingMap,
   lookupPricing,
   estimateCost,
-  type DbPricingRow,
 } from "@/lib/pricing";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface DeviceSummaryRow {
-  device_id: string;
-  alias: string | null;
-  first_seen: string;
-  last_seen: string;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-  reasoning_output_tokens: number;
-  sources: string; // GROUP_CONCAT result
-  models: string; // GROUP_CONCAT result
-}
-
-interface CostDetailRow {
-  device_id: string;
-  source: string;
-  model: string;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
-
-interface TimelineRow {
-  date: string;
-  device_id: string;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,78 +79,24 @@ export async function GET(request: Request) {
     );
   }
   const { fromDate, toDate } = dateRange;
-  const params = [userId, fromDate, toDate];
 
-  // 3. Execute queries
+  // 3. Execute queries via RPC
   const db = await getDbRead();
 
   try {
     // Summary query — one row per device with aggregated stats + alias
-    const summaryResult = await db.query<DeviceSummaryRow>(
-      `SELECT
-        ur.device_id,
-        da.alias,
-        MIN(ur.hour_start) AS first_seen,
-        MAX(ur.hour_start) AS last_seen,
-        SUM(ur.total_tokens) AS total_tokens,
-        SUM(ur.input_tokens) AS input_tokens,
-        SUM(ur.output_tokens) AS output_tokens,
-        SUM(ur.cached_input_tokens) AS cached_input_tokens,
-        SUM(ur.reasoning_output_tokens) AS reasoning_output_tokens,
-        GROUP_CONCAT(DISTINCT ur.source) AS sources,
-        GROUP_CONCAT(DISTINCT ur.model) AS models
-      FROM usage_records ur
-      LEFT JOIN device_aliases da
-        ON da.user_id = ur.user_id AND da.device_id = ur.device_id
-      WHERE ur.user_id = ?
-        AND ur.hour_start >= ?
-        AND ur.hour_start < ?
-      GROUP BY ur.device_id
-      ORDER BY total_tokens DESC`,
-      params
-    );
+    const summaryRows = await db.getDeviceSummary(userId, fromDate, toDate);
 
     // Cost detail query — per (device, source, model) for accurate pricing
-    const costResult = await db.query<CostDetailRow>(
-      `SELECT
-        ur.device_id,
-        ur.source,
-        ur.model,
-        SUM(ur.input_tokens) AS input_tokens,
-        SUM(ur.output_tokens) AS output_tokens,
-        SUM(ur.cached_input_tokens) AS cached_input_tokens
-      FROM usage_records ur
-      WHERE ur.user_id = ?
-        AND ur.hour_start >= ?
-        AND ur.hour_start < ?
-      GROUP BY ur.device_id, ur.source, ur.model`,
-      params
-    );
+    const costRows = await db.getDeviceCostDetails(userId, fromDate, toDate);
 
     // Timeline query — daily totals per device
-    const timelineResult = await db.query<TimelineRow>(
-      `SELECT
-        date(ur.hour_start) AS date,
-        ur.device_id,
-        SUM(ur.total_tokens) AS total_tokens,
-        SUM(ur.input_tokens) AS input_tokens,
-        SUM(ur.output_tokens) AS output_tokens,
-        SUM(ur.cached_input_tokens) AS cached_input_tokens
-      FROM usage_records ur
-      WHERE ur.user_id = ?
-        AND ur.hour_start >= ?
-        AND ur.hour_start < ?
-      GROUP BY date(ur.hour_start), ur.device_id
-      ORDER BY date ASC`,
-      params
-    );
+    const timelineRows = await db.getDeviceTimeline(userId, fromDate, toDate);
 
     // 4. Build pricing map (merge static defaults + DB overrides)
     let pricingMap;
     try {
-      const { results: pricingRows } = await db.query<DbPricingRow>(
-        "SELECT * FROM model_pricing ORDER BY model ASC"
-      );
+      const pricingRows = await db.listModelPricing();
       pricingMap = buildPricingMap(pricingRows);
     } catch {
       // Table might not exist yet — fall back to static defaults
@@ -197,7 +106,7 @@ export async function GET(request: Request) {
     // 5. Compute estimated_cost per device from cost detail rows
     const costByDevice = new Map<string, number>();
 
-    for (const row of costResult.results) {
+    for (const row of costRows) {
       const pricing = lookupPricing(pricingMap, row.model, row.source);
       const { totalCost } = estimateCost(
         row.input_tokens,
@@ -212,7 +121,7 @@ export async function GET(request: Request) {
     }
 
     // 6. Assemble response
-    const devices = summaryResult.results.map((row) => ({
+    const devices = summaryRows.map((row) => ({
       device_id: row.device_id,
       alias: row.alias,
       first_seen: row.first_seen,
@@ -227,7 +136,7 @@ export async function GET(request: Request) {
       models: row.models ? row.models.split(",") : [],
     }));
 
-    const timeline = timelineResult.results.map((row) => ({
+    const timeline = timelineRows.map((row) => ({
       date: row.date,
       device_id: row.device_id,
       total_tokens: row.total_tokens,

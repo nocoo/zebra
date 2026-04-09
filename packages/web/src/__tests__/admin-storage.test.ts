@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as dbModule from "@/lib/db";
+import { createMockDbRead } from "./test-utils";
 
-const mockQuery = vi.fn();
 const mockResolveAdmin = vi.fn();
 
 vi.mock("@/lib/admin", () => ({
@@ -8,12 +9,16 @@ vi.mock("@/lib/admin", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  getDbRead: vi.fn(() => Promise.resolve({ query: mockQuery })),
+  getDbRead: vi.fn(),
+  getDbWrite: vi.fn(),
+  resetDb: vi.fn(),
 }));
 
 import { GET } from "@/app/api/admin/storage/route";
 
 describe("GET /api/admin/storage", () => {
+  let mockDbRead: ReturnType<typeof createMockDbRead>;
+
   function createRequest() {
     return new Request("http://localhost/api/admin/storage", {
       method: "GET",
@@ -22,6 +27,8 @@ describe("GET /api/admin/storage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDbRead = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as any);
   });
 
   it("should return 403 when not admin", async () => {
@@ -36,46 +43,44 @@ describe("GET /api/admin/storage", () => {
 
   it("should return user storage stats for admin", async () => {
     mockResolveAdmin.mockResolvedValue({ userId: "admin-1" });
-    mockQuery.mockResolvedValue({
-      results: [
-        {
-          user_id: "user-1",
-          slug: "alice",
-          email: "alice@example.com",
-          name: "Alice",
-          image: null,
-          team_count: 2,
-          device_count: 3,
-          total_tokens: 1000000,
-          tokens_7d: 100000,
-          tokens_30d: 500000,
-          usage_row_count: 100,
-          session_count: 50,
-          total_messages: 200,
-          total_duration_seconds: 3600,
-          first_seen: "2026-01-01T00:00:00Z",
-          last_seen: "2026-04-06T00:00:00Z",
-        },
-        {
-          user_id: "user-2",
-          slug: "bob",
-          email: "bob@example.com",
-          name: "Bob",
-          image: null,
-          team_count: 1,
-          device_count: 1,
-          total_tokens: 500000,
-          tokens_7d: 50000,
-          tokens_30d: 200000,
-          usage_row_count: 50,
-          session_count: 25,
-          total_messages: 100,
-          total_duration_seconds: 1800,
-          first_seen: "2026-02-01T00:00:00Z",
-          last_seen: "2026-04-05T00:00:00Z",
-        },
-      ],
-    });
+    mockDbRead.getAdminStorageStats.mockResolvedValue([
+      {
+        user_id: "user-1",
+        slug: "alice",
+        email: "alice@example.com",
+        name: "Alice",
+        image: null,
+        team_count: 2,
+        device_count: 3,
+        total_tokens: 1000000,
+        tokens_7d: 100000,
+        tokens_30d: 500000,
+        usage_row_count: 100,
+        session_count: 50,
+        total_messages: 200,
+        total_duration_seconds: 3600,
+        first_seen: "2026-01-01T00:00:00Z",
+        last_seen: "2026-04-06T00:00:00Z",
+      },
+      {
+        user_id: "user-2",
+        slug: "bob",
+        email: "bob@example.com",
+        name: "Bob",
+        image: null,
+        team_count: 1,
+        device_count: 1,
+        total_tokens: 500000,
+        tokens_7d: 50000,
+        tokens_30d: 200000,
+        usage_row_count: 50,
+        session_count: 25,
+        total_messages: 100,
+        total_duration_seconds: 1800,
+        first_seen: "2026-02-01T00:00:00Z",
+        last_seen: "2026-04-05T00:00:00Z",
+      },
+    ]);
 
     const response = await GET(createRequest());
 
@@ -90,7 +95,7 @@ describe("GET /api/admin/storage", () => {
 
   it("should return empty results when tables do not exist", async () => {
     mockResolveAdmin.mockResolvedValue({ userId: "admin-1" });
-    mockQuery.mockRejectedValue(new Error("no such table: users"));
+    mockDbRead.getAdminStorageStats.mockRejectedValue(new Error("no such table: users"));
 
     const response = await GET(createRequest());
 
@@ -107,7 +112,7 @@ describe("GET /api/admin/storage", () => {
 
   it("should return 500 on unexpected error", async () => {
     mockResolveAdmin.mockResolvedValue({ userId: "admin-1" });
-    mockQuery.mockRejectedValue(new Error("Connection timeout"));
+    mockDbRead.getAdminStorageStats.mockRejectedValue(new Error("Connection timeout"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await GET(createRequest());

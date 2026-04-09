@@ -94,8 +94,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
     } as never);
     putTeamLogo.mockResolvedValue("https://s.zhe.to/apps/pew/teams-logo/t1/abc123.jpg");
     deleteTeamLogoByUrl.mockResolvedValue(undefined);
-    // firstOrNull: first call returns role, second returns old logo_url
-    mockDbRead.firstOrNull.mockResolvedValue(null);
+    mockDbRead.getTeamMembership.mockResolvedValue(null);
+    mockDbRead.getTeamLogoUrl.mockResolvedValue(null);
     const mod = await import("@/app/api/teams/[teamId]/logo/route");
     POST = mod.POST;
   });
@@ -110,7 +110,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject non-member with 403", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getTeamMembership.mockResolvedValueOnce(null);
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
 
@@ -120,7 +120,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject non-owner with 403", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "member" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
 
@@ -130,7 +130,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject invalid MIME type", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
 
     const res = await POST(
       makeUploadRequest("t1", { type: "image/gif" }),
@@ -143,7 +143,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject file exceeding 2 MB", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
 
     const res = await POST(
       makeUploadRequest("t1", { size: 3 * 1024 * 1024 }),
@@ -156,9 +156,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should accept non-square images (center-crop to 256x256)", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ role: "owner" }) // membership check
-      .mockResolvedValueOnce({ logo_url: null }); // old logo
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
     mockDbWrite.execute.mockResolvedValueOnce(undefined);
     vi.mocked(putTeamLogo).mockResolvedValueOnce("https://cdn.example.com/new.jpg");
 
@@ -171,7 +170,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject invalid image data", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     vi.mocked(sharp).mockReturnValue({
       resize: vi.fn().mockReturnThis(),
       jpeg: vi.fn().mockReturnThis(),
@@ -186,7 +185,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should reject request without file field", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
 
     const formData = new FormData();
     // No file appended
@@ -204,10 +203,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
     const newUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg";
     const oldUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/old456.jpg";
     putTeamLogo.mockResolvedValueOnce(newUrl);
-    // firstOrNull call 1: role check
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    // firstOrNull call 2: old logo_url
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: oldUrl });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(oldUrl);
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
 
@@ -228,8 +225,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
   it("should skip old logo deletion when team had no logo", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
     putTeamLogo.mockResolvedValueOnce("https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg");
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: null });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
 
@@ -237,14 +234,12 @@ describe("POST /api/teams/[teamId]/logo", () => {
     expect(deleteTeamLogoByUrl).not.toHaveBeenCalled();
   });
 
-  it("should return 500 and compensate-delete R2 object when DB SELECT fails after upload", async () => {
+  it("should return 500 and compensate-delete R2 object when getTeamLogoUrl fails after upload", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
     const newUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg";
     putTeamLogo.mockResolvedValueOnce(newUrl);
-    // firstOrNull call 1: role check → owner
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    // firstOrNull call 2: SELECT logo_url → D1 fails
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
 
@@ -258,10 +253,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
     const newUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/new123.jpg";
     putTeamLogo.mockResolvedValueOnce(newUrl);
-    // firstOrNull call 1: role check → owner
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    // firstOrNull call 2: SELECT logo_url → succeeds
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: null });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
     // execute: UPDATE fails
     mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 write failed"));
 
@@ -275,7 +268,7 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should return 500 when R2 upload fails", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
     putTeamLogo.mockRejectedValueOnce(new Error("R2 unavailable"));
 
     const res = await POST(makeUploadRequest("t1"), makeParams());
@@ -286,8 +279,8 @@ describe("POST /api/teams/[teamId]/logo", () => {
 
   it("should accept JPEG content type", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: null });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
 
     const res = await POST(
       makeUploadRequest("t1", { type: "image/jpeg" }),
@@ -328,7 +321,7 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
 
   it("should reject non-member with 403", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getTeamMembership.mockResolvedValueOnce(null);
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
 
@@ -338,7 +331,7 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
 
   it("should reject non-owner with 403", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "member" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
 
@@ -349,10 +342,8 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
   it("should delete successfully, clear DB, and remove R2 object", async () => {
     const logoUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/abc123.jpg";
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    // firstOrNull call 1: role check
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    // firstOrNull call 2: current logo_url
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: logoUrl });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(logoUrl);
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
 
@@ -369,8 +360,8 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
 
   it("should succeed even when team has no logo", async () => {
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: null });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
 
@@ -381,8 +372,8 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
   it("should return 200 when R2 delete fails (DB still cleared, storage leak tolerable)", async () => {
     const logoUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg";
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: logoUrl });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(logoUrl);
     deleteTeamLogoByUrl.mockRejectedValueOnce(new Error("R2 unavailable"));
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());
@@ -402,8 +393,8 @@ describe("DELETE /api/teams/[teamId]/logo", () => {
   it("should return 500 when DB UPDATE fails, leaving R2 object untouched", async () => {
     const logoUrl = "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg";
     resolveUser.mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ role: "owner" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ logo_url: logoUrl });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(logoUrl);
     mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 write failed"));
 
     const res = await DELETE(makeDeleteRequest("t1"), makeParams());

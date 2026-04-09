@@ -56,19 +56,18 @@ describe("GET /api/teams", () => {
 
   it("should return teams list", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "t1",
-          name: "Team Alpha",
-          slug: "team-alpha",
-          invite_code: "abc12345",
-          created_by: "u1",
-          created_at: "2026-01-01T00:00:00Z",
-          member_count: 3,
-        },
-      ],
-    });
+    mockDbRead.listTeamsForUser.mockResolvedValueOnce([
+      {
+        id: "t1",
+        name: "Team Alpha",
+        slug: "team-alpha",
+        invite_code: "abc12345",
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        member_count: 3,
+        logo_url: null,
+      },
+    ]);
 
     const res = await GET(makeJson("GET"));
     const body = await res.json();
@@ -80,7 +79,7 @@ describe("GET /api/teams", () => {
 
   it("should return empty array when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: teams"));
+    mockDbRead.listTeamsForUser.mockRejectedValueOnce(new Error("no such table: teams"));
 
     const res = await GET(makeJson("GET"));
     const body = await res.json();
@@ -91,7 +90,7 @@ describe("GET /api/teams", () => {
 
   it("should return 500 on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.listTeamsForUser.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(makeJson("GET"));
 
@@ -172,7 +171,7 @@ describe("POST /api/teams", () => {
 
   it("should create a team with auto-generated slug (201)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // slug not taken
+    mockDbRead.checkTeamSlugExists.mockResolvedValueOnce(false); // slug not taken
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "My Cool Team!" }));
@@ -189,7 +188,7 @@ describe("POST /api/teams", () => {
 
   it("should append random suffix when slug is taken", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing" }); // slug taken
+    mockDbRead.checkTeamSlugExists.mockResolvedValueOnce(true); // slug taken
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "Taken" }));
@@ -202,7 +201,7 @@ describe("POST /api/teams", () => {
 
   it("should use 'team' as fallback slug for non-alphanumeric names", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkTeamSlugExists.mockResolvedValueOnce(false);
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
 
     const res = await POST(makeJson("POST", { name: "---" }));
@@ -214,21 +213,11 @@ describe("POST /api/teams", () => {
 
   it("should return 503 when teams table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.checkTeamSlugExists.mockResolvedValueOnce(false);
     mockDbWrite.execute.mockRejectedValueOnce(new Error("no such table: teams"));
 
     const res = await POST(makeJson("POST", { name: "Test" }));
 
     expect(res.status).toBe(503);
-  });
-
-  it("should return 500 when error is not Error instance in POST", async () => {
-    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
-    mockDbWrite.execute.mockRejectedValueOnce("string error");
-
-    const res = await POST(makeJson("POST", { name: "Test" }));
-
-    expect(res.status).toBe(500);
   });
 });

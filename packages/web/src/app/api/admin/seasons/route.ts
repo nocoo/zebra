@@ -37,27 +37,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const { results } = await dbRead.query<{
-      id: string;
-      name: string;
-      slug: string;
-      start_date: string;
-      end_date: string;
-      created_at: string;
-      team_count: number;
-      allow_late_registration: number;
-      allow_roster_changes: number;
-      allow_late_withdrawal: number;
-    }>(
-      `SELECT
-         s.id, s.name, s.slug, s.start_date, s.end_date, s.created_at,
-         s.allow_late_registration, s.allow_roster_changes, s.allow_late_withdrawal,
-         COUNT(st.id) AS team_count
-       FROM seasons s
-       LEFT JOIN season_teams st ON st.season_id = s.id
-       GROUP BY s.id
-       ORDER BY s.start_date DESC`
-    );
+    const results = await dbRead.listSeasons();
 
     const seasons = results.map((r) => ({
       id: r.id,
@@ -160,10 +140,7 @@ export async function POST(request: Request) {
 
   try {
     // Check slug uniqueness
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM seasons WHERE slug = ?",
-      [slug]
-    );
+    const existing = await dbRead.getSeasonBySlug(slug);
     if (existing) {
       return NextResponse.json(
         { error: "A season with this slug already exists" },

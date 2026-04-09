@@ -16,14 +16,237 @@ import type { DbRead, DbWrite } from "@/lib/db";
 // Mock DB factories
 // ---------------------------------------------------------------------------
 
-/** Mock DbRead with `query` + `firstOrNull`. */
+/** Mock DbRead with all methods (legacy SQL proxy + users RPC). */
 export function createMockDbRead() {
   return {
+    // Legacy SQL proxy
     query: vi.fn(),
     firstOrNull: vi.fn(),
+    // Users RPC methods
+    getUserById: vi.fn(),
+    getUserBySlug: vi.fn(),
+    getUserByEmail: vi.fn(),
+    getUserByApiKey: vi.fn(),
+    getUserByOAuthAccount: vi.fn(),
+    checkSlugExists: vi.fn(),
+    getUserSettings: vi.fn(),
+    getUserApiKey: vi.fn(),
+    getUserEmail: vi.fn(),
+    searchUsers: vi.fn(),
+    getUserSlugOnly: vi.fn(),
+    getUserNicknameSlug: vi.fn(),
+    checkSharedTeam: vi.fn(),
+    checkSharedSeason: vi.fn(),
+    getUserFirstSeen: vi.fn(),
+    getPublicUserBySlugOrId: vi.fn(),
+    // Organizations RPC methods
+    listOrganizations: vi.fn(),
+    listOrganizationsWithCount: vi.fn(),
+    listUserOrganizations: vi.fn(),
+    getOrganizationById: vi.fn(),
+    getOrganizationBySlug: vi.fn(),
+    checkOrgMembership: vi.fn(),
+    listOrgMembers: vi.fn(),
+    // Projects RPC methods
+    listProjects: vi.fn(),
+    listAliasesWithStats: vi.fn(),
+    listUnassignedRefs: vi.fn(),
+    listProjectTags: vi.fn(),
+    getProjectByName: vi.fn(),
+    getProjectById: vi.fn(),
+    getProjectByNameExcluding: vi.fn(),
+    projectExistsForUser: vi.fn(),
+    sessionRecordExists: vi.fn(),
+    getAliasOwner: vi.fn(),
+    aliasAttachedToProject: vi.fn(),
+    projectTagExists: vi.fn(),
+    getProjectAliasStats: vi.fn(),
+    getProjectTagList: vi.fn(),
+    getProjectTimeline: vi.fn(),
+    // Seasons RPC methods
+    listSeasons: vi.fn(),
+    getSeasonById: vi.fn(),
+    getSeasonBySlug: vi.fn(),
+    getSeasonRegistration: vi.fn(),
+    checkSeasonMemberConflict: vi.fn(),
+    aggregateSeasonTeamTokens: vi.fn(),
+    aggregateSeasonMemberTokens: vi.fn(),
+    getSeasonSnapshots: vi.fn(),
+    getSeasonMemberSnapshots: vi.fn(),
+    getSeasonTeamTokens: vi.fn(),
+    getSeasonMemberTokens: vi.fn(),
+    getSeasonTeamSessionStats: vi.fn(),
+    getSeasonMemberSessionStats: vi.fn(),
+    // Showcases RPC methods
+    getShowcaseById: vi.fn(),
+    getShowcaseOwner: vi.fn(),
+    checkShowcaseExists: vi.fn(),
+    checkShowcaseExistsByRepoKey: vi.fn(),
+    checkShowcaseUpvote: vi.fn(),
+    getShowcaseUpvoteCount: vi.fn(),
+    listShowcases: vi.fn(),
+    countShowcases: vi.fn(),
+    // Teams RPC methods
+    listTeamsForUser: vi.fn(),
+    checkTeamSlugExists: vi.fn(),
+    findTeamByInviteCode: vi.fn(),
+    checkTeamMembershipExists: vi.fn(),
+    getTeamById: vi.fn(),
+    getTeamMembers: vi.fn(),
+    getTeamSeasonRegistrations: vi.fn(),
+    getTeamLogoUrl: vi.fn(),
+    countTeamMembers: vi.fn(),
+    getTeamMembership: vi.fn(),
+    getAppSetting: vi.fn(),
+    // Pricing RPC methods
+    listModelPricing: vi.fn(),
+    getModelPricingById: vi.fn(),
+    getModelPricingByModelSource: vi.fn(),
+    // Admin RPC methods
+    getAdminStorageStats: vi.fn(),
+    // Sessions RPC methods
+    getSessionRecords: vi.fn(),
+    // Usage RPC methods
+    getUsageRecords: vi.fn(),
+    getDeviceSummary: vi.fn(),
+    getDeviceCostDetails: vi.fn(),
+    getDeviceTimeline: vi.fn(),
+    // Devices RPC methods
+    listDevices: vi.fn(),
+    checkDeviceExists: vi.fn(),
+    checkDuplicateDeviceAlias: vi.fn(),
+    checkDeviceHasRecords: vi.fn(),
+    // Auth RPC methods
+    getAuthCode: vi.fn(),
+    listInviteCodes: vi.fn(),
+    checkInviteCodeExists: vi.fn(),
+    getInviteCodeById: vi.fn(),
+    checkUserHasUnusedInvite: vi.fn(),
+    // Settings RPC methods
+    getAllAppSettings: vi.fn(),
+    getAllUserSettings: vi.fn(),
+    // Achievements RPC methods
+    getAchievementUsageAggregates: vi.fn(),
+    getAchievementDailyUsage: vi.fn(),
+    getAchievementDailyCostBreakdown: vi.fn(),
+    getAchievementDiversityCounts: vi.fn(),
+    getAchievementSessionAggregates: vi.fn(),
+    getAchievementHourlyUsage: vi.fn(),
+    getAchievementCostByModelSource: vi.fn(),
+    getAchievementEarners: vi.fn(),
+    getAchievementEarnersCount: vi.fn(),
+    // Leaderboard RPC methods
+    getGlobalLeaderboard: vi.fn(),
+    getLeaderboardUserTeams: vi.fn(),
+    getLeaderboardSessionStats: vi.fn(),
+    // Live RPC methods
+    ping: vi.fn(),
   } as unknown as DbRead & {
     query: ReturnType<typeof vi.fn>;
     firstOrNull: ReturnType<typeof vi.fn>;
+    getUserById: ReturnType<typeof vi.fn>;
+    getUserBySlug: ReturnType<typeof vi.fn>;
+    getUserByEmail: ReturnType<typeof vi.fn>;
+    getUserByApiKey: ReturnType<typeof vi.fn>;
+    getUserByOAuthAccount: ReturnType<typeof vi.fn>;
+    checkSlugExists: ReturnType<typeof vi.fn>;
+    getUserSettings: ReturnType<typeof vi.fn>;
+    getUserApiKey: ReturnType<typeof vi.fn>;
+    getUserEmail: ReturnType<typeof vi.fn>;
+    searchUsers: ReturnType<typeof vi.fn>;
+    getUserSlugOnly: ReturnType<typeof vi.fn>;
+    getUserNicknameSlug: ReturnType<typeof vi.fn>;
+    checkSharedTeam: ReturnType<typeof vi.fn>;
+    checkSharedSeason: ReturnType<typeof vi.fn>;
+    getUserFirstSeen: ReturnType<typeof vi.fn>;
+    getPublicUserBySlugOrId: ReturnType<typeof vi.fn>;
+    listOrganizations: ReturnType<typeof vi.fn>;
+    listOrganizationsWithCount: ReturnType<typeof vi.fn>;
+    listUserOrganizations: ReturnType<typeof vi.fn>;
+    getOrganizationById: ReturnType<typeof vi.fn>;
+    getOrganizationBySlug: ReturnType<typeof vi.fn>;
+    checkOrgMembership: ReturnType<typeof vi.fn>;
+    listOrgMembers: ReturnType<typeof vi.fn>;
+    listProjects: ReturnType<typeof vi.fn>;
+    listAliasesWithStats: ReturnType<typeof vi.fn>;
+    listUnassignedRefs: ReturnType<typeof vi.fn>;
+    listProjectTags: ReturnType<typeof vi.fn>;
+    getProjectByName: ReturnType<typeof vi.fn>;
+    getProjectById: ReturnType<typeof vi.fn>;
+    getProjectByNameExcluding: ReturnType<typeof vi.fn>;
+    projectExistsForUser: ReturnType<typeof vi.fn>;
+    sessionRecordExists: ReturnType<typeof vi.fn>;
+    getAliasOwner: ReturnType<typeof vi.fn>;
+    aliasAttachedToProject: ReturnType<typeof vi.fn>;
+    projectTagExists: ReturnType<typeof vi.fn>;
+    getProjectAliasStats: ReturnType<typeof vi.fn>;
+    getProjectTagList: ReturnType<typeof vi.fn>;
+    getProjectTimeline: ReturnType<typeof vi.fn>;
+    listSeasons: ReturnType<typeof vi.fn>;
+    getSeasonById: ReturnType<typeof vi.fn>;
+    getSeasonBySlug: ReturnType<typeof vi.fn>;
+    getSeasonRegistration: ReturnType<typeof vi.fn>;
+    checkSeasonMemberConflict: ReturnType<typeof vi.fn>;
+    aggregateSeasonTeamTokens: ReturnType<typeof vi.fn>;
+    aggregateSeasonMemberTokens: ReturnType<typeof vi.fn>;
+    getSeasonSnapshots: ReturnType<typeof vi.fn>;
+    getSeasonMemberSnapshots: ReturnType<typeof vi.fn>;
+    getSeasonTeamTokens: ReturnType<typeof vi.fn>;
+    getSeasonMemberTokens: ReturnType<typeof vi.fn>;
+    getSeasonTeamSessionStats: ReturnType<typeof vi.fn>;
+    getSeasonMemberSessionStats: ReturnType<typeof vi.fn>;
+    getShowcaseById: ReturnType<typeof vi.fn>;
+    getShowcaseOwner: ReturnType<typeof vi.fn>;
+    checkShowcaseExists: ReturnType<typeof vi.fn>;
+    checkShowcaseExistsByRepoKey: ReturnType<typeof vi.fn>;
+    checkShowcaseUpvote: ReturnType<typeof vi.fn>;
+    getShowcaseUpvoteCount: ReturnType<typeof vi.fn>;
+    listShowcases: ReturnType<typeof vi.fn>;
+    countShowcases: ReturnType<typeof vi.fn>;
+    listTeamsForUser: ReturnType<typeof vi.fn>;
+    checkTeamSlugExists: ReturnType<typeof vi.fn>;
+    findTeamByInviteCode: ReturnType<typeof vi.fn>;
+    checkTeamMembershipExists: ReturnType<typeof vi.fn>;
+    getTeamById: ReturnType<typeof vi.fn>;
+    getTeamMembers: ReturnType<typeof vi.fn>;
+    getTeamSeasonRegistrations: ReturnType<typeof vi.fn>;
+    getTeamLogoUrl: ReturnType<typeof vi.fn>;
+    countTeamMembers: ReturnType<typeof vi.fn>;
+    getTeamMembership: ReturnType<typeof vi.fn>;
+    getAppSetting: ReturnType<typeof vi.fn>;
+    listModelPricing: ReturnType<typeof vi.fn>;
+    getModelPricingById: ReturnType<typeof vi.fn>;
+    getModelPricingByModelSource: ReturnType<typeof vi.fn>;
+    getAdminStorageStats: ReturnType<typeof vi.fn>;
+    getSessionRecords: ReturnType<typeof vi.fn>;
+    getUsageRecords: ReturnType<typeof vi.fn>;
+    getDeviceSummary: ReturnType<typeof vi.fn>;
+    getDeviceCostDetails: ReturnType<typeof vi.fn>;
+    getDeviceTimeline: ReturnType<typeof vi.fn>;
+    listDevices: ReturnType<typeof vi.fn>;
+    checkDeviceExists: ReturnType<typeof vi.fn>;
+    checkDuplicateDeviceAlias: ReturnType<typeof vi.fn>;
+    checkDeviceHasRecords: ReturnType<typeof vi.fn>;
+    getAuthCode: ReturnType<typeof vi.fn>;
+    listInviteCodes: ReturnType<typeof vi.fn>;
+    checkInviteCodeExists: ReturnType<typeof vi.fn>;
+    getInviteCodeById: ReturnType<typeof vi.fn>;
+    checkUserHasUnusedInvite: ReturnType<typeof vi.fn>;
+    getAllAppSettings: ReturnType<typeof vi.fn>;
+    getAllUserSettings: ReturnType<typeof vi.fn>;
+    getAchievementUsageAggregates: ReturnType<typeof vi.fn>;
+    getAchievementDailyUsage: ReturnType<typeof vi.fn>;
+    getAchievementDailyCostBreakdown: ReturnType<typeof vi.fn>;
+    getAchievementDiversityCounts: ReturnType<typeof vi.fn>;
+    getAchievementSessionAggregates: ReturnType<typeof vi.fn>;
+    getAchievementHourlyUsage: ReturnType<typeof vi.fn>;
+    getAchievementCostByModelSource: ReturnType<typeof vi.fn>;
+    getAchievementEarners: ReturnType<typeof vi.fn>;
+    getAchievementEarnersCount: ReturnType<typeof vi.fn>;
+    getGlobalLeaderboard: ReturnType<typeof vi.fn>;
+    getLeaderboardUserTeams: ReturnType<typeof vi.fn>;
+    getLeaderboardSessionStats: ReturnType<typeof vi.fn>;
+    ping: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -44,10 +267,42 @@ export function createMockDbWrite() {
  */
 export function createMockClient() {
   return {
+    // Legacy SQL proxy
     query: vi.fn(),
     execute: vi.fn(),
     batch: vi.fn(),
     firstOrNull: vi.fn(),
+    // Users RPC methods
+    getUserById: vi.fn(),
+    getUserBySlug: vi.fn(),
+    getUserByEmail: vi.fn(),
+    getUserByApiKey: vi.fn(),
+    getUserByOAuthAccount: vi.fn(),
+    checkSlugExists: vi.fn(),
+    getUserSettings: vi.fn(),
+    getUserApiKey: vi.fn(),
+    getUserEmail: vi.fn(),
+    searchUsers: vi.fn(),
+    getUserSlugOnly: vi.fn(),
+    getUserNicknameSlug: vi.fn(),
+    checkSharedTeam: vi.fn(),
+    checkSharedSeason: vi.fn(),
+    getUserFirstSeen: vi.fn(),
+    getPublicUserBySlugOrId: vi.fn(),
+    // Achievements RPC methods
+    getAchievementUsageAggregates: vi.fn(),
+    getAchievementDailyUsage: vi.fn(),
+    getAchievementDailyCostBreakdown: vi.fn(),
+    getAchievementDiversityCounts: vi.fn(),
+    getAchievementSessionAggregates: vi.fn(),
+    getAchievementHourlyUsage: vi.fn(),
+    getAchievementCostByModelSource: vi.fn(),
+    getAchievementEarners: vi.fn(),
+    getAchievementEarnersCount: vi.fn(),
+    // Leaderboard RPC methods
+    getGlobalLeaderboard: vi.fn(),
+    getLeaderboardUserTeams: vi.fn(),
+    getLeaderboardSessionStats: vi.fn(),
   };
 }
 

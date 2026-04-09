@@ -36,25 +36,6 @@ const VALID_KINDS = new Set(["human", "automated"]);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SessionRow {
-  session_key: string;
-  source: string;
-  kind: string;
-  started_at: string;
-  last_message_at: string;
-  duration_seconds: number;
-  user_messages: number;
-  assistant_messages: number;
-  total_messages: number;
-  project_ref: string | null;
-  project_name: string | null;
-  model: string | null;
-}
-
-// ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
@@ -124,50 +105,14 @@ export async function GET(request: Request) {
     toDate = new Date().toISOString();
   }
 
-  // 3. Build query
-  const conditions = ["sr.user_id = ?", "sr.started_at >= ?", "sr.started_at < ?"];
-  const params: unknown[] = [userId, fromDate, toDate];
-
-  if (sourceFilter) {
-    conditions.push("sr.source = ?");
-    params.push(sourceFilter);
-  }
-
-  if (kindFilter) {
-    conditions.push("sr.kind = ?");
-    params.push(kindFilter);
-  }
-
-  const sql = `
-    SELECT
-      sr.session_key,
-      sr.source,
-      sr.kind,
-      sr.started_at,
-      sr.last_message_at,
-      sr.duration_seconds,
-      sr.user_messages,
-      sr.assistant_messages,
-      sr.total_messages,
-      sr.project_ref,
-      p.name AS project_name,
-      sr.model
-    FROM session_records sr
-    LEFT JOIN project_aliases pa
-      ON pa.user_id = sr.user_id
-      AND pa.source = sr.source
-      AND pa.project_ref = sr.project_ref
-    LEFT JOIN projects p ON p.id = pa.project_id
-    WHERE ${conditions.join(" AND ")}
-    ORDER BY sr.started_at DESC
-  `;
-
-  // 4. Execute
+  // 3. Execute query via RPC
   const db = await getDbRead();
 
   try {
-    const result = await db.query<SessionRow>(sql, params);
-    const records = result.results;
+    const records = await db.getSessionRecords(userId, fromDate, toDate, {
+      ...(sourceFilter && { source: sourceFilter }),
+      ...(kindFilter && { kind: kindFilter }),
+    });
 
     // Compute summary
     const summary = records.reduce(

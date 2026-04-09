@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +31,7 @@ export interface LeaderboardData {
   scope: LeaderboardScope;
   scopeId?: string;
   entries: LeaderboardEntry[];
+  hasMore: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,69 +43,180 @@ interface UseLeaderboardOptions {
   limit?: number;
   teamId?: string | null;
   orgId?: string | null;
+  /** Delay initial fetch until true (for scope initialization) */
+  enabled?: boolean;
 }
 
 interface UseLeaderboardResult {
-  data: LeaderboardData | null;
+  /** All accumulated entries across pages */
+  entries: LeaderboardEntry[];
+  /** True during initial load (no entries yet) */
   loading: boolean;
-  /** True when refetching with stale data still visible */
-  refreshing: boolean;
+  /** True when loading more pages (entries already visible) */
+  loadingMore: boolean;
+  /** Error message if fetch failed */
   error: string | null;
+  /** Whether more pages are available */
+  hasMore: boolean;
+  /** Load the next page */
+  loadMore: () => void;
+  /** Re-fetch from the beginning */
   refetch: () => void;
+  /** Index where new entries start (for animation) */
+  animationStartIndex: number;
+}
+
+/** Generate a stable key for filter params */
+function makeFilterKey(period: string, teamId: string | null | undefined, orgId: string | null | undefined): string {
+  return `${period}|${teamId ?? ""}|${orgId ?? ""}`;
 }
 
 export function useLeaderboard(
   options: UseLeaderboardOptions = {},
 ): UseLeaderboardResult {
-  const { period = "week", limit, teamId, orgId } = options;
-  const [data, setData] = useState<LeaderboardData | null>(null);
+  const { period = "week", limit = 20, teamId, orgId, enabled = true } = options;
+
+  // All accumulated entries
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  // Current offset for pagination
+  const [offset, setOffset] = useState(0);
+  // Loading states
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Error and pagination info
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  // Animation tracking
+  const [animationStartIndex, setAnimationStartIndex] = useState(0);
 
-  const fetchData = useCallback(async () => {
-    // Initial load → loading=true; subsequent fetches → refreshing=true
-    if (data === null) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
-    setError(null);
+  // Request counter for stale response detection
+  // Each new request increments this; responses check if their ID matches current
+  const requestIdRef = useRef(0);
 
-    try {
-      const params = new URLSearchParams({ period });
-      if (limit !== undefined) {
+  // Track last fetched filter key to detect changes
+  const lastFilterKeyRef = useRef<string | null>(null);
+
+  // Current filter key
+  const filterKey = makeFilterKey(period, teamId, orgId);
+
+  // Fetch a single page
+  const fetchPage = useCallback(
+    async (pageOffset: number, isLoadMore: boolean, requestId: number) => {
+      // Set appropriate loading state
+      if (isLoadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        // Clear entries immediately on filter change
+        setEntries([]);
+        setAnimationStartIndex(0);
+      }
+      setError(null);
+
+      try {
+        const params = new URLSearchParams({ period });
         params.set("limit", String(limit));
-      }
-      if (teamId) {
-        params.set("team", teamId);
-      }
-      if (orgId) {
-        params.set("org", orgId);
-      }
+        if (pageOffset > 0) {
+          params.set("offset", String(pageOffset));
+        }
+        if (teamId) {
+          params.set("team", teamId);
+        }
+        if (orgId) {
+          params.set("org", orgId);
+        }
 
-      const res = await fetch(`/api/leaderboard?${params.toString()}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          (body as { error?: string }).error ?? `HTTP ${res.status}`,
-        );
+        const res = await fetch(`/api/leaderboard?${params.toString()}`);
+
+        // Check if this request is stale (a newer request has been issued)
+        if (requestId !== requestIdRef.current) {
+          return; // Stale response, discard
+        }
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(
+            (body as { error?: string }).error ?? `HTTP ${res.status}`,
+          );
+        }
+
+        const json = (await res.json()) as LeaderboardData;
+
+        // Double-check staleness after JSON parse (in case another request started)
+        if (requestId !== requestIdRef.current) {
+          return; // Stale response, discard
+        }
+
+        if (isLoadMore) {
+          // Append to existing entries
+          setEntries((prev) => {
+            setAnimationStartIndex(prev.length);
+            return [...prev, ...json.entries];
+          });
+        } else {
+          // Replace entries
+          setAnimationStartIndex(0);
+          setEntries(json.entries);
+        }
+        setHasMore(json.hasMore);
+      } catch (err) {
+        // Only set error if this request is still current
+        if (requestId === requestIdRef.current) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
+      } finally {
+        // Only clear loading state if this request is still current
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
+    },
+    [period, limit, teamId, orgId],
+  );
 
-      const json = (await res.json()) as LeaderboardData;
-      setData(json);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, limit, teamId, orgId]);
-
+  // Fetch when filters change or on initial mount (when enabled)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!enabled) {
+      // Not enabled yet - stay in loading state, don't fetch
+      return;
+    }
 
-  return { data, loading, refreshing, error, refetch: fetchData };
+    const shouldFetch = lastFilterKeyRef.current !== filterKey;
+    if (shouldFetch) {
+      lastFilterKeyRef.current = filterKey;
+      setOffset(0);
+      // Increment request ID to invalidate any in-flight requests
+      const requestId = ++requestIdRef.current;
+      fetchPage(0, false, requestId);
+    }
+  }, [enabled, filterKey, fetchPage]);
+
+  // Load more handler
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return;
+    const newOffset = offset + limit;
+    setOffset(newOffset);
+    // Increment request ID for this pagination request
+    const requestId = ++requestIdRef.current;
+    fetchPage(newOffset, true, requestId);
+  }, [loadingMore, loading, hasMore, offset, limit, fetchPage]);
+
+  // Refetch from beginning
+  const refetch = useCallback(() => {
+    setOffset(0);
+    const requestId = ++requestIdRef.current;
+    fetchPage(0, false, requestId);
+  }, [fetchPage]);
+
+  return {
+    entries,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    refetch,
+    animationStartIndex,
+  };
 }

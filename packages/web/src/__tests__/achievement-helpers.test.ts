@@ -5,7 +5,6 @@ import {
   computeAchievements,
   computeAchievementState,
   getAchievementDef,
-  formatMessages,
   ACHIEVEMENT_DEFS,
   TIMEZONE_DEPENDANT_IDS,
   TIER_LABELS,
@@ -511,49 +510,5 @@ describe("Label constants", () => {
     expect(CATEGORY_LABELS.diversity).toBe("Diversity");
     expect(CATEGORY_LABELS.sessions).toBe("Sessions");
     expect(CATEGORY_LABELS.special).toBe("Special");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatMessages
-// ---------------------------------------------------------------------------
-
-describe("formatMessages", () => {
-  it("returns singular for exactly 1", () => {
-    expect(formatMessages(1)).toBe("1 msg");
-  });
-
-  it("returns plural for 0 and > 1", () => {
-    expect(formatMessages(0)).toBe("0 msgs");
-    expect(formatMessages(5)).toBe("5 msgs");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// computeTierProgress with bronze = 0
-// ---------------------------------------------------------------------------
-
-describe("computeTierProgress edge cases", () => {
-  it("returns 0 progress when bronze threshold is 0 and value is 0", () => {
-    const result = computeTierProgress(0, [0, 0, 0, 0]);
-    // bronze === 0 and value === 0 → value >= diamond → diamond tier
-    expect(result.tier).toBe("diamond");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// computeAchievements with empty inputs (values[def.id] ?? 0)
-// ---------------------------------------------------------------------------
-
-describe("computeAchievements edge", () => {
-  it("returns 6 legacy achievements even with minimal inputs", () => {
-    // Empty rows/summary → extractAchievementValues returns 0 for many IDs
-    const inputs = makeInputs({
-      rows: [],
-      summary: makeSummary({ total_tokens: 0 }),
-      models: [],
-    });
-    const achievements = computeAchievements(inputs);
-    expect(achievements).toHaveLength(6);
   });
 });

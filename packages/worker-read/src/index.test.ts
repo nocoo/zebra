@@ -352,6 +352,117 @@ describe("pew read Worker", () => {
       expect(res.status).toBe(403);
     });
 
+    // -----------------------------------------------------------------------
+    // SQL injection bypass attempts (security hardening)
+    // -----------------------------------------------------------------------
+
+    describe("SQL injection bypass attempts", () => {
+      it("should reject SQL with leading line comment: -- DELETE", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "-- comment\nDELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject SQL with block comment: /* */ DELETE", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "/* comment */ DELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject SQL with nested block comments", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "/* outer /* inner */ */ DELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject CTE with DELETE: WITH x AS (...) DELETE", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "WITH x AS (SELECT 1) DELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject CTE with UPDATE: WITH x AS (...) UPDATE", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "WITH x AS (SELECT 1) UPDATE users SET name = 'x'" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject CTE with INSERT: WITH x AS (...) INSERT", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "WITH x AS (SELECT 1) INSERT INTO users (id) VALUES ('x')" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject multi-statement SQL with semicolon", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "SELECT 1; DELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject SQL with leading whitespace hiding write keyword", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "   \n\t  DELETE FROM users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject REPLACE statement", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "REPLACE INTO users (id) VALUES ('x')" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should reject TRUNCATE statement", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "TRUNCATE TABLE users" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(403);
+      });
+
+      it("should allow legitimate CTE SELECT", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "WITH cte AS (SELECT id FROM users) SELECT * FROM cte" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(200);
+      });
+
+      it("should allow SELECT with comment inside string literal", async () => {
+        // The string "-- not a comment" should not be treated as a comment
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "SELECT '-- not a comment' AS val" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(200);
+      });
+
+      it("should allow SELECT with semicolon inside string literal", async () => {
+        const res = await callWorker(
+          makeRequest("POST", "/api/query", { sql: "SELECT 'value; with semicolon' AS val" }, SECRET),
+          env,
+        );
+        expect(res.status).toBe(200);
+      });
+    });
+
     it("should return 500 on D1 error", async () => {
       const db = {
         prepare: vi.fn().mockReturnValue({
@@ -392,6 +503,92 @@ describe("pew read Worker", () => {
         env,
       );
       expect(res.status).toBe(405);
+    });
+
+    it("should return 405 for GET on /api/rpc", async () => {
+      const res = await callWorker(
+        makeRequest("GET", "/api/rpc", undefined, SECRET),
+        env,
+      );
+      expect(res.status).toBe(405);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /api/rpc
+  // -----------------------------------------------------------------------
+
+  describe("POST /api/rpc", () => {
+    it("should return 401 without auth", async () => {
+      const req = new Request("https://pew.test.workers.dev/api/rpc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method: "users.getById", id: "usr_123" }),
+      });
+
+      const res = await callWorker(req, env);
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 400 for missing method", async () => {
+      const res = await callWorker(
+        makeRequest("POST", "/api/rpc", { id: "usr_123" }, SECRET),
+        env,
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.error).toContain("method");
+    });
+
+    it("should return 400 for unknown domain", async () => {
+      const res = await callWorker(
+        makeRequest("POST", "/api/rpc", { method: "unknown.method" }, SECRET),
+        env,
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.error).toContain("Unknown RPC domain");
+    });
+
+    it("should route users domain to users handler", async () => {
+      const mockUser = {
+        id: "usr_123",
+        email: "test@example.com",
+        name: "Test",
+        image: null,
+        email_verified: null,
+      };
+      const db = createMockDB();
+      (db.prepare as ReturnType<typeof vi.fn>).mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(mockUser),
+        }),
+      });
+      const testEnv = createEnv({ DB: db });
+
+      const res = await callWorker(
+        makeRequest("POST", "/api/rpc", { method: "users.getById", id: "usr_123" }, SECRET),
+        testEnv,
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.result).toEqual(mockUser);
+    });
+
+    it("should return 400 for invalid JSON body", async () => {
+      const req = new Request("https://pew.test.workers.dev/api/rpc", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SECRET}`,
+        },
+        body: "not-json",
+      });
+      const res = await callWorker(req, env);
+      expect(res.status).toBe(400);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.error).toContain("JSON");
     });
   });
 });

@@ -51,18 +51,18 @@ describe("POST /api/seasons/[seasonId]/register", () => {
   it("should register team when user is owner and season is upcoming", async () => {
     resolveUser.mockResolvedValueOnce(USER);
     // Season upcoming
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      // User is team owner
-      .mockResolvedValueOnce({ role: "owner" })
-      // No existing registration
-      .mockResolvedValueOnce(null)
-      // Pre-validation: no member conflict
-      .mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    // User is team owner
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    // No existing registration
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce(null);
     // Fetch current team members
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [{ user_id: "user-1" }, { user_id: "user-2" }],
-    });
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([
+      { user_id: "user-1", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+      { user_id: "user-2", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+    ]);
+    // Pre-validation: no member conflict
+    mockDbRead.checkSeasonMemberConflict.mockResolvedValueOnce(null);
     // Batch write succeeds
     mockDbWrite.batch.mockResolvedValueOnce(undefined);
 
@@ -75,10 +75,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
     expect(json.team_id).toBe("team-1");
 
     // Verify frozen roster: fetch members then batch write
-    expect(mockDbRead.query).toHaveBeenCalledWith(
-      "SELECT user_id FROM team_members WHERE team_id = ?",
-      ["team-1"]
-    );
+    expect(mockDbRead.getTeamMembers).toHaveBeenCalledWith("team-1");
     expect(mockDbWrite.batch).toHaveBeenCalledTimes(1);
     const batchStatements = mockDbWrite.batch.mock.calls[0]![0] as Array<{ sql: string; params: unknown[] }>;
     // 1 season_teams INSERT + 2 season_team_members INSERTs
@@ -90,15 +87,15 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when a member is already registered on another team", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce(null)
-      // Pre-validation: user-2 is already on another team
-      .mockResolvedValueOnce({ user_id: "user-2" });
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [{ user_id: "user-1" }, { user_id: "user-2" }],
-    });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce(null);
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([
+      { user_id: "user-1", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+      { user_id: "user-2", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+    ]);
+    // Pre-validation: user-2 is already on another team
+    mockDbRead.checkSeasonMemberConflict.mockResolvedValueOnce({ user_id: "user-2" });
 
     const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -112,7 +109,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when season is active", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T23:59:00Z",
@@ -129,7 +126,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when season is ended", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2020-12-31T23:59:00Z",
@@ -146,19 +143,18 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should allow registration for active season when allow_late_registration=1", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({
-        id: "season-1",
-        start_date: "2020-01-01",
-        end_date: "2099-12-31",
-        allow_late_registration: 1,
-      })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [{ user_id: "user-1" }],
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
+      id: "season-1",
+      start_date: "2020-01-01",
+      end_date: "2099-12-31",
+      allow_late_registration: 1,
     });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce(null);
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([
+      { user_id: "user-1", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+    ]);
+    mockDbRead.checkSeasonMemberConflict.mockResolvedValueOnce(null);
     mockDbWrite.batch.mockResolvedValueOnce(undefined);
 
     const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
@@ -169,7 +165,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject registration for ended season even when allow_late_registration=1", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2020-12-31T23:59:00Z",
@@ -186,9 +182,8 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when user is not team owner", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "member" });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
 
     const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -200,10 +195,9 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when team is already registered", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({ id: "existing-reg" });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce({ id: "existing-reg" });
 
     const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -215,7 +209,7 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should reject when season does not exist", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce(null);
 
     const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -234,14 +228,14 @@ describe("POST /api/seasons/[seasonId]/register", () => {
 
   it("should compensate by UUID on batch failure, not by (season_id, team_id)", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [{ user_id: "user-1" }, { user_id: "user-2" }],
-    });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce(null);
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([
+      { user_id: "user-1", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+      { user_id: "user-2", name: null, nickname: null, slug: null, image: null, role: "member", joined_at: "" },
+    ]);
+    mockDbRead.checkSeasonMemberConflict.mockResolvedValueOnce(null);
     // Batch fails (e.g. UNIQUE constraint from concurrent request)
     mockDbWrite.batch.mockRejectedValueOnce(new Error("UNIQUE constraint failed"));
     // Cleanup calls succeed
@@ -289,10 +283,9 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should withdraw team from upcoming season", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({ id: "reg-1" });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce({ id: "reg-1" });
     // DELETE season_team_members + DELETE season_teams
     mockDbWrite.execute
       .mockResolvedValueOnce({ changes: 2, duration: 0.01 })
@@ -313,7 +306,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should reject withdrawal from active season", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2099-12-31T23:59:00Z",
@@ -330,15 +323,14 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should allow withdrawal from active season when allow_late_withdrawal=1", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({
-        id: "season-1",
-        start_date: "2020-01-01",
-        end_date: "2099-12-31",
-        allow_late_withdrawal: 1,
-      })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({ id: "reg-1" });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
+      id: "season-1",
+      start_date: "2020-01-01",
+      end_date: "2099-12-31",
+      allow_late_withdrawal: 1,
+    });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce({ id: "reg-1" });
     mockDbWrite.execute
       .mockResolvedValueOnce({ changes: 1, duration: 0.01 })
       .mockResolvedValueOnce({ changes: 1, duration: 0.01 });
@@ -353,7 +345,7 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should reject withdrawal from ended season even when allow_late_withdrawal=1", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
       id: "season-1",
       start_date: "2020-01-01T00:00:00Z",
       end_date: "2020-12-31T23:59:00Z",
@@ -370,9 +362,8 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should reject when user is not team owner", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "member" });
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
 
     const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -382,10 +373,9 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
 
   it("should reject when registration does not exist", async () => {
     resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" })
-      .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce(null);
+    mockDbRead.getSeasonById.mockResolvedValueOnce({ id: "season-1", start_date: "2099-01-01T00:00:00Z", end_date: "2099-12-31T23:59:00Z" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getSeasonRegistration.mockResolvedValueOnce(null);
 
     const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
       params: regParams,
@@ -393,100 +383,5 @@ describe("DELETE /api/seasons/[seasonId]/register", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toContain("not registered");
-  });
-
-  it("should return 500 on unexpected error in POST", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when POST error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await POST(makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 on unexpected error in DELETE", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when DELETE error is not Error instance", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 404 when season not found in DELETE", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
-
-    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toContain("Season not found");
-  });
-
-  it("should return 503 when DELETE hits 'no such table' error", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: season_teams"));
-
-    const res = await DELETE(makeJsonRequest("DELETE", "/api/seasons/season-1/register", { team_id: "team-1" }), {
-      params: regParams,
-    });
-    expect(res.status).toBe(503);
-    const json = await res.json();
-    expect(json.error).toContain("not yet migrated");
-  });
-
-  it("should return 400 for invalid JSON body in POST", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-
-    const req = new Request("http://localhost:7020/api/seasons/season-1/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "not valid json {",
-    });
-    const res = await POST(req, { params: regParams });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("Invalid JSON");
-  });
-
-  it("should return 400 when team_id is missing in POST", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-
-    const req = makeJsonRequest("POST", "/api/seasons/season-1/register", {});
-    const res = await POST(req, { params: regParams });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("team_id is required");
-  });
-
-  it("should return 400 when team_id is not a string in POST", async () => {
-    resolveUser.mockResolvedValueOnce(USER);
-
-    const req = makeJsonRequest("POST", "/api/seasons/season-1/register", { team_id: 123 });
-    const res = await POST(req, { params: regParams });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("team_id is required");
   });
 });

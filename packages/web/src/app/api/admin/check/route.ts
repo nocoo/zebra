@@ -16,14 +16,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ isAdmin: false });
   }
 
-  let email = authResult.email;
+  let email: string | null | undefined = authResult.email;
   if (!email) {
     const db = await getDbRead();
-    const row = await db.firstOrNull<{ email: string }>(
-      "SELECT email FROM users WHERE id = ?",
-      [authResult.userId]
-    );
-    email = row?.email;
+    email = await db.getUserEmail(authResult.userId);
   }
 
   return NextResponse.json({ isAdmin: isAdmin(email) });

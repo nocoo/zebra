@@ -160,9 +160,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should accept localhost callback URLs", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "existing-key-123",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("existing-key-123");
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")
@@ -175,9 +173,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should accept 127.0.0.1 callback URLs", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "existing-key-456",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("existing-key-456");
 
       const res = await GET(
         makeRequest("http://127.0.0.1:8888/callback")
@@ -198,9 +194,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should reuse existing api_key if user already has one", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "existing-key-abc",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("existing-key-abc");
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")
@@ -214,7 +208,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should generate new api_key if user has none", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({ api_key: null });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce(null);
       mockDbWrite.execute.mockResolvedValueOnce(undefined);
 
       const res = await GET(
@@ -236,9 +230,7 @@ describe("GET /api/auth/cli", () => {
         userId: "u1",
         email: "test@example.com",
       });
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "key-xyz",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("key-xyz");
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")
@@ -249,9 +241,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should forward state parameter in callback redirect", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "key-xyz",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("key-xyz");
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback", "my-nonce-123")
@@ -264,9 +254,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should omit state from redirect when not provided", async () => {
-      mockDbRead.firstOrNull.mockResolvedValueOnce({
-        api_key: "key-xyz",
-      });
+      mockDbRead.getUserApiKey.mockResolvedValueOnce("key-xyz");
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")
@@ -278,7 +266,7 @@ describe("GET /api/auth/cli", () => {
     });
 
     it("should return 500 on D1 failure", async () => {
-      mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("D1 down"));
+      mockDbRead.getUserApiKey.mockRejectedValueOnce(new Error("D1 down"));
 
       const res = await GET(
         makeRequest("http://localhost:9999/callback")

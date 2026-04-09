@@ -342,22 +342,30 @@ function DropdownItem({
 function LeaderboardRow({
   entry,
   index,
+  animationStartIndex,
 }: {
   entry: LeaderboardEntry;
   index: number;
+  /** Index of first newly loaded entry — entries before this don't animate */
+  animationStartIndex: number;
 }) {
   const { rank, user, teams, total_tokens, session_count, total_duration_seconds } =
     entry;
   const displayName = user.name ?? "Anonymous";
   const initial = displayName[0]?.toUpperCase() ?? "?";
 
+  // Only animate newly loaded entries (index >= animationStartIndex)
+  const shouldAnimate = index >= animationStartIndex;
+  const animationIndex = index - animationStartIndex;
+
   const content = (
     <div
       className={cn(
-        "relative flex items-center gap-3 overflow-hidden rounded-[var(--radius-card)] bg-secondary px-4 py-3 transition-colors animate-fade-up hover:bg-accent cursor-pointer",
+        "relative flex items-center gap-3 overflow-hidden rounded-[var(--radius-card)] bg-secondary px-4 py-3 transition-colors hover:bg-accent cursor-pointer",
+        shouldAnimate && "animate-fade-up",
         rank <= 3 && "ring-1 ring-border/50",
       )}
-      style={{ animationDelay: `${Math.min(index * 40, 600)}ms` }}
+      style={shouldAnimate ? { animationDelay: `${Math.min(animationIndex * 40, 600)}ms` } : undefined}
     >
       <CheckRuling />
 
@@ -443,30 +451,36 @@ const MAX_ENTRIES = 100;
 export default function LeaderboardPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
+  const isSessionLoading = status === "loading";
 
   const [period, setPeriod] = useState<LeaderboardPeriod>("week");
   const [scope, setScope] = useState<ScopeSelection>({ type: "global" });
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const teamId = scope.type === "team" ? scope.id ?? null : null;
   const orgId = scope.type === "org" ? scope.id ?? null : null;
 
-  const { data, loading, refreshing, error } = useLeaderboard({
+  // Delay fetch until scope is initialized:
+  // - Session loading: wait (don't know if user is authenticated yet)
+  // - Authenticated: wait for orgs/teams + localStorage scope restore
+  // - Unauthenticated: fetch immediately with global scope
+  const {
+    entries,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    animationStartIndex,
+  } = useLeaderboard({
     period,
     teamId,
     orgId,
-    limit: MAX_ENTRIES,
+    limit: PAGE_SIZE,
+    enabled: scopeInitialized && !isSessionLoading,
   });
-
-  // Reset visible count when period or scope changes
-  /* eslint-disable react-hooks/set-state-in-effect -- reset pagination on filter change is intentional */
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [period, scope]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Fetch user's organizations and teams
   const fetchOrgsAndTeams = useCallback(async () => {
@@ -489,24 +503,30 @@ export default function LeaderboardPage() {
     }
   }, []);
 
-  // Initialize scope from localStorage and fetch orgs/teams (logged-in only)
+  // Initialize scope from localStorage and fetch orgs/teams
+  // Wait for session to resolve before deciding auth state
   /* eslint-disable react-hooks/set-state-in-effect -- async fetch and localStorage read */
   useEffect(() => {
+    // Still loading session - wait
+    if (isSessionLoading) {
+      return;
+    }
+
+    // Unauthenticated - use global scope immediately
     if (!isAuthenticated) {
       setScopeInitialized(true);
       return;
     }
 
+    // Authenticated - fetch orgs/teams and restore scope
     fetchOrgsAndTeams().then(() => {
-      // After fetching orgs/teams, restore scope from localStorage
       const stored = loadScopeFromStorage();
       if (stored) {
-        // Will be validated below after orgs/teams are loaded
         setScope(stored);
       }
       setScopeInitialized(true);
     });
-  }, [isAuthenticated, fetchOrgsAndTeams]);
+  }, [isSessionLoading, isAuthenticated, fetchOrgsAndTeams]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Validate stored scope against available orgs/teams
@@ -601,41 +621,37 @@ export default function LeaderboardPage() {
         {/* Table header row */}
         <TableHeader />
 
-        {/* Loading — skeleton only on initial load */}
-        {loading && !data && <LeaderboardSkeleton />}
+        {/* Loading — skeleton on initial load */}
+        {loading && <LeaderboardSkeleton />}
 
-        {/* Content — stays visible during refreshing with opacity transition */}
-        {data && (
-          <div
-            className={cn(
-              "space-y-2 transition-opacity duration-200",
-              refreshing && "opacity-60",
+        {/* Content — no opacity change during pagination */}
+        {entries.length > 0 && (
+          <div className="space-y-2">
+            {entries.map((entry, i) => (
+              <LeaderboardRow
+                key={entry.user.id}
+                entry={entry}
+                index={i}
+                animationStartIndex={animationStartIndex}
+              />
+            ))}
+            {/* Load more button — hide when reached max or no more data */}
+            {hasMore && entries.length < MAX_ENTRIES && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full rounded-[var(--radius-card)] bg-secondary py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? "Loading..." : "Show more"}
+              </button>
             )}
-          >
-            {data.entries.length === 0 ? (
-              <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
-                No usage data for this period yet.
-              </div>
-            ) : (
-              <>
-                {data.entries.slice(0, visibleCount).map((entry, i) => (
-                  <LeaderboardRow
-                    key={entry.rank}
-                    entry={entry}
-                    index={i}
-                  />
-                ))}
-                {/* Load more button */}
-                {visibleCount < data.entries.length && visibleCount < MAX_ENTRIES && (
-                  <button
-                    onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, MAX_ENTRIES))}
-                    className="w-full rounded-[var(--radius-card)] bg-secondary py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    Show more
-                  </button>
-                )}
-              </>
-            )}
+          </div>
+        )}
+
+        {/* Empty state — only show after loading completes with no results */}
+        {!loading && entries.length === 0 && !error && (
+          <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
+            No usage data for this period yet.
           </div>
         )}
       </main>

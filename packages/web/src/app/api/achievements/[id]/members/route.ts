@@ -38,15 +38,6 @@ const DEFAULT_LIMIT = 50;
 // Types
 // ---------------------------------------------------------------------------
 
-interface MemberRow {
-  id: string;
-  name: string | null;
-  image: string | null;
-  slug: string | null;
-  value: number;
-  earned_at: string | null;
-}
-
 interface MemberResponse {
   id: string;
   name: string;
@@ -639,13 +630,13 @@ export async function GET(
 
   try {
     const { sql, params: queryParams } = queryBuilder(bronzeThreshold, limit + 1, offset);
-    const result = await db.query<MemberRow>(sql, queryParams);
+    const rows = await db.getAchievementEarners(id, sql, queryParams);
 
     // Check if there are more results
-    const hasMore = result.results.length > limit;
-    const rows = hasMore ? result.results.slice(0, limit) : result.results;
+    const hasMore = rows.length > limit;
+    const resultRows = hasMore ? rows.slice(0, limit) : rows;
 
-    const members: MemberResponse[] = rows.map((row) => {
+    const members: MemberResponse[] = resultRows.map((row) => {
       const { tier } = computeTierProgress(row.value, def.tiers);
       return {
         id: row.id,

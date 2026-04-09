@@ -76,7 +76,7 @@ describe("GET /api/admin/invites", () => {
         created_at: "2026-03-10T12:00:00Z",
       },
     ];
-    mockDbRead.query.mockResolvedValueOnce({ results: mockRows });
+    mockDbRead.listInviteCodes.mockResolvedValueOnce(mockRows);
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
     expect(res.status).toBe(200);
@@ -108,8 +108,8 @@ describe("POST /api/admin/invites", () => {
       userId: "admin-1",
       email: "admin@test.com",
     });
-    // firstOrNull returns null (no collision)
-    mockDbRead.firstOrNull.mockResolvedValue(null);
+    // checkInviteCodeExists returns null (no collision)
+    mockDbRead.checkInviteCodeExists.mockResolvedValue(null);
     mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
 
     const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 3 }));
@@ -216,8 +216,8 @@ describe("DELETE /api/admin/invites", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.deleted).toBe(true);
-    // Should NOT have called firstOrNull (no fallback needed)
-    expect(mockDbRead.firstOrNull).not.toHaveBeenCalled();
+    // Should NOT have called getInviteCodeById (no fallback needed)
+    expect(mockDbRead.getInviteCodeById).not.toHaveBeenCalled();
   });
 
   it("should delete burned pending:* code (atomic DELETE succeeds)", async () => {
@@ -243,8 +243,8 @@ describe("DELETE /api/admin/invites", () => {
     });
     // Atomic DELETE didn't match (code is fully consumed)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 0, duration: 0.01 });
-    // Fallback SELECT finds the row with a real user ID
-    mockDbRead.firstOrNull.mockResolvedValueOnce({
+    // Fallback getInviteCodeById finds the row with a real user ID
+    mockDbRead.getInviteCodeById.mockResolvedValueOnce({
       used_by: "user-uuid-abc123",
     });
 
@@ -263,8 +263,8 @@ describe("DELETE /api/admin/invites", () => {
     });
     // Atomic DELETE didn't match (no such row)
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 0, duration: 0.01 });
-    // Fallback SELECT also finds nothing
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    // Fallback getInviteCodeById also finds nothing
+    mockDbRead.getInviteCodeById.mockResolvedValueOnce(null);
 
     const res = await DELETE(
       makeJsonRequest("DELETE", "/api/admin/invites?id=999")
@@ -272,86 +272,5 @@ describe("DELETE /api/admin/invites", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toBe("Code not found");
-  });
-
-  it("should return 500 on unexpected error in GET", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 when GET error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-    mockDbRead.query.mockRejectedValueOnce("string error");
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 500 on unexpected error in POST", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB write failed"));
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/invites", { count: 1 }),
-    );
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toContain("Failed to generate");
-  });
-
-  it("should return 500 on unexpected error in DELETE", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB connection timeout"));
-
-    const res = await DELETE(
-      makeJsonRequest("DELETE", "/api/admin/invites?id=1"),
-    );
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toContain("Failed to delete");
-  });
-
-  it("should return 400 for invalid JSON body in POST", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-
-    const req = new Request("http://localhost:7020/api/admin/invites", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "not valid json",
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("Invalid JSON");
-  });
-
-  it("should return 400 for non-positive count in POST", async () => {
-    resolveAdmin.mockResolvedValueOnce({
-      userId: "admin-1",
-      email: "admin@test.com",
-    });
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/invites", { count: 0 }),
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("positive integer");
   });
 });

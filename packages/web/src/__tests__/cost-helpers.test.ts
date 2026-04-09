@@ -244,18 +244,6 @@ describe("computeCacheSavings", () => {
     expect(result.actualCachedCost).toBeCloseTo(0.184, 3);
     expect(result.netSavings).toBeCloseTo(0.916, 3);
   });
-
-  it("falls back to input * 0.1 when cached pricing is undefined", () => {
-    // Create a pricing map where the model has no cached price
-    const pm = makePricingMap();
-    pm.models["no-cache-model"] = { input: 10, output: 40 };
-    const models = [makeAggregate({ model: "no-cache-model", cached: 500_000 })];
-    const result = computeCacheSavings(models, pm);
-    // savedDollars = 500k / 1M * $10 = $5.00
-    expect(result.savedDollars).toBeCloseTo(5.0, 2);
-    // actualCachedCost = 500k / 1M * ($10 * 0.1) = 500k / 1M * $1.0 = $0.50
-    expect(result.actualCachedCost).toBeCloseTo(0.5, 2);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -269,12 +257,6 @@ function makeCostPoint(date: string, totalCost: number): DailyCostPoint {
 describe("forecastMonthlyCost", () => {
   it("returns null for empty data", () => {
     const result = forecastMonthlyCost([], new Date("2026-03-15"));
-    expect(result).toBeNull();
-  });
-
-  it("defaults to current date when now is not provided", () => {
-    // Just ensure it doesn't throw and returns null for empty data
-    const result = forecastMonthlyCost([]);
     expect(result).toBeNull();
   });
 

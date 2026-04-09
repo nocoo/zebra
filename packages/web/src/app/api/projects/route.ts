@@ -400,10 +400,7 @@ export async function POST(request: Request) {
 
   try {
     // Check name uniqueness
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM projects WHERE user_id = ? AND name = ?",
-      [userId, trimmedName],
-    );
+    const existing = await dbRead.getProjectByName(userId, trimmedName);
     if (existing) {
       return NextResponse.json(
         { error: "A project with this name already exists" },
@@ -414,11 +411,10 @@ export async function POST(request: Request) {
     // Validate aliases reference real session data
     const invalidAliases: AliasInput[] = [];
     for (const alias of deduped) {
-      const exists = await dbRead.firstOrNull<{ "1": number }>(
-        `SELECT 1 FROM session_records
-         WHERE user_id = ? AND source = ? AND project_ref = ?
-         LIMIT 1`,
-        [userId, alias.source, alias.project_ref],
+      const exists = await dbRead.sessionRecordExists(
+        userId,
+        alias.source,
+        alias.project_ref,
       );
       if (!exists) {
         invalidAliases.push(alias);
@@ -436,10 +432,10 @@ export async function POST(request: Request) {
 
     // Check aliases aren't already assigned to another project
     for (const alias of deduped) {
-      const taken = await dbRead.firstOrNull<{ project_id: string }>(
-        `SELECT project_id FROM project_aliases
-         WHERE user_id = ? AND source = ? AND project_ref = ?`,
-        [userId, alias.source, alias.project_ref],
+      const taken = await dbRead.getAliasOwner(
+        userId,
+        alias.source,
+        alias.project_ref,
       );
       if (taken) {
         return NextResponse.json(
@@ -527,10 +523,7 @@ export async function POST(request: Request) {
     }
 
     // Read back server-generated created_at instead of fabricating one
-    const created = await dbRead.firstOrNull<{ created_at: string }>(
-      "SELECT created_at FROM projects WHERE id = ?",
-      [projectId],
-    );
+    const created = await dbRead.getProjectById(userId, projectId);
     if (!created) {
       return NextResponse.json(
         { error: "Project not found after creation" },

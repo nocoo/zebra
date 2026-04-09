@@ -41,16 +41,13 @@ export async function POST(
   // Verify ownership
   const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
-  const membership = await dbRead.firstOrNull<{ role: string }>(
-    "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-    [teamId, authResult.userId],
-  );
+  const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-  if (!membership) {
+  if (!role) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  if (membership.role !== "owner") {
+  if (role !== "owner") {
     return NextResponse.json(
       { error: "Only the team owner can change the logo" },
       { status: 403 },
@@ -125,11 +122,7 @@ export async function POST(
   // Persist new URL to DB — compensate by deleting the new R2 object on failure
   let oldLogoUrl: string | null;
   try {
-    const oldTeam = await dbRead.firstOrNull<{ logo_url: string | null }>(
-      "SELECT logo_url FROM teams WHERE id = ?",
-      [teamId],
-    );
-    oldLogoUrl = oldTeam?.logo_url ?? null;
+    oldLogoUrl = await dbRead.getTeamLogoUrl(teamId);
 
     await dbWrite.execute("UPDATE teams SET logo_url = ? WHERE id = ?", [
       newLogoUrl,
@@ -180,16 +173,13 @@ export async function DELETE(
   // Verify ownership
   const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
-  const membership = await dbRead.firstOrNull<{ role: string }>(
-    "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-    [teamId, authResult.userId],
-  );
+  const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-  if (!membership) {
+  if (!role) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  if (membership.role !== "owner") {
+  if (role !== "owner") {
     return NextResponse.json(
       { error: "Only the team owner can remove the logo" },
       { status: 403 },
@@ -197,10 +187,7 @@ export async function DELETE(
   }
 
   // Read current logo URL before clearing
-  const team = await dbRead.firstOrNull<{ logo_url: string | null }>(
-    "SELECT logo_url FROM teams WHERE id = ?",
-    [teamId],
-  );
+  const logoUrl = await dbRead.getTeamLogoUrl(teamId);
 
   // Clear logo_url in DB first — DB is the authoritative state.
   // If this fails, return 500 and leave R2 untouched (no dangling reference).
@@ -218,9 +205,9 @@ export async function DELETE(
   }
 
   // Best-effort delete from R2
-  if (team?.logo_url) {
+  if (logoUrl) {
     try {
-      await deleteTeamLogoByUrl(team.logo_url);
+      await deleteTeamLogoByUrl(logoUrl);
     } catch (err) {
       // Storage leak is tolerable; dangling reference is not
       console.error("Failed to delete team logo from R2 (DB already cleared):", err);

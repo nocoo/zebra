@@ -19,33 +19,6 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-interface UsageAggregates {
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-  reasoning_output_tokens: number;
-}
-
-interface DailyUsageRow {
-  day: string;
-  total_tokens: number;
-}
-
-interface DiversityRow {
-  source_count: number;
-  model_count: number;
-  device_count: number;
-}
-
-interface SessionAggregates {
-  total_sessions: number;
-  quick_sessions: number;
-  marathon_sessions: number;
-  max_messages: number;
-  automated_sessions: number;
-}
-
 interface AchievementResponse {
   id: string;
   name: string;
@@ -128,59 +101,21 @@ export async function GET(
 
   try {
     // 1. Find user by slug (must be public)
-    const user = await db.firstOrNull<{ id: string; name: string | null }>(
-      `SELECT id, name FROM users WHERE (slug = ? OR id = ?) AND is_public = 1`,
-      [slug, slug]
-    );
+    const user = await db.getPublicUserBySlugOrId(slug);
 
-    if (!user) {
+    if (!user || !user.is_public) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const userId = user.id;
 
-    // 2. Query data (similar to /api/achievements but for specific user)
-    const usageAgg = await db.firstOrNull<UsageAggregates>(
-      `SELECT
-        COALESCE(SUM(total_tokens), 0) AS total_tokens,
-        COALESCE(SUM(input_tokens), 0) AS input_tokens,
-        COALESCE(SUM(output_tokens), 0) AS output_tokens,
-        COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
-        COALESCE(SUM(reasoning_output_tokens), 0) AS reasoning_output_tokens
-      FROM usage_records
-      WHERE user_id = ?`,
-      [userId]
-    );
-
-    const dailyUsage = await db.query<DailyUsageRow>(
-      `SELECT DATE(hour_start) AS day, SUM(total_tokens) AS total_tokens
-      FROM usage_records
-      WHERE user_id = ?
-      GROUP BY DATE(hour_start)
-      ORDER BY day`,
-      [userId]
-    );
-
-    const costByModelSourceDay = await db.query<{
-      day: string;
-      model: string;
-      source: string | null;
-      input_tokens: number;
-      output_tokens: number;
-      cached_input_tokens: number;
-    }>(
-      `SELECT DATE(hour_start) AS day, model, source,
-              SUM(input_tokens) AS input_tokens,
-              SUM(output_tokens) AS output_tokens,
-              SUM(cached_input_tokens) AS cached_input_tokens
-      FROM usage_records
-      WHERE user_id = ?
-      GROUP BY DATE(hour_start), model, source`,
-      [userId]
-    );
+    // 2. Query data using RPC methods
+    const usageAgg = await db.getAchievementUsageAggregates(userId);
+    const dailyUsage = await db.getAchievementDailyUsage(userId);
+    const costByModelSourceDay = await db.getAchievementDailyCostBreakdown(userId);
 
     const dailyCostMap = new Map<string, number>();
-    for (const row of costByModelSourceDay.results) {
+    for (const row of costByModelSourceDay) {
       const cost = computeCost(
         row.model,
         row.source,
@@ -192,47 +127,12 @@ export async function GET(
       dailyCostMap.set(row.day, (dailyCostMap.get(row.day) ?? 0) + cost);
     }
 
-    const diversity = await db.firstOrNull<DiversityRow>(
-      `SELECT
-        COUNT(DISTINCT source) AS source_count,
-        COUNT(DISTINCT model) AS model_count,
-        COUNT(DISTINCT device_id) AS device_count
-      FROM usage_records
-      WHERE user_id = ?`,
-      [userId]
-    );
-
-    const sessionAgg = await db.firstOrNull<SessionAggregates>(
-      `SELECT
-        COUNT(*) AS total_sessions,
-        SUM(CASE WHEN duration_seconds < 300 THEN 1 ELSE 0 END) AS quick_sessions,
-        SUM(CASE WHEN duration_seconds > 7200 THEN 1 ELSE 0 END) AS marathon_sessions,
-        MAX(total_messages) AS max_messages,
-        SUM(CASE WHEN kind = 'automated' THEN 1 ELSE 0 END) AS automated_sessions
-      FROM session_records
-      WHERE user_id = ?`,
-      [userId]
-    );
-
-    const costByModelSource = await db.query<{
-      model: string;
-      source: string | null;
-      input_tokens: number;
-      output_tokens: number;
-      cached_input_tokens: number;
-    }>(
-      `SELECT model, source,
-              SUM(input_tokens) AS input_tokens,
-              SUM(output_tokens) AS output_tokens,
-              SUM(cached_input_tokens) AS cached_input_tokens
-      FROM usage_records
-      WHERE user_id = ?
-      GROUP BY model, source`,
-      [userId]
-    );
+    const diversity = await db.getAchievementDiversityCounts(userId);
+    const sessionAgg = await db.getAchievementSessionAggregates(userId);
+    const costByModelSource = await db.getAchievementCostByModelSource(userId);
 
     let totalCost = 0;
-    for (const row of costByModelSource.results) {
+    for (const row of costByModelSource) {
       totalCost += computeCost(
         row.model,
         row.source,
@@ -244,9 +144,9 @@ export async function GET(
     }
 
     // 3. Compute achievement values
-    const activeDays = new Set(dailyUsage.results.map((r) => r.day));
+    const activeDays = new Set(dailyUsage.map((r) => r.day));
     const streak = computeStreak(activeDays, today);
-    const biggestDay = dailyUsage.results.reduce(
+    const biggestDay = dailyUsage.reduce(
       (max, r) => Math.max(max, r.total_tokens),
       0
     );

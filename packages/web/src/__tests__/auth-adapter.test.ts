@@ -79,7 +79,7 @@ describe("D1AuthAdapter", () => {
 
   describe("getUser()", () => {
     it("should return user by id", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -99,7 +99,7 @@ describe("D1AuthAdapter", () => {
     });
 
     it("should return null when user not found", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce(null);
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce(null);
 
       const result = await adapter.getUser!("nonexistent");
       expect(result).toBeNull();
@@ -108,7 +108,7 @@ describe("D1AuthAdapter", () => {
 
   describe("getUserByEmail()", () => {
     it("should return user by email", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserByEmail).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -125,14 +125,11 @@ describe("D1AuthAdapter", () => {
         image: null,
         emailVerified: null,
       });
-      expect(mockDbRead.firstOrNull).toHaveBeenCalledWith(
-        expect.stringContaining("WHERE email = ?"),
-        ["test@example.com"]
-      );
+      expect(mockDbRead.getUserByEmail).toHaveBeenCalledWith("test@example.com");
     });
 
     it("should return null when email not found", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce(null);
+      vi.mocked(mockDbRead.getUserByEmail).mockResolvedValueOnce(null);
 
       const result = await adapter.getUserByEmail!("nobody@example.com");
       expect(result).toBeNull();
@@ -141,7 +138,7 @@ describe("D1AuthAdapter", () => {
 
   describe("getUserByAccount()", () => {
     it("should return user linked to provider account", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserByOAuthAccount).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -161,14 +158,14 @@ describe("D1AuthAdapter", () => {
         image: null,
         emailVerified: null,
       });
-      const [sql, params] = vi.mocked(mockDbRead.firstOrNull).mock.calls[0]!;
-      expect(sql).toContain("JOIN accounts");
-      expect(params).toContain("google");
-      expect(params).toContain("google-123");
+      expect(mockDbRead.getUserByOAuthAccount).toHaveBeenCalledWith(
+        "google",
+        "google-123"
+      );
     });
 
     it("should return null when no linked account", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce(null);
+      vi.mocked(mockDbRead.getUserByOAuthAccount).mockResolvedValueOnce(null);
 
       const result = await adapter.getUserByAccount!({
         provider: "google",
@@ -180,12 +177,13 @@ describe("D1AuthAdapter", () => {
   });
 
   describe("linkAccount()", () => {
-    it("should insert account record", async () => {
+    it("should insert account record with only essential fields (no OAuth tokens)", async () => {
       vi.mocked(mockDbWrite.execute).mockResolvedValueOnce({
         changes: 1,
         duration: 0.01,
       });
 
+      // Even if OAuth tokens are provided, they should NOT be stored
       await adapter.linkAccount!({
         userId: "u1",
         type: "oauth" as const,
@@ -202,11 +200,14 @@ describe("D1AuthAdapter", () => {
       expect(mockDbWrite.execute).toHaveBeenCalledOnce();
       const [sql, params] = vi.mocked(mockDbWrite.execute).mock.calls[0]!;
       expect(sql).toContain("INSERT INTO accounts");
+      // Only 5 params: id, user_id, type, provider, provider_account_id
+      // Token fields are hardcoded to NULL in the SQL, not passed as params
+      expect(params).toHaveLength(5);
       expect(params).toContain("google");
       expect(params).toContain("google-123");
     });
 
-    it("should pass null for missing optional fields", async () => {
+    it("should store NULL for all OAuth token fields (data minimization)", async () => {
       vi.mocked(mockDbWrite.execute).mockResolvedValueOnce({
         changes: 1,
         duration: 0.01,
@@ -219,14 +220,9 @@ describe("D1AuthAdapter", () => {
         providerAccountId: "gh-456",
       });
 
-      const [, params] = vi.mocked(mockDbWrite.execute).mock.calls[0]!;
-      // access_token, refresh_token, expires_at, token_type, scope, id_token → all null
-      expect(params![5]).toBeNull(); // access_token
-      expect(params![6]).toBeNull(); // refresh_token
-      expect(params![7]).toBeNull(); // expires_at
-      expect(params![8]).toBeNull(); // token_type
-      expect(params![9]).toBeNull(); // scope
-      expect(params![10]).toBeNull(); // id_token
+      const [sql] = vi.mocked(mockDbWrite.execute).mock.calls[0]!;
+      // SQL should have NULL literals for all token fields
+      expect(sql).toContain("NULL, NULL, NULL, NULL, NULL, NULL");
     });
   });
 
@@ -236,7 +232,7 @@ describe("D1AuthAdapter", () => {
         changes: 1,
         duration: 0.01,
       });
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "new@example.com",
         name: "New Name",
@@ -259,7 +255,7 @@ describe("D1AuthAdapter", () => {
         changes: 1,
         duration: 0.01,
       });
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -284,7 +280,7 @@ describe("D1AuthAdapter", () => {
         changes: 1,
         duration: 0.01,
       });
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -308,7 +304,7 @@ describe("D1AuthAdapter", () => {
         changes: 1,
         duration: 0.01,
       });
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -328,7 +324,7 @@ describe("D1AuthAdapter", () => {
     });
 
     it("should skip execute when no fields provided (only id)", async () => {
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce({
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce({
         id: "u1",
         email: "test@example.com",
         name: "Test",
@@ -348,7 +344,7 @@ describe("D1AuthAdapter", () => {
         changes: 1,
         duration: 0.01,
       });
-      vi.mocked(mockDbRead.firstOrNull).mockResolvedValueOnce(null);
+      vi.mocked(mockDbRead.getUserById).mockResolvedValueOnce(null);
 
       await expect(
         adapter.updateUser!({ id: "u1", name: "Ghost" })

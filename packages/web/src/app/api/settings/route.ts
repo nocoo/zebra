@@ -17,13 +17,6 @@ interface UserSettings {
   is_public: boolean;
 }
 
-/** Raw D1 row — is_public is stored as INTEGER (0/1). */
-interface UserSettingsRow {
-  nickname: string | null;
-  slug: string | null;
-  is_public: number;
-}
-
 // ---------------------------------------------------------------------------
 // GET — read current settings
 // ---------------------------------------------------------------------------
@@ -37,10 +30,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const row = await dbRead.firstOrNull<UserSettingsRow>(
-      "SELECT nickname, slug, is_public FROM users WHERE id = ?",
-      [authResult.userId],
-    );
+    const row = await dbRead.getUserSettings(authResult.userId);
 
     if (!row) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -62,10 +52,7 @@ export async function GET(request: Request) {
 
     // Level 1: is_public missing but nickname exists
     try {
-      const row = await dbRead.firstOrNull<{ nickname: string | null; slug: string | null }>(
-        "SELECT nickname, slug FROM users WHERE id = ?",
-        [authResult.userId],
-      );
+      const row = await dbRead.getUserNicknameSlug(authResult.userId);
       if (!row) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
@@ -79,10 +66,7 @@ export async function GET(request: Request) {
     }
 
     // Level 2: both nickname and is_public missing
-    const row = await dbRead.firstOrNull<{ slug: string | null }>(
-      "SELECT slug FROM users WHERE id = ?",
-      [authResult.userId],
-    );
+    const row = await dbRead.getUserSlugOnly(authResult.userId);
     if (!row) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -154,11 +138,8 @@ export async function PATCH(request: Request) {
       }
 
       // Check uniqueness
-      const existing = await dbRead.firstOrNull<{ id: string }>(
-        "SELECT id FROM users WHERE slug = ? AND id != ?",
-        [slug, authResult.userId],
-      );
-      if (existing) {
+      const slugTaken = await dbRead.checkSlugExists(slug, authResult.userId);
+      if (slugTaken) {
         return NextResponse.json(
           { error: "slug is already taken" },
           { status: 409 },
@@ -195,10 +176,7 @@ export async function PATCH(request: Request) {
     );
 
     // Return updated settings
-    const row = await dbRead.firstOrNull<UserSettingsRow>(
-      "SELECT nickname, slug, is_public FROM users WHERE id = ?",
-      [authResult.userId],
-    );
+    const row = await dbRead.getUserSettings(authResult.userId);
 
     return NextResponse.json(
       row

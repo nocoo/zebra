@@ -109,10 +109,7 @@ export async function PATCH(
   const dbWrite = await getDbWrite();
 
   // Verify project exists and belongs to user
-  const project = await dbRead.firstOrNull<{ id: string; name: string }>(
-    "SELECT id, name FROM projects WHERE id = ? AND user_id = ?",
-    [projectId, userId],
-  );
+  const project = await dbRead.getProjectById(userId, projectId);
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
@@ -150,9 +147,10 @@ export async function PATCH(
       );
     }
 
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM projects WHERE user_id = ? AND name = ? AND id != ?",
-      [userId, trimmedName, projectId],
+    const existing = await dbRead.getProjectByNameExcluding(
+      userId,
+      trimmedName,
+      projectId,
     );
     if (existing) {
       return NextResponse.json(
@@ -182,11 +180,10 @@ export async function PATCH(
 
     const invalidAliases: AliasInput[] = [];
     for (const alias of deduped) {
-      const exists = await dbRead.firstOrNull<{ "1": number }>(
-        `SELECT 1 FROM session_records
-         WHERE user_id = ? AND source = ? AND project_ref = ?
-         LIMIT 1`,
-        [userId, alias.source, alias.project_ref],
+      const exists = await dbRead.sessionRecordExists(
+        userId,
+        alias.source,
+        alias.project_ref,
       );
       if (!exists) {
         invalidAliases.push(alias);
@@ -204,10 +201,10 @@ export async function PATCH(
 
     const trulyNewAliases: AliasInput[] = [];
     for (const alias of deduped) {
-      const taken = await dbRead.firstOrNull<{ project_id: string }>(
-        `SELECT project_id FROM project_aliases
-         WHERE user_id = ? AND source = ? AND project_ref = ?`,
-        [userId, alias.source, alias.project_ref],
+      const taken = await dbRead.getAliasOwner(
+        userId,
+        alias.source,
+        alias.project_ref,
       );
       if (taken && taken.project_id !== projectId) {
         return NextResponse.json(
@@ -240,10 +237,11 @@ export async function PATCH(
     // Verify each alias is actually attached to this project
     const notFound: AliasInput[] = [];
     for (const alias of valid) {
-      const attached = await dbRead.firstOrNull<{ project_id: string }>(
-        `SELECT project_id FROM project_aliases
-         WHERE user_id = ? AND project_id = ? AND source = ? AND project_ref = ?`,
-        [userId, projectId, alias.source, alias.project_ref],
+      const attached = await dbRead.aliasAttachedToProject(
+        userId,
+        projectId,
+        alias.source,
+        alias.project_ref,
       );
       if (!attached) {
         notFound.push(alias);
@@ -353,11 +351,7 @@ export async function PATCH(
     // doesn't corrupt pre-existing state (e.g. deleting an already-present
     // tag or inserting a tag that never existed).
     for (const tag of addTags) {
-      const existing = await dbRead.firstOrNull<{ tag: string }>(
-        `SELECT tag FROM project_tags
-         WHERE user_id = ? AND project_id = ? AND tag = ?`,
-        [userId, projectId, tag],
-      );
+      const existing = await dbRead.projectTagExists(userId, projectId, tag);
       if (!existing) {
         await dbWrite.execute(
           `INSERT INTO project_tags (user_id, project_id, tag, created_at)
@@ -368,11 +362,7 @@ export async function PATCH(
       }
     }
     for (const tag of removeTags) {
-      const existing = await dbRead.firstOrNull<{ tag: string }>(
-        `SELECT tag FROM project_tags
-         WHERE user_id = ? AND project_id = ? AND tag = ?`,
-        [userId, projectId, tag],
-      );
+      const existing = await dbRead.projectTagExists(userId, projectId, tag);
       if (existing) {
         await dbWrite.execute(
           `DELETE FROM project_tags
@@ -391,14 +381,7 @@ export async function PATCH(
     }
 
     // Return updated project
-    const updated = await dbRead.firstOrNull<{
-      id: string;
-      name: string;
-      created_at: string;
-    }>(
-      "SELECT id, name, created_at FROM projects WHERE id = ?",
-      [projectId],
-    );
+    const updated = await dbRead.getProjectById(userId, projectId);
     if (!updated) {
       return NextResponse.json(
         { error: "Project not found after update" },
@@ -445,12 +428,7 @@ export async function PATCH(
     }
 
     // Fetch current tags
-    const tagRows = await dbRead.query<{ tag: string }>(
-      `SELECT tag FROM project_tags
-       WHERE user_id = ? AND project_id = ?
-       ORDER BY tag`,
-      [userId, projectId],
-    );
+    const tags = await dbRead.getProjectTagList(userId, projectId);
 
     return NextResponse.json({
       id: updated.id,
@@ -460,7 +438,7 @@ export async function PATCH(
         project_ref: a.project_ref,
         session_count: a.session_count,
       })),
-      tags: tagRows.results.map((r) => r.tag),
+      tags,
       session_count: sessionCount,
       last_active: lastActive,
       absolute_last_active: lastActive, // PATCH is always all-time, so identical
@@ -537,11 +515,8 @@ export async function DELETE(
   const dbWrite = await getDbWrite();
 
   // Verify project exists and belongs to user
-  const project = await dbRead.firstOrNull<{ id: string }>(
-    "SELECT id FROM projects WHERE id = ? AND user_id = ?",
-    [projectId, userId],
-  );
-  if (!project) {
+  const exists = await dbRead.projectExistsForUser(userId, projectId);
+  if (!exists) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 

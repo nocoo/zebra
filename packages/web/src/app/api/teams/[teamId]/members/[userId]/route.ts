@@ -31,15 +31,12 @@ export async function DELETE(
     const dbWrite = await getDbWrite();
 
     // Only the owner can kick members
-    const membership = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [teamId, authResult.userId],
-    );
+    const role = await dbRead.getTeamMembership(teamId, authResult.userId);
 
-    if (!membership) {
+    if (!role) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
-    if (membership.role !== "owner") {
+    if (role !== "owner") {
       return NextResponse.json(
         { error: "Only the team owner can remove members" },
         { status: 403 },
@@ -47,12 +44,9 @@ export async function DELETE(
     }
 
     // Verify the target is actually a member
-    const target = await dbRead.firstOrNull<{ role: string }>(
-      "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-      [teamId, targetUserId],
-    );
+    const targetIsMember = await dbRead.checkTeamMembershipExists(teamId, targetUserId);
 
-    if (!target) {
+    if (!targetIsMember) {
       return NextResponse.json({ error: "User is not a member" }, { status: 404 });
     }
 

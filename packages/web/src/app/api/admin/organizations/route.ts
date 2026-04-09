@@ -28,24 +28,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const { results } = await dbRead.query<{
-      id: string;
-      name: string;
-      slug: string;
-      logo_url: string | null;
-      created_by: string;
-      created_at: string;
-      updated_at: string;
-      member_count: number;
-    }>(
-      `SELECT
-         o.id, o.name, o.slug, o.logo_url, o.created_by, o.created_at, o.updated_at,
-         COUNT(om.id) AS member_count
-       FROM organizations o
-       LEFT JOIN organization_members om ON om.org_id = o.id
-       GROUP BY o.id
-       ORDER BY o.name ASC`
-    );
+    const results = await dbRead.listOrganizationsWithCount();
 
     const organizations = results.map((r) => ({
       id: r.id,
@@ -118,10 +101,7 @@ export async function POST(request: Request) {
 
   try {
     // Check slug uniqueness
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM organizations WHERE slug = ?",
-      [slug]
-    );
+    const existing = await dbRead.getOrganizationBySlug(slug);
     if (existing) {
       return NextResponse.json(
         { error: "An organization with this slug already exists" },

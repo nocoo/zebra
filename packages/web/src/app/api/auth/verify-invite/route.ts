@@ -38,12 +38,9 @@ export async function POST(request: Request) {
 
   try {
     // Read-only check — does NOT consume the code
-    const row = await db.firstOrNull<{ id: number }>(
-      "SELECT id FROM invite_codes WHERE code = ? AND used_by IS NULL",
-      [code]
-    );
+    const row = await db.checkInviteCodeExists(code);
 
-    if (!row) {
+    if (!row || row.used_by !== null) {
       return NextResponse.json(
         { valid: false, error: "Invalid or already used invite code" },
         { status: 400 }

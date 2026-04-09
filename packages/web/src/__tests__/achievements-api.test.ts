@@ -47,75 +47,67 @@ describe("GET /api/achievements", () => {
         email: "test@example.com",
       });
 
-      // Setup default mock responses for all queries
-      // Use mockResolvedValue (not Once) for repeated queries
+      // Setup default mock responses for all RPC methods
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 1_000_000,
+        input_tokens: 600_000,
+        output_tokens: 400_000,
+        cached_input_tokens: 200_000,
+        reasoning_output_tokens: 50_000,
+      });
 
-      // firstOrNull mocks in order: usage aggregates, diversity, session aggregates, then count queries
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({
-          total_tokens: 1_000_000,
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-04-03", total_tokens: 100_000 },
+        { day: "2026-04-04", total_tokens: 200_000 },
+        { day: "2026-04-05", total_tokens: 150_000 },
+      ]);
+
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([
+        {
+          day: "2026-04-03",
+          model: "claude-sonnet-4-20250514",
+          source: null,
+          input_tokens: 50_000,
+          output_tokens: 30_000,
+          cached_input_tokens: 10_000,
+        },
+      ]);
+
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 3,
+        model_count: 5,
+        device_count: 2,
+      });
+
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 50,
+        quick_sessions: 20,
+        marathon_sessions: 5,
+        max_messages: 150,
+        automated_sessions: 10,
+      });
+
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([
+        { hour_start: "2026-04-05T02:00:00Z", total_tokens: 10_000 },
+        { hour_start: "2026-04-05T07:00:00Z", total_tokens: 20_000 },
+      ]);
+
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([
+        {
+          model: "claude-sonnet-4-20250514",
+          source: null,
           input_tokens: 600_000,
           output_tokens: 400_000,
           cached_input_tokens: 200_000,
-          reasoning_output_tokens: 50_000,
-        })
-        .mockResolvedValueOnce({
-          source_count: 3,
-          model_count: 5,
-          device_count: 2,
-        })
-        .mockResolvedValueOnce({
-          total_sessions: 50,
-          quick_sessions: 20,
-          marathon_sessions: 5,
-          max_messages: 150,
-          automated_sessions: 10,
-        })
-        // All count queries return the same value
-        .mockResolvedValue({ count: 5 });
+        },
+      ]);
 
-      // query mocks: daily usage, cost by model/day, hourly usage, cost by model, then earnedBy queries
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            { day: "2026-04-03", total_tokens: 100_000 },
-            { day: "2026-04-04", total_tokens: 200_000 },
-            { day: "2026-04-05", total_tokens: 150_000 },
-          ],
-        })
-        .mockResolvedValueOnce({
-          results: [
-            {
-              day: "2026-04-03",
-              model: "claude-sonnet-4-20250514",
-              input_tokens: 50_000,
-              output_tokens: 30_000,
-              cached_input_tokens: 10_000,
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          results: [
-            { hour_start: "2026-04-05T02:00:00Z", total_tokens: 10_000 },
-            { hour_start: "2026-04-05T07:00:00Z", total_tokens: 20_000 },
-          ],
-        })
-        .mockResolvedValueOnce({
-          results: [
-            {
-              model: "claude-sonnet-4-20250514",
-              input_tokens: 600_000,
-              output_tokens: 400_000,
-              cached_input_tokens: 200_000,
-            },
-          ],
-        })
-        // All earnedBy queries return similar data
-        .mockResolvedValue({
-          results: [
-            { id: "u2", name: "Alice", image: null, slug: "alice", value: 50_000_000 },
-          ],
-        });
+      // Earners queries
+      mockClient.getAchievementEarners.mockResolvedValue([
+        { id: "u2", name: "Alice", image: null, slug: "alice", value: 50_000_000 },
+      ]);
+
+      mockClient.getAchievementEarnersCount.mockResolvedValue(5);
     });
 
     it("should return achievements array and summary", async () => {
@@ -202,14 +194,31 @@ describe("GET /api/achievements", () => {
       });
 
       // Setup minimal mock responses
-      mockClient.firstOrNull.mockResolvedValue({
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
         total_tokens: 100_000,
         input_tokens: 60_000,
         output_tokens: 40_000,
         cached_input_tokens: 20_000,
         reasoning_output_tokens: 5_000,
       });
-      mockClient.query.mockResolvedValue({ results: [] });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 0,
+        model_count: 0,
+        device_count: 0,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 0,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 0,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([]);
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+      mockClient.getAchievementEarners.mockResolvedValue([]);
+      mockClient.getAchievementEarnersCount.mockResolvedValue(0);
     });
 
     it("should accept tzOffset query parameter", async () => {
@@ -235,7 +244,7 @@ describe("GET /api/achievements", () => {
     });
 
     it("should return 500 on database error", async () => {
-      mockClient.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
+      mockClient.getAchievementUsageAggregates.mockRejectedValueOnce(new Error("DB connection failed"));
 
       const res = await GET(makeGetRequest("/api/achievements"));
 

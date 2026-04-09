@@ -85,13 +85,13 @@ describe("GET /api/admin/check", () => {
       userId: "u1",
       email: undefined,
     });
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ email: "admin@example.com" });
+    mockDbRead.getUserEmail.mockResolvedValueOnce("admin@example.com");
 
     const res = await GET(new Request("http://localhost:7020/api/admin/check"));
     const body = await res.json();
 
     expect(body.isAdmin).toBe(true);
-    expect(mockDbRead.firstOrNull).toHaveBeenCalledOnce();
+    expect(mockDbRead.getUserEmail).toHaveBeenCalledOnce();
   });
 
   it("should return isAdmin: false when DB lookup finds no email", async () => {
@@ -99,7 +99,7 @@ describe("GET /api/admin/check", () => {
       userId: "u1",
       email: undefined,
     });
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null);
+    mockDbRead.getUserEmail.mockResolvedValueOnce(null);
 
     const res = await GET(new Request("http://localhost:7020/api/admin/check"));
     const body = await res.json();

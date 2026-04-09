@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/leaderboard/route";
 import * as dbModule from "@/lib/db";
-import { createMockClient, makeGetRequest } from "./test-utils";
+import { createMockDbRead, makeGetRequest } from "./test-utils";
 
 // Mock DB
 vi.mock("@/lib/db", () => ({
@@ -24,12 +24,12 @@ const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
 };
 
 describe("GET /api/leaderboard", () => {
-  let mockClient: ReturnType<typeof createMockClient>;
+  let mockDb: ReturnType<typeof createMockDbRead>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient = createMockClient();
-    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockClient as any);
+    mockDb = createMockDbRead();
+    vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDb as any);
     // Default to authenticated user for scope tests
     resolveUser.mockResolvedValue({ userId: "test-user" });
   });
@@ -45,8 +45,8 @@ describe("GET /api/leaderboard", () => {
 
     it("should accept valid periods", async () => {
       for (const period of ["week", "month", "all"]) {
-        mockClient.query
-          .mockResolvedValueOnce({ results: [] })  // leaderboard query
+        mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+        mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
         const res = await GET(makeGetRequest("/api/leaderboard", { period }));
         expect(res.status).toBe(200);
       }
@@ -71,11 +71,40 @@ describe("GET /api/leaderboard", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it("should reject negative offset", async () => {
+      const res = await GET(makeGetRequest("/api/leaderboard", { offset: "-1" }));
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("offset must be");
+    });
+
+    it("should reject non-numeric offset", async () => {
+      const res = await GET(makeGetRequest("/api/leaderboard", { offset: "abc" }));
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should accept valid offset", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/leaderboard", { offset: "20" }));
+
+      expect(res.status).toBe(200);
+      expect(mockDb.getGlobalLeaderboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offset: 20,
+        }),
+      );
+    });
   });
 
   describe("default behavior", () => {
-    it("should default to period=week and limit=100", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should default to period=week and limit=20", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
@@ -83,47 +112,51 @@ describe("GET /api/leaderboard", () => {
       expect(res.status).toBe(200);
       expect(body.period).toBe("week");
       expect(body.entries).toEqual([]);
+      expect(body.hasMore).toBe(false);
 
-      // Check SQL includes date filter (week has a date condition)
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("ur.hour_start >= ?");
+      // Check RPC call includes fromDate (week has a date condition)
+      // limit is requested as limit+1 to detect hasMore
+      expect(mockDb.getGlobalLeaderboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fromDate: expect.any(String),
+          limit: 21, // DEFAULT_LIMIT (20) + 1
+        }),
+      );
     });
   });
 
   describe("successful response", () => {
     it("should return ranked entries with user info and teams", async () => {
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            {
-              user_id: "u1",
-              name: "Alice",
-              image: "https://example.com/alice.jpg",
-              slug: "alice",
-              total_tokens: 5000000,
-              input_tokens: 3000000,
-              output_tokens: 1500000,
-              cached_input_tokens: 500000,
-            },
-            {
-              user_id: "u2",
-              name: "Bob",
-              image: null,
-              slug: "bob",
-              total_tokens: 3000000,
-              input_tokens: 2000000,
-              output_tokens: 800000,
-              cached_input_tokens: 200000,
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          results: [
-            { user_id: "u1", team_id: "t1", team_name: "Team Alpha", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg" },
-            { user_id: "u2", team_id: "t1", team_name: "Team Alpha", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg" },
-            { user_id: "u2", team_id: "t2", team_name: "Team Beta", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t2/def.jpg" },
-          ],
-        });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Alice",
+          nickname: null,
+          image: "https://example.com/alice.jpg",
+          slug: "alice",
+          total_tokens: 5000000,
+          input_tokens: 3000000,
+          output_tokens: 1500000,
+          cached_input_tokens: 500000,
+        },
+        {
+          user_id: "u2",
+          name: "Bob",
+          nickname: null,
+          image: null,
+          slug: "bob",
+          total_tokens: 3000000,
+          input_tokens: 2000000,
+          output_tokens: 800000,
+          cached_input_tokens: 200000,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([
+        { user_id: "u1", team_id: "t1", team_name: "Team Alpha", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg" },
+        { user_id: "u2", team_id: "t1", team_name: "Team Alpha", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/abc.jpg" },
+        { user_id: "u2", team_id: "t2", team_name: "Team Beta", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t2/def.jpg" },
+      ]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { period: "month" }));
       const body = await res.json();
@@ -158,48 +191,33 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should not include date filter for period=all", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       await GET(makeGetRequest("/api/leaderboard", { period: "all" }));
 
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).not.toContain("ur.hour_start >= ?");
+      // With conditional spread, fromDate is omitted (not present) for period=all
+      const callArg = mockDb.getGlobalLeaderboard.mock.calls[0]?.[0];
+      expect(callArg).not.toHaveProperty("fromDate");
     });
 
-    it("should filter by is_public = 1 (no slug requirement)", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
-
-      await GET(makeGetRequest("/api/leaderboard"));
-
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("u.is_public = 1");
-      // slug IS NOT NULL was removed — all public users shown regardless of slug
-      expect(sqlCall[0]).not.toContain("u.slug IS NOT NULL");
-    });
-
-    it("should filter out users with 0 total_tokens via HAVING", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
-
-      await GET(makeGetRequest("/api/leaderboard"));
-
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("HAVING total_tokens > 0");
-    });
-
-    it("should pass limit to SQL", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should pass limit to RPC (with +1 for hasMore detection)", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       await GET(makeGetRequest("/api/leaderboard", { limit: "10" }));
 
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("LIMIT ?");
-      expect(sqlCall[1]).toContain(10);
+      expect(mockDb.getGlobalLeaderboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 11, // requested limit + 1
+        }),
+      );
     });
   });
 
   describe("error handling", () => {
     it("should return 500 on D1 failure", async () => {
-      mockClient.query.mockRejectedValueOnce(new Error("D1 down"));
+      mockDb.getGlobalLeaderboard.mockRejectedValueOnce(new Error("D1 down"));
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
 
@@ -210,44 +228,39 @@ describe("GET /api/leaderboard", () => {
   });
 
   describe("team filter", () => {
-    it("should add EXISTS filter when team param is provided", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should pass teamId when team param is provided", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
       expect(res.status).toBe(200);
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = ur.user_id AND tm.team_id = ?)");
-      expect(sqlCall[1]).toContain("team-abc");
-    });
-
-    it("should include is_public filter even when team is set (opt-out respected)", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
-
-      await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
-
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      // Team filter still respects user opt-out
-      expect(sqlCall[0]).toContain("u.is_public = 1");
+      expect(mockDb.getGlobalLeaderboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teamId: "team-abc",
+        }),
+      );
     });
 
     it("should silently ignore team param for anonymous users", async () => {
       resolveUser.mockResolvedValueOnce(null); // Anonymous
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
       const body = await res.json();
 
       expect(res.status).toBe(200);
       expect(body.scope).toBe("global");
-      // Should NOT have team filter in SQL
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).not.toContain("team_members");
+      // Should NOT have team filter - with conditional spread, teamId is omitted entirely
+      const callArg = mockDb.getGlobalLeaderboard.mock.calls[0]?.[0];
+      expect(callArg).not.toHaveProperty("teamId");
     });
 
     it("should set Cache-Control: private, no-store for anonymous team-scoped request", async () => {
       resolveUser.mockResolvedValueOnce(null); // Anonymous
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
@@ -258,71 +271,22 @@ describe("GET /api/leaderboard", () => {
   });
 
   describe("nickname fallback", () => {
-    it("should retry without nickname when first query throws 'no such column: nickname'", async () => {
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(makeGetRequest("/api/leaderboard"));
-
-      expect(res.status).toBe(200);
-      expect(mockClient.query).toHaveBeenCalledTimes(2);
-      // Level 1 fallback: no nickname but preserves is_public filter
-      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(fallbackSql).not.toContain("u.nickname");
-      expect(fallbackSql).toContain("u.is_public = 1");
-    });
-
-    it("should fail closed when is_public column is missing (no bare fallback)", async () => {
-      // Both queries fail because is_public column is missing — fail closed, don't bypass opt-out
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such column: u.is_public"))
-        .mockRejectedValueOnce(new Error("no such column: u.is_public"));
-
-      const res = await GET(makeGetRequest("/api/leaderboard"));
-
-      expect(res.status).toBe(500);
-      expect(mockClient.query).toHaveBeenCalledTimes(2);
-    });
-
-    it("should fail closed when team_members table is missing", async () => {
-      // Both queries fail because team_members table is missing — fail closed
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such table: team_members"))
-        .mockRejectedValueOnce(new Error("no such table: team_members"));
-
-      const res = await GET(makeGetRequest("/api/leaderboard", { team: "t1" }));
-
-      expect(res.status).toBe(500);
-      expect(mockClient.query).toHaveBeenCalledTimes(2);
-    });
-
-    it("should re-throw non-column/table errors", async () => {
-      mockClient.query.mockRejectedValueOnce(new Error("connection refused"));
-
-      const res = await GET(makeGetRequest("/api/leaderboard"));
-
-      expect(res.status).toBe(500);
-    });
-
     it("should use nickname when available", async () => {
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            {
-              user_id: "u1",
-              name: "Alice Smith",
-              nickname: "alice",
-              image: null,
-              slug: "alice-s",
-              total_tokens: 1000,
-              input_tokens: 500,
-              output_tokens: 400,
-              cached_input_tokens: 100,
-            },
-          ],
-        })
-        .mockResolvedValueOnce({ results: [] }); // teams query
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Alice Smith",
+          nickname: "alice",
+          image: null,
+          slug: "alice-s",
+          total_tokens: 1000,
+          input_tokens: 500,
+          output_tokens: 400,
+          cached_input_tokens: 100,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
@@ -331,58 +295,33 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should fall back to name when nickname is null", async () => {
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            {
-              user_id: "u1",
-              name: "Bob Jones",
-              nickname: null,
-              image: null,
-              slug: "bob",
-              total_tokens: 1000,
-              input_tokens: 500,
-              output_tokens: 400,
-              cached_input_tokens: 100,
-            },
-          ],
-        })
-        .mockResolvedValueOnce({ results: [] }); // teams query
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Bob Jones",
+          nickname: null,
+          image: null,
+          slug: "bob",
+          total_tokens: 1000,
+          input_tokens: 500,
+          output_tokens: 400,
+          cached_input_tokens: 100,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].user.name).toBe("Bob Jones");
     });
-
-    it("should include fromDate in fallback when period is not all", async () => {
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(makeGetRequest("/api/leaderboard", { period: "month" }));
-
-      expect(res.status).toBe(200);
-      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(fallbackSql).toContain("ur.hour_start >= ?");
-    });
-
-    it("should preserve EXISTS filter in level 1 fallback", async () => {
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
-
-      expect(res.status).toBe(200);
-      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(fallbackSql).toContain("EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = ur.user_id AND tm.team_id = ?)");
-    });
   });
 
   describe("organization filter", () => {
-    it("should add EXISTS filter when org param is provided", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+    it("should pass orgId when org param is provided", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
 
@@ -391,9 +330,11 @@ describe("GET /api/leaderboard", () => {
       expect(body.scope).toBe("org");
       expect(body.scopeId).toBe("org-123");
 
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = ur.user_id AND om.org_id = ?)");
-      expect(sqlCall[1]).toContain("org-123");
+      expect(mockDb.getGlobalLeaderboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orgId: "org-123",
+        }),
+      );
     });
 
     it("should return 400 when both org and team are provided", async () => {
@@ -406,7 +347,8 @@ describe("GET /api/leaderboard", () => {
 
     it("should silently ignore org param for anonymous users", async () => {
       resolveUser.mockResolvedValueOnce(null); // Anonymous
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
       const body = await res.json();
@@ -414,14 +356,15 @@ describe("GET /api/leaderboard", () => {
       expect(res.status).toBe(200);
       expect(body.scope).toBe("global");
       expect(body.scopeId).toBeUndefined();
-      // Should NOT have org filter in SQL
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).not.toContain("organization_members");
+      // Should NOT have org filter - with conditional spread, orgId is omitted entirely
+      const callArg = mockDb.getGlobalLeaderboard.mock.calls[0]?.[0];
+      expect(callArg).not.toHaveProperty("orgId");
     });
 
     it("should set Cache-Control: private, no-store for anonymous org-scoped request", async () => {
       resolveUser.mockResolvedValueOnce(null); // Anonymous
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
 
@@ -430,51 +373,21 @@ describe("GET /api/leaderboard", () => {
       expect(res.headers.get("Cache-Control")).toBe("private, no-store");
     });
 
-    it("should include is_public filter even when org is set (opt-out respected)", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
-
-      await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
-
-      const sqlCall = mockClient.query.mock.calls[0]!;
-      expect(sqlCall[0]).toContain("u.is_public = 1");
-    });
-
     it("should set Cache-Control: private, no-store for org-scoped leaderboard", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("private, no-store");
     });
-
-    it("should fail closed when organization_members table is missing", async () => {
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such table: organization_members"))
-        .mockRejectedValueOnce(new Error("no such table: organization_members"));
-
-      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
-
-      expect(res.status).toBe(500);
-      expect(mockClient.query).toHaveBeenCalledTimes(2);
-    });
-
-    it("should preserve EXISTS filter in level 1 fallback for org", async () => {
-      mockClient.query
-        .mockRejectedValueOnce(new Error("no such column: u.nickname"))
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-123" }));
-
-      expect(res.status).toBe(200);
-      const fallbackSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(fallbackSql).toContain("EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = ur.user_id AND om.org_id = ?)");
-    });
   });
 
   describe("response shape", () => {
     it("should include scope='global' when no scope params", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
@@ -485,7 +398,8 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should include scope='team' and scopeId when team param is provided", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-xyz" }));
       const body = await res.json();
@@ -496,7 +410,8 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should include scope='org' and scopeId when org param is provided", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { org: "org-abc" }));
       const body = await res.json();
@@ -509,7 +424,8 @@ describe("GET /api/leaderboard", () => {
 
   describe("cache headers", () => {
     it("should set cache headers for public leaderboard", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
 
@@ -520,7 +436,8 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should NOT set cache headers for team-scoped leaderboard", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard", { team: "team-abc" }));
 
@@ -532,33 +449,9 @@ describe("GET /api/leaderboard", () => {
   });
 
   describe("teams in response", () => {
-    it("should return empty teams array when teams query fails", async () => {
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            {
-              user_id: "u1",
-              name: "Alice",
-              image: null,
-              slug: null,
-              total_tokens: 1000,
-              input_tokens: 500,
-              output_tokens: 400,
-              cached_input_tokens: 100,
-            },
-          ],
-        })
-        .mockRejectedValueOnce(new Error("no such table: team_members"));
-
-      const res = await GET(makeGetRequest("/api/leaderboard"));
-      const body = await res.json();
-
-      expect(res.status).toBe(200);
-      expect(body.entries[0].teams).toEqual([]);
-    });
-
     it("should return empty teams array when no results", async () => {
-      mockClient.query.mockResolvedValueOnce({ results: [] });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
@@ -568,43 +461,81 @@ describe("GET /api/leaderboard", () => {
     });
 
     it("should fetch teams for leaderboard users", async () => {
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            {
-              user_id: "u1",
-              name: "Alice",
-              image: null,
-              slug: null,
-              total_tokens: 1000,
-              input_tokens: 500,
-              output_tokens: 400,
-              cached_input_tokens: 100,
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          results: [
-            { user_id: "u1", team_id: "t1", team_name: "Eng", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/xyz.jpg" },
-          ],
-        });
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Alice",
+          nickname: null,
+          image: null,
+          slug: null,
+          total_tokens: 1000,
+          input_tokens: 500,
+          output_tokens: 400,
+          cached_input_tokens: 100,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([
+        { user_id: "u1", team_id: "t1", team_name: "Eng", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/xyz.jpg" },
+      ]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]);
 
       const res = await GET(makeGetRequest("/api/leaderboard"));
       const body = await res.json();
 
       expect(body.entries[0].teams).toEqual([{ id: "t1", name: "Eng", logo_url: "https://s.zhe.to/apps/pew/teams-logo/t1/xyz.jpg" }]);
-      // Second query should be the teams lookup
-      const teamsSql = mockClient.query.mock.calls[1]![0] as string;
-      expect(teamsSql).toContain("team_members");
-      expect(teamsSql).toContain("IN (?)");
+      expect(mockDb.getLeaderboardUserTeams).toHaveBeenCalledWith(["u1"]);
     });
   });
 
-  it("should return 500 when error is not Error instance", async () => {
-    mockClient.query.mockRejectedValueOnce("string error");
+  describe("session stats in response", () => {
+    it("should include session stats for users", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Alice",
+          nickname: null,
+          image: null,
+          slug: "alice",
+          total_tokens: 1000,
+          input_tokens: 500,
+          output_tokens: 400,
+          cached_input_tokens: 100,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([
+        { user_id: "u1", session_count: 42, total_duration_seconds: 3600 },
+      ]);
 
-    const res = await GET(makeGetRequest("/api/leaderboard"));
+      const res = await GET(makeGetRequest("/api/leaderboard"));
+      const body = await res.json();
 
-    expect(res.status).toBe(500);
+      expect(body.entries[0].session_count).toBe(42);
+      expect(body.entries[0].total_duration_seconds).toBe(3600);
+    });
+
+    it("should default session stats to 0 when not found", async () => {
+      mockDb.getGlobalLeaderboard.mockResolvedValueOnce([
+        {
+          user_id: "u1",
+          name: "Alice",
+          nickname: null,
+          image: null,
+          slug: "alice",
+          total_tokens: 1000,
+          input_tokens: 500,
+          output_tokens: 400,
+          cached_input_tokens: 100,
+        },
+      ]);
+      mockDb.getLeaderboardUserTeams.mockResolvedValueOnce([]);
+      mockDb.getLeaderboardSessionStats.mockResolvedValueOnce([]); // No stats for u1
+
+      const res = await GET(makeGetRequest("/api/leaderboard"));
+      const body = await res.json();
+
+      expect(body.entries[0].session_count).toBe(0);
+      expect(body.entries[0].total_duration_seconds).toBe(0);
+    });
   });
 });

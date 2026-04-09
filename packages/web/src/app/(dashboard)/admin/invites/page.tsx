@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAdmin } from "@/hooks/use-admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog, useConfirm } from "@/components/ui/confirm-dialog";
-import type { InviteCodeRow } from "@/app/api/admin/invites/route";
+import type { InviteCodeRow } from "@/lib/rpc-types";
 
 // ---------------------------------------------------------------------------
 // Types

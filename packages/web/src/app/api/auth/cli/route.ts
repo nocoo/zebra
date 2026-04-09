@@ -87,12 +87,7 @@ export async function GET(request: Request) {
   const email = authResult.email ?? "";
 
   try {
-    const row = await dbRead.firstOrNull<{ api_key: string | null }>(
-      "SELECT api_key FROM users WHERE id = ?",
-      [userId]
-    );
-
-    let apiKey = row?.api_key;
+    let apiKey = await dbRead.getUserApiKey(userId);
 
     if (!apiKey) {
       // Generate a new api_key

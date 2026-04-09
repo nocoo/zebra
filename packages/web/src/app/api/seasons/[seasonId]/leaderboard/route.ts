@@ -16,83 +16,14 @@
 import { NextResponse } from "next/server";
 import { getDbRead } from "@/lib/db";
 import { deriveSeasonStatus } from "@/lib/seasons";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SeasonRow {
-  id: string;
-  name: string;
-  slug: string;
-  start_date: string;
-  end_date: string;
-  snapshot_ready: number;
-}
-
-interface TeamTokenRow {
-  team_id: string;
-  team_name: string;
-  team_slug: string;
-  team_logo_url: string | null;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
-
-interface SnapshotRow {
-  team_id: string;
-  team_name: string;
-  team_slug: string;
-  team_logo_url: string | null;
-  rank: number;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
-
-interface MemberRow {
-  team_id: string;
-  user_id: string;
-  slug: string | null;
-  name: string | null;
-  nickname: string | null;
-  image: string | null;
-  is_public: number | null;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
-
-interface MemberSnapshotRow {
-  team_id: string;
-  user_id: string;
-  slug: string | null;
-  name: string | null;
-  nickname: string | null;
-  image: string | null;
-  is_public: number | null;
-  total_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens: number;
-}
-
-interface TeamSessionStatsRow {
-  team_id: string;
-  session_count: number;
-  total_duration_seconds: number;
-}
-
-interface MemberSessionStatsRow {
-  team_id: string;
-  user_id: string;
-  session_count: number;
-  total_duration_seconds: number;
-}
+import type {
+  SeasonSnapshotRow,
+  SeasonMemberSnapshotRow,
+  SeasonTeamTokenRow,
+  SeasonMemberTokenRow,
+  SeasonTeamSessionStatsRow,
+  SeasonMemberSessionStatsRow,
+} from "@/lib/rpc-types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -141,12 +72,9 @@ export async function GET(
   try {
     // Fetch season by UUID or slug
     const isUUID = UUID_RE.test(seasonId);
-    const season = await db.firstOrNull<SeasonRow>(
-      isUUID
-        ? "SELECT id, name, slug, start_date, end_date, snapshot_ready FROM seasons WHERE id = ?"
-        : "SELECT id, name, slug, start_date, end_date, snapshot_ready FROM seasons WHERE slug = ?",
-      [seasonId]
-    );
+    const season = isUUID
+      ? await db.getSeasonById(seasonId)
+      : await db.getSeasonBySlug(seasonId);
 
     if (!season) {
       return NextResponse.json(
@@ -168,57 +96,25 @@ export async function GET(
 
     if (hasSnapshot) {
       // Read from frozen snapshot tables
-      const snapshots = await db.query<SnapshotRow>(
-        `SELECT
-          ss.team_id,
-          t.name AS team_name,
-          t.slug AS team_slug,
-          t.logo_url AS team_logo_url,
-          ss.rank,
-          ss.total_tokens,
-          ss.input_tokens,
-          ss.output_tokens,
-          ss.cached_input_tokens
-        FROM season_snapshots ss
-        JOIN teams t ON t.id = ss.team_id
-        WHERE ss.season_id = ?
-        ORDER BY ss.rank ASC`,
-        [season.id]
-      );
+      const snapshots = await db.getSeasonSnapshots(season.id);
 
-      const membersByTeam = new Map<string, MemberSnapshotRow[]>();
+      const membersByTeam = new Map<string, SeasonMemberSnapshotRow[]>();
       if (expandMembers) {
         // Only include members who have opted in (is_public = 1)
         // Their token contributions are still counted in team totals
-        const memberSnapshots = await db.query<MemberSnapshotRow>(
-          `SELECT
-            sms.team_id,
-            sms.user_id,
-            u.slug,
-            u.name,
-            u.nickname,
-            u.image,
-            u.is_public,
-            sms.total_tokens,
-            sms.input_tokens,
-            sms.output_tokens,
-            sms.cached_input_tokens
-          FROM season_member_snapshots sms
-          JOIN users u ON u.id = sms.user_id
-          WHERE sms.season_id = ?
-            AND u.is_public = 1
-          ORDER BY sms.total_tokens DESC`,
-          [season.id]
+        const memberSnapshots = await db.getSeasonMemberSnapshots(
+          season.id,
+          true // publicOnly
         );
 
-        for (const row of memberSnapshots.results) {
+        for (const row of memberSnapshots) {
           const list = membersByTeam.get(row.team_id) ?? [];
           list.push(row);
           membersByTeam.set(row.team_id, list);
         }
       }
 
-      entries = snapshots.results.map((row) => ({
+      entries = snapshots.map((row: SeasonSnapshotRow) => ({
         rank: row.rank,
         team: {
           id: row.team_id,
@@ -249,24 +145,18 @@ export async function GET(
       }));
 
       // Enrich snapshot entries with live session stats
-      const snapshotTeamIds = snapshots.results.map((r) => r.team_id);
+      const snapshotTeamIds = snapshots.map((r: SeasonSnapshotRow) => r.team_id);
       if (snapshotTeamIds.length > 0) {
         try {
-          const placeholders = snapshotTeamIds.map(() => "?").join(",");
-          const teamSessionResult = await db.query<TeamSessionStatsRow>(
-            `SELECT stm.team_id,
-                    COUNT(*) AS session_count,
-                    COALESCE(SUM(sr.duration_seconds), 0) AS total_duration_seconds
-             FROM season_team_members stm
-             JOIN session_records sr ON sr.user_id = stm.user_id
-               AND sr.started_at >= ?
-               AND sr.started_at < ?
-             WHERE stm.season_id = ?
-               AND stm.team_id IN (${placeholders})
-             GROUP BY stm.team_id`,
-            [fromDate, toDate, season.id, ...snapshotTeamIds],
+          const teamSessionStats = await db.getSeasonTeamSessionStats(
+            season.id,
+            snapshotTeamIds,
+            fromDate,
+            toDate
           );
-          const teamSessionMap = new Map(teamSessionResult.results.map((r) => [r.team_id, r]));
+          const teamSessionMap = new Map(
+            teamSessionStats.map((r: SeasonTeamSessionStatsRow) => [r.team_id, r])
+          );
           for (const entry of entries) {
             const stats = teamSessionMap.get(entry.team.id);
             if (stats) {
@@ -276,25 +166,24 @@ export async function GET(
           }
 
           if (expandMembers) {
-            const memberSessionResult = await db.query<MemberSessionStatsRow>(
-              `SELECT stm.team_id,
-                      stm.user_id,
-                      COUNT(*) AS session_count,
-                      COALESCE(SUM(sr.duration_seconds), 0) AS total_duration_seconds
-               FROM season_team_members stm
-               JOIN session_records sr ON sr.user_id = stm.user_id
-                 AND sr.started_at >= ?
-                 AND sr.started_at < ?
-               WHERE stm.season_id = ?
-                 AND stm.team_id IN (${placeholders})
-               GROUP BY stm.team_id, stm.user_id`,
-              [fromDate, toDate, season.id, ...snapshotTeamIds],
+            const memberSessionStats = await db.getSeasonMemberSessionStats(
+              season.id,
+              snapshotTeamIds,
+              fromDate,
+              toDate
             );
-            const memberSessionMap = new Map(memberSessionResult.results.map((r) => `${r.team_id}:${r.user_id}`).map((key, i) => [key, memberSessionResult.results[i]]));
+            const memberSessionMap = new Map(
+              memberSessionStats.map((r: SeasonMemberSessionStatsRow) => [
+                `${r.team_id}:${r.user_id}`,
+                r,
+              ])
+            );
             for (const entry of entries) {
               if (entry.members) {
                 for (const member of entry.members) {
-                  const stats = memberSessionMap.get(`${entry.team.id}:${member.user_id}`);
+                  const stats = memberSessionMap.get(
+                    `${entry.team.id}:${member.user_id}`
+                  );
                   if (stats) {
                     member.session_count = stats.session_count;
                     member.total_duration_seconds = stats.total_duration_seconds;
@@ -309,68 +198,29 @@ export async function GET(
       }
     } else {
       // Real-time aggregation from usage_records
-      const teamRows = await db.query<TeamTokenRow>(
-        `SELECT
-          st.team_id,
-          t.name AS team_name,
-          t.slug AS team_slug,
-          t.logo_url AS team_logo_url,
-          COALESCE(SUM(ur.total_tokens), 0) AS total_tokens,
-          COALESCE(SUM(ur.input_tokens), 0) AS input_tokens,
-          COALESCE(SUM(ur.output_tokens), 0) AS output_tokens,
-          COALESCE(SUM(ur.cached_input_tokens), 0) AS cached_input_tokens
-        FROM season_teams st
-        JOIN teams t ON t.id = st.team_id
-        LEFT JOIN season_team_members tm ON tm.team_id = st.team_id AND tm.season_id = st.season_id
-        LEFT JOIN usage_records ur ON ur.user_id = tm.user_id
-          AND ur.hour_start >= ?
-          AND ur.hour_start < ?
-        WHERE st.season_id = ?
-        GROUP BY st.team_id
-        ORDER BY total_tokens DESC`,
-        [fromDate, toDate, season.id]
-      );
+      const teamRows = await db.getSeasonTeamTokens(season.id, fromDate, toDate);
 
-      const membersByTeam = new Map<string, MemberRow[]>();
-      if (expandMembers && teamRows.results.length > 0) {
-        const teamIds = teamRows.results.map((r) => r.team_id);
-        const placeholders = teamIds.map(() => "?").join(",");
+      const membersByTeam = new Map<string, SeasonMemberTokenRow[]>();
+      if (expandMembers && teamRows.length > 0) {
+        const teamIds = teamRows.map((r: SeasonTeamTokenRow) => r.team_id);
         // Only include members who have opted in (is_public = 1)
         // Their token contributions are still counted in team totals
-        const memberRows = await db.query<MemberRow>(
-          `SELECT
-            tm.team_id,
-            tm.user_id,
-            u.slug,
-            u.name,
-            u.nickname,
-            u.image,
-            u.is_public,
-            COALESCE(SUM(ur.total_tokens), 0) AS total_tokens,
-            COALESCE(SUM(ur.input_tokens), 0) AS input_tokens,
-            COALESCE(SUM(ur.output_tokens), 0) AS output_tokens,
-            COALESCE(SUM(ur.cached_input_tokens), 0) AS cached_input_tokens
-          FROM season_team_members tm
-          JOIN users u ON u.id = tm.user_id
-          LEFT JOIN usage_records ur ON ur.user_id = tm.user_id
-            AND ur.hour_start >= ?
-            AND ur.hour_start < ?
-          WHERE tm.season_id = ?
-            AND tm.team_id IN (${placeholders})
-            AND u.is_public = 1
-          GROUP BY tm.team_id, tm.user_id
-          ORDER BY total_tokens DESC`,
-          [fromDate, toDate, season.id, ...teamIds]
+        const memberRows = await db.getSeasonMemberTokens(
+          season.id,
+          teamIds,
+          fromDate,
+          toDate,
+          true // publicOnly
         );
 
-        for (const row of memberRows.results) {
+        for (const row of memberRows) {
           const list = membersByTeam.get(row.team_id) ?? [];
           list.push(row);
           membersByTeam.set(row.team_id, list);
         }
       }
 
-      entries = teamRows.results.map((row, index) => ({
+      entries = teamRows.map((row: SeasonTeamTokenRow, index: number) => ({
         rank: index + 1,
         team: {
           id: row.team_id,
@@ -401,24 +251,18 @@ export async function GET(
       }));
 
       // Enrich with session stats
-      const liveTeamIds = teamRows.results.map((r) => r.team_id);
+      const liveTeamIds = teamRows.map((r: SeasonTeamTokenRow) => r.team_id);
       if (liveTeamIds.length > 0) {
         try {
-          const placeholders = liveTeamIds.map(() => "?").join(",");
-          const teamSessionResult = await db.query<TeamSessionStatsRow>(
-            `SELECT stm.team_id,
-                    COUNT(*) AS session_count,
-                    COALESCE(SUM(sr.duration_seconds), 0) AS total_duration_seconds
-             FROM season_team_members stm
-             JOIN session_records sr ON sr.user_id = stm.user_id
-               AND sr.started_at >= ?
-               AND sr.started_at < ?
-             WHERE stm.season_id = ?
-               AND stm.team_id IN (${placeholders})
-             GROUP BY stm.team_id`,
-            [fromDate, toDate, season.id, ...liveTeamIds],
+          const teamSessionStats = await db.getSeasonTeamSessionStats(
+            season.id,
+            liveTeamIds,
+            fromDate,
+            toDate
           );
-          const teamSessionMap = new Map(teamSessionResult.results.map((r) => [r.team_id, r]));
+          const teamSessionMap = new Map(
+            teamSessionStats.map((r: SeasonTeamSessionStatsRow) => [r.team_id, r])
+          );
           for (const entry of entries) {
             const stats = teamSessionMap.get(entry.team.id);
             if (stats) {
@@ -428,25 +272,24 @@ export async function GET(
           }
 
           if (expandMembers) {
-            const memberSessionResult = await db.query<MemberSessionStatsRow>(
-              `SELECT stm.team_id,
-                      stm.user_id,
-                      COUNT(*) AS session_count,
-                      COALESCE(SUM(sr.duration_seconds), 0) AS total_duration_seconds
-               FROM season_team_members stm
-               JOIN session_records sr ON sr.user_id = stm.user_id
-                 AND sr.started_at >= ?
-                 AND sr.started_at < ?
-               WHERE stm.season_id = ?
-                 AND stm.team_id IN (${placeholders})
-               GROUP BY stm.team_id, stm.user_id`,
-              [fromDate, toDate, season.id, ...liveTeamIds],
+            const memberSessionStats = await db.getSeasonMemberSessionStats(
+              season.id,
+              liveTeamIds,
+              fromDate,
+              toDate
             );
-            const memberSessionMap = new Map(memberSessionResult.results.map((r) => `${r.team_id}:${r.user_id}`).map((key, i) => [key, memberSessionResult.results[i]]));
+            const memberSessionMap = new Map(
+              memberSessionStats.map((r: SeasonMemberSessionStatsRow) => [
+                `${r.team_id}:${r.user_id}`,
+                r,
+              ])
+            );
             for (const entry of entries) {
               if (entry.members) {
                 for (const member of entry.members) {
-                  const stats = memberSessionMap.get(`${entry.team.id}:${member.user_id}`);
+                  const stats = memberSessionMap.get(
+                    `${entry.team.id}:${member.user_id}`
+                  );
                   if (stats) {
                     member.session_count = stats.session_count;
                     member.total_duration_seconds = stats.total_duration_seconds;

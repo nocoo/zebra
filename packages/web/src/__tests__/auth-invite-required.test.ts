@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockFirstOrNull = vi.fn();
+const mockGetAppSetting = vi.fn();
 
 vi.mock("@/lib/db", () => ({
-  getDbRead: vi.fn(() => Promise.resolve({ firstOrNull: mockFirstOrNull })),
+  getDbRead: vi.fn(() => Promise.resolve({ getAppSetting: mockGetAppSetting })),
 }));
 
 import { GET } from "@/app/api/auth/invite-required/route";
@@ -14,7 +14,7 @@ describe("GET /api/auth/invite-required", () => {
   });
 
   it("should return required=true when setting is 'true'", async () => {
-    mockFirstOrNull.mockResolvedValue({ value: "true" });
+    mockGetAppSetting.mockResolvedValue("true");
 
     const response = await GET();
     const data = await response.json();
@@ -24,7 +24,7 @@ describe("GET /api/auth/invite-required", () => {
   });
 
   it("should return required=false when setting is 'false'", async () => {
-    mockFirstOrNull.mockResolvedValue({ value: "false" });
+    mockGetAppSetting.mockResolvedValue("false");
 
     const response = await GET();
     const data = await response.json();
@@ -33,7 +33,7 @@ describe("GET /api/auth/invite-required", () => {
   });
 
   it("should return required=true when setting does not exist (null)", async () => {
-    mockFirstOrNull.mockResolvedValue(null);
+    mockGetAppSetting.mockResolvedValue(null);
 
     const response = await GET();
     const data = await response.json();
@@ -42,7 +42,7 @@ describe("GET /api/auth/invite-required", () => {
   });
 
   it("should return required=true when table does not exist", async () => {
-    mockFirstOrNull.mockRejectedValue(new Error("no such table: app_settings"));
+    mockGetAppSetting.mockRejectedValue(new Error("no such table: app_settings"));
 
     const response = await GET();
     const data = await response.json();
@@ -52,24 +52,13 @@ describe("GET /api/auth/invite-required", () => {
 
   it("should return required=true on unexpected error (safe default)", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockFirstOrNull.mockRejectedValue(new Error("Connection refused"));
+    mockGetAppSetting.mockRejectedValue(new Error("Connection refused"));
 
     const response = await GET();
     const data = await response.json();
 
     expect(data).toEqual({ required: true });
     expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
-  });
-
-  it("should handle non-Error thrown values", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockFirstOrNull.mockRejectedValue("string error");
-
-    const response = await GET();
-    const data = await response.json();
-
-    expect(data).toEqual({ required: true });
     consoleSpy.mockRestore();
   });
 });

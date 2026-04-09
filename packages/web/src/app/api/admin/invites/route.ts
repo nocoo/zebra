@@ -12,21 +12,6 @@ import { getDbRead, getDbWrite } from "@/lib/db";
 import { generateInviteCode } from "@/lib/invite";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface InviteCodeRow {
-  id: number;
-  code: string;
-  created_by: string;
-  created_by_email: string | null;
-  used_by: string | null;
-  used_by_email: string | null;
-  used_at: string | null;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
 // GET — list all invite codes
 // ---------------------------------------------------------------------------
 
@@ -39,21 +24,7 @@ export async function GET(request: Request) {
   const dbRead = await getDbRead();
 
   try {
-    const { results } = await dbRead.query<InviteCodeRow>(
-      `SELECT
-         ic.id,
-         ic.code,
-         ic.created_by,
-         creator.email AS created_by_email,
-         ic.used_by,
-         consumer.email AS used_by_email,
-         ic.used_at,
-         ic.created_at
-       FROM invite_codes ic
-       LEFT JOIN users creator ON ic.created_by = creator.id
-       LEFT JOIN users consumer ON ic.used_by = consumer.id
-       ORDER BY ic.created_at DESC`
-    );
+    const results = await dbRead.listInviteCodes();
     return NextResponse.json({ rows: results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
@@ -119,10 +90,7 @@ export async function POST(request: Request) {
           );
         }
         // Check for collision
-        const existing = await dbRead.firstOrNull<{ id: number }>(
-          "SELECT id FROM invite_codes WHERE code = ?",
-          [code]
-        );
+        const existing = await dbRead.checkInviteCodeExists(code);
         if (!existing) break;
         // eslint-disable-next-line no-constant-condition -- retry loop for unique code generation
       } while (true);
@@ -184,10 +152,7 @@ export async function DELETE(request: Request) {
     }
 
     // changes=0: either the row doesn't exist, or it's fully consumed.
-    const row = await dbRead.firstOrNull<{ used_by: string | null }>(
-      "SELECT used_by FROM invite_codes WHERE id = ?",
-      [id]
-    );
+    const row = await dbRead.getInviteCodeById(id);
 
     if (!row) {
       return NextResponse.json({ error: "Code not found" }, { status: 404 });

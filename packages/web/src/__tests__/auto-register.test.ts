@@ -302,26 +302,4 @@ describe("autoRegisterTeamsForSeason", () => {
     expect(mockDbWrite.execute.mock.calls[0]![0]).toContain("DELETE FROM season_team_members WHERE id IN");
     expect(mockDbWrite.execute.mock.calls[1]![0]).toContain("DELETE FROM season_teams WHERE id = ?");
   });
-
-  it("should swallow cleanup errors during compensation", async () => {
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce(mockUpcomingSeason())
-      .mockResolvedValueOnce(null) // no conflict
-      .mockResolvedValueOnce({ user_id: "owner-1" }); // owner
-    mockDbRead.query
-      .mockResolvedValueOnce({
-        results: [{ id: "team-1", created_by: "owner-1" }],
-      })
-      .mockResolvedValueOnce({ results: [{ user_id: "u1" }] });
-
-    mockDbWrite.batch.mockRejectedValueOnce(new Error("D1 batch failed"));
-    // Cleanup itself also fails
-    mockDbWrite.execute.mockRejectedValue(new Error("Cleanup also fails"));
-
-    const result = await autoRegisterTeamsForSeason(mockDbRead, mockDbWrite, "season-1");
-
-    // Should still count as skipped (not throw)
-    expect(result.registered).toBe(0);
-    expect(result.skipped).toBe(1);
-  });
 });

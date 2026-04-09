@@ -33,10 +33,7 @@ export async function POST(request: Request) {
     const dbWrite = await getDbWrite();
 
     // Find team by invite code
-    const team = await dbRead.firstOrNull<{ id: string; name: string; slug: string }>(
-      "SELECT id, name, slug FROM teams WHERE invite_code = ?",
-      [inviteCode],
-    );
+    const team = await dbRead.findTeamByInviteCode(inviteCode);
 
     if (!team) {
       return NextResponse.json(
@@ -46,12 +43,9 @@ export async function POST(request: Request) {
     }
 
     // Check if already a member
-    const existing = await dbRead.firstOrNull<{ id: string }>(
-      "SELECT id FROM team_members WHERE team_id = ? AND user_id = ?",
-      [team.id, authResult.userId],
-    );
+    const isMember = await dbRead.checkTeamMembershipExists(team.id, authResult.userId);
 
-    if (existing) {
+    if (isMember) {
       return NextResponse.json(
         { error: "Already a member of this team" },
         { status: 409 },
@@ -62,12 +56,9 @@ export async function POST(request: Request) {
     const DEFAULT_MAX_TEAM_MEMBERS = 5;
     let maxMembers = DEFAULT_MAX_TEAM_MEMBERS;
     try {
-      const setting = await dbRead.firstOrNull<{ value: string }>(
-        "SELECT value FROM app_settings WHERE key = 'max_team_members'",
-        [],
-      );
-      if (setting) {
-        const parsed = parseInt(setting.value, 10);
+      const settingValue = await dbRead.getAppSetting("max_team_members");
+      if (settingValue) {
+        const parsed = parseInt(settingValue, 10);
         if (!isNaN(parsed) && parsed > 0) maxMembers = parsed;
       }
     } catch {

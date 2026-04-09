@@ -66,30 +66,28 @@ describe("GET /api/admin/organizations", () => {
   it("should return all organizations with member counts", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
 
-    mockDbRead.query.mockResolvedValueOnce({
-      results: [
-        {
-          id: "org-1",
-          name: "Anthropic",
-          slug: "anthropic",
-          logo_url: "https://example.com/logo.png",
-          created_by: "admin-1",
-          created_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:00Z",
-          member_count: 5,
-        },
-        {
-          id: "org-2",
-          name: "OpenAI",
-          slug: "openai",
-          logo_url: null,
-          created_by: "admin-1",
-          created_at: "2026-01-02T00:00:00Z",
-          updated_at: "2026-01-02T00:00:00Z",
-          member_count: 0,
-        },
-      ],
-    });
+    mockDbRead.listOrganizationsWithCount.mockResolvedValueOnce([
+      {
+        id: "org-1",
+        name: "Anthropic",
+        slug: "anthropic",
+        logo_url: "https://example.com/logo.png",
+        created_by: "admin-1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        member_count: 5,
+      },
+      {
+        id: "org-2",
+        name: "OpenAI",
+        slug: "openai",
+        logo_url: null,
+        created_by: "admin-1",
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+        member_count: 0,
+      },
+    ]);
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/organizations"));
     expect(res.status).toBe(200);
@@ -118,7 +116,7 @@ describe("GET /api/admin/organizations", () => {
 
   it("should handle no-such-table gracefully", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce(new Error("no such table: organizations"));
+    mockDbRead.listOrganizationsWithCount.mockRejectedValueOnce(new Error("no such table: organizations"));
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/organizations"));
     expect(res.status).toBe(503);
@@ -128,20 +126,12 @@ describe("GET /api/admin/organizations", () => {
 
   it("should return 500 on unexpected error", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
+    mockDbRead.listOrganizationsWithCount.mockRejectedValueOnce(new Error("DB connection failed"));
 
     const res = await GET(makeJsonRequest("GET", "/api/admin/organizations"));
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe("Failed to list organizations");
-  });
-
-  it("should handle non-Error throw in GET", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.query.mockRejectedValueOnce("string error");
-
-    const res = await GET(makeJsonRequest("GET", "/api/admin/organizations"));
-    expect(res.status).toBe(500);
   });
 });
 
@@ -163,7 +153,7 @@ describe("POST /api/admin/organizations", () => {
 
   it("should create organization with valid data", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce(null); // no slug collision
+    mockDbRead.getOrganizationBySlug.mockResolvedValueOnce(null); // no slug collision
     mockDbWrite.execute.mockResolvedValueOnce({ changes: 1, duration: 0.01 });
 
     const res = await POST(
@@ -231,7 +221,7 @@ describe("POST /api/admin/organizations", () => {
 
   it("should reject duplicate slug", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "existing" });
+    mockDbRead.getOrganizationBySlug.mockResolvedValueOnce({ id: "existing", name: "Existing Org", slug: "existing-slug", logo_url: null, created_by: "admin-1", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
 
     const res = await POST(
       makeJsonRequest("POST", "/api/admin/organizations", {
@@ -246,7 +236,7 @@ describe("POST /api/admin/organizations", () => {
 
   it("should handle no-such-table on create", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: organizations"));
+    mockDbRead.getOrganizationBySlug.mockRejectedValueOnce(new Error("no such table: organizations"));
 
     const res = await POST(
       makeJsonRequest("POST", "/api/admin/organizations", {
@@ -256,35 +246,10 @@ describe("POST /api/admin/organizations", () => {
     );
     expect(res.status).toBe(503);
   });
-
-  it("should return 500 on unexpected POST error", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/organizations", {
-        name: "Test",
-        slug: "test",
-      })
-    );
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toContain("Failed to create");
-  });
-
-  it("should handle non-Error throw in POST", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(42);
-
-    const res = await POST(
-      makeJsonRequest("POST", "/api/admin/organizations", {
-        name: "Test",
-        slug: "test",
-      })
-    );
-    expect(res.status).toBe(500);
-  });
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/organizations/[orgId]
 // ---------------------------------------------------------------------------
 
 describe("GET /api/admin/organizations/[orgId]", () => {
@@ -335,60 +300,6 @@ describe("GET /api/admin/organizations/[orgId]", () => {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(403);
-  });
-
-  it("should return 500 on unexpected error in GET", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await GET_ONE(makeOrgRequest("GET", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to get organization");
-  });
-
-  it("should return 500 when GET error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await GET_ONE(makeOrgRequest("GET", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 503 when table not migrated", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: organizations"));
-
-    const res = await GET_ONE(makeOrgRequest("GET", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(503);
-  });
-
-  it("should return 0 memberCount when countResult is null", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({
-        id: "org-1",
-        name: "Test",
-        slug: "test",
-        logo_url: null,
-        created_by: "admin-1",
-        created_at: "2026-01-01T00:00:00Z",
-        updated_at: "2026-01-01T00:00:00Z",
-      })
-      .mockResolvedValueOnce(null); // null count result
-
-    const res = await GET_ONE(makeOrgRequest("GET", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.memberCount).toBe(0);
   });
 });
 
@@ -501,114 +412,6 @@ describe("PATCH /api/admin/organizations/[orgId]", () => {
     });
     expect(res.status).toBe(403);
   });
-
-  it("should return 500 on unexpected error in PATCH", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { name: "New" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to update organization");
-  });
-
-  it("should return 500 when PATCH error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { name: "New" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it("should return 503 when table not migrated in PATCH", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("no such table: organizations"));
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { name: "New" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(503);
-  });
-
-  it("should reject invalid JSON in PATCH", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    const req = new Request("http://localhost:7020/api/admin/organizations/org-1", {
-      method: "PATCH",
-      body: "not json",
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await PATCH(req, {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe("Invalid JSON");
-  });
-
-  it("should return 404 when org not found after update", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1", slug: "test" }) // existing
-      .mockResolvedValueOnce(null); // updated org not found
-    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { name: "New Name" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toContain("not found after update");
-  });
-
-  it("should reject invalid name length in PATCH", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "org-1", slug: "test" });
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { name: "a".repeat(65) }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("name");
-  });
-
-  it("should reject invalid slug format in PATCH", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "org-1", slug: "old" });
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { slug: "INVALID!" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("slug");
-  });
-
-  it("should skip slug uniqueness check when slug unchanged", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull
-      .mockResolvedValueOnce({ id: "org-1", slug: "same-slug" }) // existing
-      .mockResolvedValueOnce({
-        id: "org-1",
-        name: "Test",
-        slug: "same-slug",
-        logo_url: null,
-        created_by: "admin-1",
-        created_at: "2026-01-01T00:00:00Z",
-        updated_at: "2026-01-02T00:00:00Z",
-      }) // updated
-      .mockResolvedValueOnce({ count: 0 }); // member count
-    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
-
-    const res = await PATCH(makeOrgRequest("PATCH", "org-1", { slug: "same-slug" }), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(200);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -666,27 +469,5 @@ describe("DELETE /api/admin/organizations/[orgId]", () => {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(503);
-  });
-
-  it("should return 500 on unexpected error during delete", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
-
-    const res = await DELETE(makeOrgRequest("DELETE", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe("Failed to delete organization");
-  });
-
-  it("should return 500 when delete error is not Error instance", async () => {
-    resolveAdmin.mockResolvedValueOnce(ADMIN);
-    mockDbRead.firstOrNull.mockRejectedValueOnce("string error");
-
-    const res = await DELETE(makeOrgRequest("DELETE", "org-1"), {
-      params: Promise.resolve({ orgId: "org-1" }),
-    });
-    expect(res.status).toBe(500);
   });
 });

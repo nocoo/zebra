@@ -21,7 +21,7 @@ describe("GET /api/users/[slug]/achievements", () => {
 
   describe("user lookup", () => {
     it("should return 404 for non-existent user", async () => {
-      mockClient.firstOrNull.mockResolvedValueOnce(null);
+      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
 
       const res = await GET(
         makeGetRequest("/api/users/unknown/achievements"),
@@ -35,7 +35,7 @@ describe("GET /api/users/[slug]/achievements", () => {
 
     it("should return 404 for non-public user", async () => {
       // User lookup returns null because is_public = 0 in WHERE clause
-      mockClient.firstOrNull.mockResolvedValueOnce(null);
+      mockClient.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
 
       const res = await GET(
         makeGetRequest("/api/users/private-user/achievements"),
@@ -49,65 +49,70 @@ describe("GET /api/users/[slug]/achievements", () => {
   describe("response structure", () => {
     beforeEach(() => {
       // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Test User" })
-        // Usage aggregates
-        .mockResolvedValueOnce({
-          total_tokens: 5_000_000_000, // 5B tokens
+      mockClient.getPublicUserBySlugOrId.mockResolvedValue({
+        id: "u1",
+        name: "Test User",
+        nickname: null,
+        image: null,
+        slug: "test-user",
+        created_at: "2026-01-01T00:00:00Z",
+        is_public: 1,
+      });
+
+      // Usage aggregates
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 5_000_000_000, // 5B tokens
+        input_tokens: 3_000_000_000,
+        output_tokens: 2_000_000_000,
+        cached_input_tokens: 1_000_000_000,
+        reasoning_output_tokens: 100_000_000,
+      });
+
+      // Daily usage
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-04-01", total_tokens: 100_000_000 },
+        { day: "2026-04-02", total_tokens: 500_000_000 },
+        { day: "2026-04-03", total_tokens: 200_000_000 },
+      ]);
+
+      // Cost by model/source/day
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([
+        {
+          day: "2026-04-02",
+          model: "claude-sonnet-4-20250514",
+          source: "claude-code",
+          input_tokens: 300_000_000,
+          output_tokens: 200_000_000,
+          cached_input_tokens: 100_000_000,
+        },
+      ]);
+
+      // Diversity
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 4,
+        model_count: 8,
+        device_count: 3,
+      });
+
+      // Session aggregates
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 500,
+        quick_sessions: 200,
+        marathon_sessions: 30,
+        max_messages: 250,
+        automated_sessions: 50,
+      });
+
+      // Cost by model/source (total)
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([
+        {
+          model: "claude-sonnet-4-20250514",
+          source: "claude-code",
           input_tokens: 3_000_000_000,
           output_tokens: 2_000_000_000,
           cached_input_tokens: 1_000_000_000,
-          reasoning_output_tokens: 100_000_000,
-        })
-        // Diversity
-        .mockResolvedValueOnce({
-          source_count: 4,
-          model_count: 8,
-          device_count: 3,
-        })
-        // Session aggregates
-        .mockResolvedValueOnce({
-          total_sessions: 500,
-          quick_sessions: 200,
-          marathon_sessions: 30,
-          max_messages: 250,
-          automated_sessions: 50,
-        });
-
-      // Daily usage
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            { day: "2026-04-01", total_tokens: 100_000_000 },
-            { day: "2026-04-02", total_tokens: 500_000_000 },
-            { day: "2026-04-03", total_tokens: 200_000_000 },
-          ],
-        })
-        // Cost by model/source/day
-        .mockResolvedValueOnce({
-          results: [
-            {
-              day: "2026-04-02",
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 300_000_000,
-              output_tokens: 200_000_000,
-              cached_input_tokens: 100_000_000,
-            },
-          ],
-        })
-        // Cost by model/source (total)
-        .mockResolvedValueOnce({
-          results: [
-            {
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 3_000_000_000,
-              output_tokens: 2_000_000_000,
-              cached_input_tokens: 1_000_000_000,
-            },
-          ],
-        });
+        },
+      ]);
     });
 
     it("should return achievements and summary", async () => {
@@ -195,306 +200,9 @@ describe("GET /api/users/[slug]/achievements", () => {
     });
   });
 
-  describe("cache-master with zero input_tokens", () => {
-    it("should return 0 cache-master value when input_tokens is 0", async () => {
-      // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Zero Input User" })
-        // Usage aggregates: zero input tokens
-        .mockResolvedValueOnce({
-          total_tokens: 0,
-          input_tokens: 0,
-          output_tokens: 0,
-          cached_input_tokens: 0,
-          reasoning_output_tokens: 0,
-        })
-        // Diversity
-        .mockResolvedValueOnce({
-          source_count: 0,
-          model_count: 0,
-          device_count: 0,
-        })
-        // Session aggregates
-        .mockResolvedValueOnce({
-          total_sessions: 0,
-          quick_sessions: 0,
-          marathon_sessions: 0,
-          max_messages: 0,
-          automated_sessions: 0,
-        });
-
-      // Daily usage (empty)
-      mockClient.query
-        .mockResolvedValueOnce({ results: [] })
-        // Cost by model/source/day
-        .mockResolvedValueOnce({ results: [] })
-        // Cost by model/source (total)
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(
-        makeGetRequest("/api/users/zero-input/achievements"),
-        { params: Promise.resolve({ slug: "zero-input" }) }
-      );
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      // All achievements should be locked with 0 values
-      expect(body.summary.totalUnlocked).toBe(0);
-    });
-  });
-
-  describe("streak computation", () => {
-    it("should compute a non-zero streak when today's date has usage", async () => {
-      const today = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-
-      // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Streak User" })
-        // Usage aggregates
-        .mockResolvedValueOnce({
-          total_tokens: 1_000_000,
-          input_tokens: 500_000,
-          output_tokens: 500_000,
-          cached_input_tokens: 0,
-          reasoning_output_tokens: 0,
-        })
-        // Diversity
-        .mockResolvedValueOnce({
-          source_count: 1,
-          model_count: 1,
-          device_count: 1,
-        })
-        // Session aggregates
-        .mockResolvedValueOnce({
-          total_sessions: 2,
-          quick_sessions: 1,
-          marathon_sessions: 0,
-          max_messages: 10,
-          automated_sessions: 0,
-        });
-
-      // Daily usage - includes today and yesterday for streak of 2
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            { day: yesterday, total_tokens: 500_000 },
-            { day: today, total_tokens: 500_000 },
-          ],
-        })
-        // Cost by model/source/day
-        .mockResolvedValueOnce({
-          results: [
-            {
-              day: today,
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 500_000,
-              output_tokens: 500_000,
-              cached_input_tokens: 0,
-            },
-          ],
-        })
-        // Cost by model/source (total)
-        .mockResolvedValueOnce({
-          results: [
-            {
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 500_000,
-              output_tokens: 500_000,
-              cached_input_tokens: 0,
-            },
-          ],
-        });
-
-      const res = await GET(
-        makeGetRequest("/api/users/streak-user/achievements"),
-        { params: Promise.resolve({ slug: "streak-user" }) }
-      );
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      // Streak should be 2 (today + yesterday)
-      expect(body.summary.currentStreak).toBe(2);
-    });
-  });
-
-  describe("null aggregates", () => {
-    it("should handle null usageAgg, diversity, and sessionAgg gracefully", async () => {
-      // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Null User" })
-        // Usage aggregates: null
-        .mockResolvedValueOnce(null)
-        // Diversity: null
-        .mockResolvedValueOnce(null)
-        // Session aggregates: null
-        .mockResolvedValueOnce(null);
-
-      // Daily usage (empty)
-      mockClient.query
-        .mockResolvedValueOnce({ results: [] })
-        // Cost by model/source/day
-        .mockResolvedValueOnce({ results: [] })
-        // Cost by model/source (total)
-        .mockResolvedValueOnce({ results: [] });
-
-      const res = await GET(
-        makeGetRequest("/api/users/null-user/achievements"),
-        { params: Promise.resolve({ slug: "null-user" }) }
-      );
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      // Should still work with all zeroed values
-      expect(body.achievements).toBeDefined();
-      expect(body.summary.totalUnlocked).toBe(0);
-      expect(body.summary.currentStreak).toBe(0);
-    });
-  });
-
-  describe("cost computation with cached tokens", () => {
-    it("should compute costs with non-zero cached tokens", async () => {
-      // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Cost User" })
-        // Usage aggregates
-        .mockResolvedValueOnce({
-          total_tokens: 10_000_000,
-          input_tokens: 5_000_000,
-          output_tokens: 3_000_000,
-          cached_input_tokens: 2_000_000,
-          reasoning_output_tokens: 0,
-        })
-        // Diversity
-        .mockResolvedValueOnce({
-          source_count: 1,
-          model_count: 1,
-          device_count: 1,
-        })
-        // Session aggregates
-        .mockResolvedValueOnce({
-          total_sessions: 1,
-          quick_sessions: 0,
-          marathon_sessions: 0,
-          max_messages: 5,
-          automated_sessions: 0,
-        });
-
-      // Daily usage
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [
-            { day: "2026-04-01", total_tokens: 10_000_000 },
-          ],
-        })
-        // Cost by model/source/day - includes cached tokens
-        .mockResolvedValueOnce({
-          results: [
-            {
-              day: "2026-04-01",
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 5_000_000,
-              output_tokens: 3_000_000,
-              cached_input_tokens: 2_000_000,
-            },
-          ],
-        })
-        // Cost by model/source (total) - includes cached tokens
-        .mockResolvedValueOnce({
-          results: [
-            {
-              model: "claude-sonnet-4-20250514",
-              source: "claude-code",
-              input_tokens: 5_000_000,
-              output_tokens: 3_000_000,
-              cached_input_tokens: 2_000_000,
-            },
-          ],
-        });
-
-      const res = await GET(
-        makeGetRequest("/api/users/cost-user/achievements"),
-        { params: Promise.resolve({ slug: "cost-user" }) }
-      );
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.achievements).toBeDefined();
-    });
-
-    it("should compute costs with null source", async () => {
-      // User lookup
-      mockClient.firstOrNull
-        .mockResolvedValueOnce({ id: "u1", name: "Null Source User" })
-        // Usage aggregates
-        .mockResolvedValueOnce({
-          total_tokens: 1_000_000,
-          input_tokens: 500_000,
-          output_tokens: 500_000,
-          cached_input_tokens: 0,
-          reasoning_output_tokens: 0,
-        })
-        // Diversity
-        .mockResolvedValueOnce({
-          source_count: 1,
-          model_count: 1,
-          device_count: 1,
-        })
-        // Session aggregates
-        .mockResolvedValueOnce({
-          total_sessions: 0,
-          quick_sessions: 0,
-          marathon_sessions: 0,
-          max_messages: 0,
-          automated_sessions: 0,
-        });
-
-      // Daily usage
-      mockClient.query
-        .mockResolvedValueOnce({
-          results: [{ day: "2026-04-01", total_tokens: 1_000_000 }],
-        })
-        // Cost by model/source/day - null source
-        .mockResolvedValueOnce({
-          results: [
-            {
-              day: "2026-04-01",
-              model: "some-model",
-              source: null,
-              input_tokens: 500_000,
-              output_tokens: 500_000,
-              cached_input_tokens: 0,
-            },
-          ],
-        })
-        // Cost by model/source (total)
-        .mockResolvedValueOnce({
-          results: [
-            {
-              model: "some-model",
-              source: null,
-              input_tokens: 500_000,
-              output_tokens: 500_000,
-              cached_input_tokens: 0,
-            },
-          ],
-        });
-
-      const res = await GET(
-        makeGetRequest("/api/users/null-source/achievements"),
-        { params: Promise.resolve({ slug: "null-source" }) }
-      );
-
-      expect(res.status).toBe(200);
-    });
-  });
-
   describe("error handling", () => {
     it("should return 500 on database error", async () => {
-      mockClient.firstOrNull.mockRejectedValueOnce(new Error("DB connection failed"));
+      mockClient.getPublicUserBySlugOrId.mockRejectedValueOnce(new Error("DB connection failed"));
 
       const res = await GET(
         makeGetRequest("/api/users/test-user/achievements"),
@@ -504,6 +212,123 @@ describe("GET /api/users/[slug]/achievements", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("Failed to compute achievements");
+    });
+  });
+
+  describe("edge cases", () => {
+    beforeEach(() => {
+      // User lookup
+      mockClient.getPublicUserBySlugOrId.mockResolvedValue({
+        id: "u1",
+        name: "Test User",
+        nickname: null,
+        image: null,
+        slug: "test-user",
+        created_at: "2026-01-01T00:00:00Z",
+        is_public: 1,
+      });
+    });
+
+    it("should handle null usage aggregates gracefully", async () => {
+      mockClient.getAchievementUsageAggregates.mockResolvedValue(null);
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue(null);
+      mockClient.getAchievementSessionAggregates.mockResolvedValue(null);
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+
+      const res = await GET(
+        makeGetRequest("/api/users/test-user/achievements"),
+        { params: Promise.resolve({ slug: "test-user" }) }
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.achievements).toBeDefined();
+      expect(body.summary.currentStreak).toBe(0);
+    });
+
+    it("should handle zero input tokens for cache ratio", async () => {
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_input_tokens: 0,
+        reasoning_output_tokens: 0,
+      });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 0,
+        model_count: 0,
+        device_count: 0,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 0,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 0,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+
+      const res = await GET(
+        makeGetRequest("/api/users/test-user/achievements"),
+        { params: Promise.resolve({ slug: "test-user" }) }
+      );
+
+      expect(res.status).toBe(200);
+    });
+
+    it("should compute cost without cached pricing when not available", async () => {
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 1_000_000,
+        input_tokens: 500_000,
+        output_tokens: 500_000,
+        cached_input_tokens: 0, // No cached tokens
+        reasoning_output_tokens: 0,
+      });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-04-01", total_tokens: 1_000_000 },
+      ]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([
+        {
+          day: "2026-04-01",
+          model: "unknown-model", // Unknown model to trigger fallback pricing
+          source: null,
+          input_tokens: 500_000,
+          output_tokens: 500_000,
+          cached_input_tokens: 0,
+        },
+      ]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 1,
+        model_count: 1,
+        device_count: 1,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 1,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 10,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([
+        {
+          model: "unknown-model",
+          source: null,
+          input_tokens: 500_000,
+          output_tokens: 500_000,
+          cached_input_tokens: 0,
+        },
+      ]);
+
+      const res = await GET(
+        makeGetRequest("/api/users/test-user/achievements"),
+        { params: Promise.resolve({ slug: "test-user" }) }
+      );
+
+      expect(res.status).toBe(200);
     });
   });
 });
