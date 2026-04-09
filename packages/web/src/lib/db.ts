@@ -30,6 +30,9 @@ import type {
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
   PricingRow,
+  UsageDeviceSummaryRow,
+  UsageCostDetailRow,
+  UsageDeviceTimelineRow,
   TeamRow,
   TeamDetailRow,
   TeamMemberRow,
@@ -366,6 +369,31 @@ export interface DbRead {
     model: string,
     source: string | null,
   ): Promise<PricingRow | null>;
+
+  // ---------------------------------------------------------------------------
+  // Usage domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get device summary for by-device usage */
+  getDeviceSummary(
+    userId: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<UsageDeviceSummaryRow[]>;
+
+  /** Get cost details for by-device pricing calculation */
+  getDeviceCostDetails(
+    userId: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<UsageCostDetailRow[]>;
+
+  /** Get device timeline for by-device charting */
+  getDeviceTimeline(
+    userId: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<UsageDeviceTimelineRow[]>;
 
   // ---------------------------------------------------------------------------
   // Devices domain RPC methods

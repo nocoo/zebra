@@ -308,6 +308,45 @@ export interface PricingRow {
 }
 
 // ---------------------------------------------------------------------------
+// Usage domain types
+// ---------------------------------------------------------------------------
+
+/** Device summary row for by-device usage */
+export interface UsageDeviceSummaryRow {
+  device_id: string;
+  alias: string | null;
+  first_seen: string;
+  last_seen: string;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+  reasoning_output_tokens: number;
+  sources: string;
+  models: string;
+}
+
+/** Cost detail row for by-device pricing calculation */
+export interface UsageCostDetailRow {
+  device_id: string;
+  source: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+/** Timeline row for by-device charting */
+export interface UsageDeviceTimelineRow {
+  date: string;
+  device_id: string;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+}
+
+// ---------------------------------------------------------------------------
 // Devices domain types
 // ---------------------------------------------------------------------------
 

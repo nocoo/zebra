@@ -31,6 +31,9 @@ import type {
   ShowcaseOwnerRow,
   ShowcaseExistsResult,
   PricingRow,
+  UsageDeviceSummaryRow,
+  UsageCostDetailRow,
+  UsageDeviceTimelineRow,
   TeamRow,
   TeamDetailRow,
   TeamMemberRow,
@@ -672,6 +675,49 @@ export function createWorkerDbRead(): DbRead {
         method: "pricing.getModelPricingByModelSource",
         model,
         source,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // Usage domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getDeviceSummary(
+      userId: string,
+      fromDate: string,
+      toDate: string,
+    ): Promise<UsageDeviceSummaryRow[]> {
+      return rpc<UsageDeviceSummaryRow[]>({
+        method: "usage.getDeviceSummary",
+        userId,
+        fromDate,
+        toDate,
+      });
+    },
+
+    async getDeviceCostDetails(
+      userId: string,
+      fromDate: string,
+      toDate: string,
+    ): Promise<UsageCostDetailRow[]> {
+      return rpc<UsageCostDetailRow[]>({
+        method: "usage.getDeviceCostDetails",
+        userId,
+        fromDate,
+        toDate,
+      });
+    },
+
+    async getDeviceTimeline(
+      userId: string,
+      fromDate: string,
+      toDate: string,
+    ): Promise<UsageDeviceTimelineRow[]> {
+      return rpc<UsageDeviceTimelineRow[]>({
+        method: "usage.getDeviceTimeline",
+        userId,
+        fromDate,
+        toDate,
       });
     },
 
