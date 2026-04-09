@@ -54,6 +54,7 @@ export async function executeNotify(
           totalDeltas: tokenResult.totalDeltas,
           totalRecords: tokenResult.totalRecords,
           filesScanned: tokenResult.filesScanned,
+          dbsScanned: tokenResult.dbsScanned,
           sources: tokenResult.sources,
         };
       } catch (err) {
@@ -78,6 +79,7 @@ export async function executeNotify(
           totalSnapshots: sessionResult.totalSnapshots,
           totalRecords: sessionResult.totalRecords,
           filesScanned: sessionResult.filesScanned,
+          dbsScanned: sessionResult.dbsScanned,
           sources: sessionResult.sources,
         };
       } catch (err) {

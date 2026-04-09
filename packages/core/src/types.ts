@@ -425,6 +425,7 @@ export interface SyncCycleResult {
     totalDeltas: number;
     totalRecords: number;
     filesScanned: Record<string, number>;
+    dbsScanned?: Record<string, number>;
     sources: Record<string, number>;
   };
   /** Error from token sync phase, if it failed */
@@ -435,6 +436,7 @@ export interface SyncCycleResult {
     totalSnapshots: number;
     totalRecords: number;
     filesScanned: Record<string, number>;
+    dbsScanned?: Record<string, number>;
     sources: Record<string, number>;
   };
   /** Error from session sync phase, if it failed */

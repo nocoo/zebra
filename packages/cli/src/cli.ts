@@ -139,6 +139,58 @@ function logSessionSyncProgress(event: {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Scanned summary formatter — builds a compact "Scanned: ..." line
+// showing both file-based and DB-based source counts.
+// ---------------------------------------------------------------------------
+
+/** Display name mapping for source keys */
+const SOURCE_LABELS: Record<string, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  gemini: "Gemini",
+  kosmos: "Kosmos",
+  opencode: "OpenCode",
+  openclaw: "OpenClaw",
+  pi: "Pi",
+  vscodeCopilot: "VSCode Copilot",
+  copilotCli: "Copilot CLI",
+  hermes: "Hermes",
+};
+
+/**
+ * Format a unified "Scanned:" line combining file counts and DB counts.
+ * File-based sources show just the number, DB-based sources show "N db(s)".
+ * Sources with 0 files AND 0 dbs are omitted.
+ */
+function formatScannedLine(
+  filesScanned: Record<string, number>,
+  dbsScanned?: Record<string, number>,
+): string {
+  const parts: string[] = [];
+
+  // Collect all unique source keys (union of files + dbs)
+  const allKeys = new Set([
+    ...Object.keys(filesScanned),
+    ...Object.keys(dbsScanned ?? {}),
+  ]);
+
+  for (const key of allKeys) {
+    const fileCount = filesScanned[key] ?? 0;
+    const dbCount = dbsScanned?.[key] ?? 0;
+    if (fileCount === 0 && dbCount === 0) continue;
+
+    const label = SOURCE_LABELS[key] ?? key;
+    const segments: string[] = [];
+    if (fileCount > 0) segments.push(String(fileCount));
+    if (dbCount > 0) segments.push(`${dbCount} db${dbCount > 1 ? "s" : ""}`);
+    parts.push(`${label}: ${segments.join(" + ")}`);
+  }
+
+  if (parts.length === 0) return pc.dim("Scanned: (none)");
+  return `Scanned: ${pc.dim(parts.join("  "))}`;
+}
+
 const syncCommand = defineCommand({
   meta: {
     name: "sync",
@@ -158,7 +210,7 @@ const syncCommand = defineCommand({
   },
   async run({ args }) {
     const paths = resolveDefaultPaths();
-    log.start("Syncing token usage from AI coding tools...");
+    log.start("Syncing token usage...");
     log.blank();
 
     // Dynamic import: opencode-sqlite-db.ts uses platform SQLite bindings
@@ -227,30 +279,16 @@ const syncCommand = defineCommand({
       if (result.sources.copilotCli > 0) deltaParts.push(`Copilot CLI: ${result.sources.copilotCli}`);
       if (result.sources.hermes > 0) deltaParts.push(`Hermes: ${result.sources.hermes}`);
       if (deltaParts.length > 0) {
-        log.text(pc.dim(deltaParts.join("  |  ")));
+        log.text(pc.dim(deltaParts.join("  ")));
       }
     }
 
-    // Always show files scanned
-    const fs = result.filesScanned;
-    const scanParts: string[] = [];
-    if (fs.claude > 0) scanParts.push(`Claude: ${fs.claude}`);
-    if (fs.codex > 0) scanParts.push(`Codex: ${fs.codex}`);
-    if (fs.gemini > 0) scanParts.push(`Gemini: ${fs.gemini}`);
-    if (fs.kosmos > 0) scanParts.push(`Kosmos: ${fs.kosmos}`);
-    if (fs.opencode > 0) scanParts.push(`OpenCode: ${fs.opencode}`);
-    if (fs.openclaw > 0) scanParts.push(`OpenClaw: ${fs.openclaw}`);
-    if (fs.pi > 0) scanParts.push(`Pi: ${fs.pi}`);
-    if (fs.vscodeCopilot > 0) scanParts.push(`VSCode Copilot: ${fs.vscodeCopilot}`);
-    if (fs.copilotCli > 0) scanParts.push(`Copilot CLI: ${fs.copilotCli}`);
-    if (fs.hermes > 0) scanParts.push(`Hermes: ${fs.hermes}`);
-    if (scanParts.length > 0) {
-      log.text(`Files scanned: ${pc.dim(scanParts.join("  |  "))}`);
-    }
+    // Always show scanned summary (files + dbs on one line)
+    log.text(formatScannedLine(result.filesScanned, result.dbsScanned));
 
     // ---------- Session sync ----------
     log.blank();
-    log.start("Syncing session statistics...");
+    log.start("Syncing sessions...");
     log.blank();
 
     const sessionResult = await executeSessionSync({
@@ -287,23 +325,12 @@ const syncCommand = defineCommand({
       if (sessionResult.sources.openclaw > 0) sessParts.push(`OpenClaw: ${sessionResult.sources.openclaw}`);
       if (sessionResult.sources.pi > 0) sessParts.push(`Pi: ${sessionResult.sources.pi}`);
       if (sessParts.length > 0) {
-        log.text(pc.dim(sessParts.join("  |  ")));
+        log.text(pc.dim(sessParts.join("  ")));
       }
     }
 
-    // Always show session files scanned
-    const sfs = sessionResult.filesScanned;
-    const sessScanParts: string[] = [];
-    if (sfs.claude > 0) sessScanParts.push(`Claude: ${sfs.claude}`);
-    if (sfs.codex > 0) sessScanParts.push(`Codex: ${sfs.codex}`);
-    if (sfs.gemini > 0) sessScanParts.push(`Gemini: ${sfs.gemini}`);
-    if (sfs.kosmos > 0) sessScanParts.push(`Kosmos: ${sfs.kosmos}`);
-    if (sfs.opencode > 0) sessScanParts.push(`OpenCode: ${sfs.opencode}`);
-    if (sfs.openclaw > 0) sessScanParts.push(`OpenClaw: ${sfs.openclaw}`);
-    if (sfs.pi > 0) sessScanParts.push(`Pi: ${sfs.pi}`);
-    if (sessScanParts.length > 0) {
-      log.text(`Files scanned: ${pc.dim(sessScanParts.join("  |  "))}`);
-    }
+    // Always show scanned summary (files + dbs on one line)
+    log.text(formatScannedLine(sessionResult.filesScanned, sessionResult.dbsScanned));
 
     // Auto-upload if logged in
     if (args.upload) {
@@ -637,7 +664,7 @@ const uninstallCommand = defineCommand({
 
 async function runUpload(stateDir: string, apiUrl: string, dev: boolean): Promise<void> {
   log.blank();
-  log.start("Uploading tokens to dashboard...");
+  log.start("Uploading tokens...");
 
   const uploadResult = await executeUpload({
     stateDir,
@@ -679,7 +706,7 @@ async function runUpload(stateDir: string, apiUrl: string, dev: boolean): Promis
 
 async function runSessionUpload(stateDir: string, apiUrl: string, dev: boolean): Promise<void> {
   log.blank();
-  log.start("Uploading sessions to dashboard...");
+  log.start("Uploading sessions...");
 
   const uploadResult = await executeSessionUpload({
     stateDir,
