@@ -12,6 +12,11 @@ import type {
   UserApiKeyAuth,
   UserSettings,
   UserSearchResult,
+  OrgRow,
+  OrgMemberRow,
+  ShowcaseRpcRow,
+  ShowcaseOwnerRow,
+  ShowcaseExistsResult,
 } from "./rpc-types";
 
 export function createWorkerDbRead(): DbRead {
@@ -148,6 +153,138 @@ export function createWorkerDbRead(): DbRead {
         query,
         limit,
       });
+    },
+
+    // -------------------------------------------------------------------------
+    // Organizations domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async listOrganizations(): Promise<OrgRow[]> {
+      return rpc<OrgRow[]>({ method: "organizations.list" });
+    },
+
+    async listUserOrganizations(userId: string): Promise<OrgRow[]> {
+      return rpc<OrgRow[]>({ method: "organizations.listForUser", userId });
+    },
+
+    async getOrganizationById(orgId: string): Promise<OrgRow | null> {
+      return rpc<OrgRow | null>({ method: "organizations.getById", orgId });
+    },
+
+    async getOrganizationBySlug(slug: string): Promise<OrgRow | null> {
+      return rpc<OrgRow | null>({ method: "organizations.getBySlug", slug });
+    },
+
+    async checkOrgMembership(orgId: string, userId: string): Promise<boolean> {
+      const result = await rpc<{ exists: boolean }>({
+        method: "organizations.checkMembership",
+        orgId,
+        userId,
+      });
+      return result.exists;
+    },
+
+    async listOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
+      return rpc<OrgMemberRow[]>({
+        method: "organizations.listMembers",
+        orgId,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // Showcases domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getShowcaseById(
+      showcaseId: string,
+      currentUserId?: string,
+    ): Promise<ShowcaseRpcRow | null> {
+      return rpc<ShowcaseRpcRow | null>({
+        method: "showcases.getById",
+        showcaseId,
+        currentUserId,
+      });
+    },
+
+    async getShowcaseOwner(
+      showcaseId: string,
+    ): Promise<ShowcaseOwnerRow | null> {
+      return rpc<ShowcaseOwnerRow | null>({
+        method: "showcases.getOwner",
+        showcaseId,
+      });
+    },
+
+    async checkShowcaseExists(
+      userId: string,
+      githubUrl: string,
+    ): Promise<ShowcaseExistsResult> {
+      return rpc<ShowcaseExistsResult>({
+        method: "showcases.checkExists",
+        userId,
+        githubUrl,
+      });
+    },
+
+    async checkShowcaseExistsByRepoKey(
+      repoKey: string,
+    ): Promise<ShowcaseExistsResult> {
+      return rpc<ShowcaseExistsResult>({
+        method: "showcases.checkExistsByRepoKey",
+        repoKey,
+      });
+    },
+
+    async checkShowcaseUpvote(
+      showcaseId: string,
+      userId: string,
+    ): Promise<boolean> {
+      const result = await rpc<{ exists: boolean }>({
+        method: "showcases.checkUpvote",
+        showcaseId,
+        visitorId: userId,
+      });
+      return result.exists;
+    },
+
+    async getShowcaseUpvoteCount(showcaseId: string): Promise<number> {
+      return rpc<number>({ method: "showcases.getUpvoteCount", showcaseId });
+    },
+
+    async listShowcases(options: {
+      userId?: string;
+      publicOnly?: boolean;
+      currentUserId?: string;
+      orderBy?: "created_at" | "upvote_count";
+      limit: number;
+      offset: number;
+    }): Promise<ShowcaseRpcRow[]> {
+      return rpc<ShowcaseRpcRow[]>({
+        method: "showcases.list",
+        ...options,
+      });
+    },
+
+    async countShowcases(options?: {
+      userId?: string;
+      publicOnly?: boolean;
+    }): Promise<number> {
+      return rpc<number>({
+        method: "showcases.count",
+        ...options,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // Teams domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async getTeamLogoUrl(teamId: string): Promise<string | null> {
+      const result = await rpc<{ logo_url: string | null } | null>({
+        method: "teams.getLogoUrl",
+        teamId,
+      });
+      return result?.logo_url ?? null;
     },
   };
 

@@ -331,10 +331,7 @@ export async function DELETE(
     // If last member, delete the team and its logo
     if (memberCount <= 1) {
       // Read logo URL before deleting
-      const team = await dbRead.firstOrNull<{ logo_url: string | null }>(
-        "SELECT logo_url FROM teams WHERE id = ?",
-        [teamId],
-      );
+      const logoUrl = await dbRead.getTeamLogoUrl(teamId);
 
       // Clean up season_teams before deleting team
       // NOTE: season_roster_snapshots are preserved for historical leaderboard data
@@ -344,9 +341,9 @@ export async function DELETE(
       ]);
 
       // Best-effort logo cleanup — don't fail the request if R2 is unavailable
-      if (team?.logo_url) {
+      if (logoUrl) {
         try {
-          await deleteTeamLogoByUrl(team.logo_url);
+          await deleteTeamLogoByUrl(logoUrl);
         } catch {
           // Silently ignore — orphaned R2 object is harmless
         }

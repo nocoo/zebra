@@ -314,8 +314,8 @@ describe("DELETE /api/teams/[teamId]", () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.firstOrNull
       .mockResolvedValueOnce({ role: "owner" })
-      .mockResolvedValueOnce({ cnt: 1 }) // last member
-      .mockResolvedValueOnce({ logo_url: null }); // team logo check
+      .mockResolvedValueOnce({ cnt: 1 }); // last member
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce(null);
     mockDbWrite.execute.mockResolvedValue({ changes: 1 });
     mockDbWrite.batch.mockResolvedValue([]);
 

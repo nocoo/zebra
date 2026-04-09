@@ -49,3 +49,70 @@ export interface UserSearchResult {
   email: string;
   image: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Organizations domain types
+// ---------------------------------------------------------------------------
+
+/** Organization record */
+export interface OrgRow {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Organization member record */
+export interface OrgMemberRow {
+  user_id: string;
+  name: string | null;
+  image: string | null;
+  slug: string | null;
+  joined_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Showcases domain types
+// ---------------------------------------------------------------------------
+
+/** Showcase record */
+export interface ShowcaseRpcRow {
+  id: string;
+  user_id: string;
+  repo_key: string;
+  github_url: string;
+  title: string;
+  description: string | null;
+  tagline: string | null;
+  og_image_url: string | null;
+  is_public: number;
+  created_at: string;
+  refreshed_at: string;
+  stars: number;
+  forks: number;
+  language: string | null;
+  license: string | null;
+  topics: string | null;
+  homepage: string | null;
+  upvote_count: number;
+  user_name: string | null;
+  user_nickname: string | null;
+  user_image: string | null;
+  user_slug: string | null;
+  has_upvoted?: number;
+}
+
+/** Showcase owner record */
+export interface ShowcaseOwnerRow {
+  id: string;
+  user_id: string;
+}
+
+/** Showcase existence check result */
+export interface ShowcaseExistsResult {
+  exists: boolean;
+  id?: string;
+}

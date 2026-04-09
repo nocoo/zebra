@@ -11,6 +11,11 @@ import type {
   UserApiKeyAuth,
   UserSettings,
   UserSearchResult,
+  OrgRow,
+  OrgMemberRow,
+  ShowcaseRpcRow,
+  ShowcaseOwnerRow,
+  ShowcaseExistsResult,
 } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
@@ -74,6 +79,79 @@ export interface DbRead {
 
   /** Search users by name/email (admin) */
   searchUsers(query: string, limit?: number): Promise<UserSearchResult[]>;
+
+  // ---------------------------------------------------------------------------
+  // Organizations domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** List all organizations */
+  listOrganizations(): Promise<OrgRow[]>;
+
+  /** List organizations for a user */
+  listUserOrganizations(userId: string): Promise<OrgRow[]>;
+
+  /** Get organization by ID */
+  getOrganizationById(orgId: string): Promise<OrgRow | null>;
+
+  /** Get organization by slug */
+  getOrganizationBySlug(slug: string): Promise<OrgRow | null>;
+
+  /** Check if user is a member of organization */
+  checkOrgMembership(orgId: string, userId: string): Promise<boolean>;
+
+  /** List organization members */
+  listOrgMembers(orgId: string): Promise<OrgMemberRow[]>;
+
+  // ---------------------------------------------------------------------------
+  // Showcases domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get showcase by ID */
+  getShowcaseById(
+    showcaseId: string,
+    currentUserId?: string,
+  ): Promise<ShowcaseRpcRow | null>;
+
+  /** Get showcase owner info */
+  getShowcaseOwner(showcaseId: string): Promise<ShowcaseOwnerRow | null>;
+
+  /** Check if showcase exists by user ID and GitHub URL */
+  checkShowcaseExists(
+    userId: string,
+    githubUrl: string,
+  ): Promise<ShowcaseExistsResult>;
+
+  /** Check if showcase exists by repo key */
+  checkShowcaseExistsByRepoKey(repoKey: string): Promise<ShowcaseExistsResult>;
+
+  /** Check if user has upvoted a showcase */
+  checkShowcaseUpvote(showcaseId: string, userId: string): Promise<boolean>;
+
+  /** Get upvote count for a showcase */
+  getShowcaseUpvoteCount(showcaseId: string): Promise<number>;
+
+  /** List showcases */
+  listShowcases(options: {
+    userId?: string;
+    publicOnly?: boolean;
+    currentUserId?: string;
+    orderBy?: "created_at" | "upvote_count";
+    limit: number;
+    offset: number;
+  }): Promise<ShowcaseRpcRow[]>;
+
+  /** Count showcases */
+  countShowcases(options?: {
+    userId?: string;
+    publicOnly?: boolean;
+  }): Promise<number>;
+
+  // ---------------------------------------------------------------------------
+  // Teams domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** Get team logo URL */
+  getTeamLogoUrl(teamId: string): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------

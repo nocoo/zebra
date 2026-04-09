@@ -33,6 +33,8 @@ export function createMockDbRead() {
     getUserApiKey: vi.fn(),
     getUserEmail: vi.fn(),
     searchUsers: vi.fn(),
+    // Teams RPC methods
+    getTeamLogoUrl: vi.fn(),
   } as unknown as DbRead & {
     query: ReturnType<typeof vi.fn>;
     firstOrNull: ReturnType<typeof vi.fn>;
@@ -46,6 +48,7 @@ export function createMockDbRead() {
     getUserApiKey: ReturnType<typeof vi.fn>;
     getUserEmail: ReturnType<typeof vi.fn>;
     searchUsers: ReturnType<typeof vi.fn>;
+    getTeamLogoUrl: ReturnType<typeof vi.fn>;
   };
 }
 
