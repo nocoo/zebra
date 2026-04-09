@@ -119,7 +119,7 @@ Each raw SQL call is migrated as an atomic commit. Total: **139 commits**.
 - [ ] M026: `dbRead.query<{ season_id: string }>` → `teams.getSeasonRegistrations`
 - [x] M027: `dbRead.firstOrNull<{ role: string }>` (2nd) → `teams.getMembership`
 - [ ] M028: `dbRead.firstOrNull<{ ... }>` (edit check) → `teams.getById`
-- [ ] M029: `dbRead.firstOrNull<{ logo_url: string | null }>` → `teams.getLogoUrl`
+- [x] M029: `dbRead.firstOrNull<{ logo_url: string | null }>` → `teams.getLogoUrl`
 - [x] M030: `dbRead.firstOrNull<{ cnt: number }>` → `teams.countMembers`
 - [x] M031: `dbRead.firstOrNull<{ role: string }>` (3rd) → `teams.getMembership`
 - [ ] M032: `dbRead.query<{ ... }>` (members 2nd) → `teams.getMembers`
