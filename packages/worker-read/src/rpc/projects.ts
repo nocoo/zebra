@@ -39,8 +39,8 @@ export interface TagRow {
 }
 
 export interface TimelineRow {
-  project_id: string;
-  day: string;
+  date: string;
+  project_name: string;
   session_count: number;
 }
 
@@ -530,21 +530,20 @@ async function handleGetProjectTimeline(
     .prepare(
       `
       SELECT
-        pa.project_id,
-        DATE(sr.started_at) AS day,
+        DATE(sr.started_at) AS date,
+        COALESCE(p.name, 'Unassigned') AS project_name,
         COUNT(*) AS session_count
       FROM session_records sr
-      JOIN project_aliases pa
+      LEFT JOIN project_aliases pa
         ON pa.user_id = sr.user_id
         AND pa.source = sr.source
         AND pa.project_ref = sr.project_ref
+      LEFT JOIN projects p ON p.id = pa.project_id
       WHERE sr.user_id = ?
         AND sr.started_at >= ?
         AND sr.started_at < ?
-        AND sr.project_ref IS NOT NULL
-        AND sr.project_ref != ''
-      GROUP BY pa.project_id, DATE(sr.started_at)
-      ORDER BY day ASC
+      GROUP BY date, project_name
+      ORDER BY date
     `
     )
     .bind(req.userId, req.from, req.to)

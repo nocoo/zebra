@@ -133,10 +133,10 @@ export interface ProjectUnassignedRow {
   total_duration_seconds: number;
 }
 
-/** Timeline row for project activity */
+/** Timeline row for project activity (per day, per project) */
 export interface ProjectTimelineRow {
-  project_id: string;
-  day: string;
+  date: string;
+  project_name: string;
   session_count: number;
 }
 

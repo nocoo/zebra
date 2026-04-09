@@ -7,16 +7,6 @@ import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface TimelineRow {
-  date: string;
-  project_name: string;
-  session_count: number;
-}
-
-// ---------------------------------------------------------------------------
 // GET — timeline data
 // ---------------------------------------------------------------------------
 
@@ -44,28 +34,11 @@ export async function GET(request: Request) {
   const db = await getDbRead();
 
   try {
-    const result = await db.query<TimelineRow>(
-      `SELECT
-         DATE(sr.started_at) AS date,
-         COALESCE(p.name, 'Unassigned') AS project_name,
-         COUNT(*) AS session_count
-       FROM session_records sr
-       LEFT JOIN project_aliases pa
-         ON pa.user_id = sr.user_id
-         AND pa.source = sr.source
-         AND pa.project_ref = sr.project_ref
-       LEFT JOIN projects p ON p.id = pa.project_id
-       WHERE sr.user_id = ?
-         AND sr.started_at >= ?
-         AND sr.started_at < ?
-       GROUP BY date, project_name
-       ORDER BY date`,
-      [userId, from, to],
-    );
+    const rows = await db.getProjectTimeline(userId, from, to);
 
     // Transform flat rows into { date, projects: { name: count } } entries
     const byDate = new Map<string, Record<string, number>>();
-    for (const row of result.results) {
+    for (const row of rows) {
       let entry = byDate.get(row.date);
       if (!entry) {
         entry = {};

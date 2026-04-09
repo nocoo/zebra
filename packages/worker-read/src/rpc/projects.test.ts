@@ -561,9 +561,9 @@ describe("projects RPC handlers", () => {
   describe("projects.getTimeline", () => {
     it("should return timeline data", async () => {
       const mockTimeline = [
-        { project_id: "p1", day: "2026-01-15", session_count: 3 },
-        { project_id: "p1", day: "2026-01-16", session_count: 5 },
-        { project_id: "p2", day: "2026-01-15", session_count: 2 },
+        { date: "2026-01-15", project_name: "Project A", session_count: 3 },
+        { date: "2026-01-16", project_name: "Project A", session_count: 5 },
+        { date: "2026-01-15", project_name: "Unassigned", session_count: 2 },
       ];
       db.all.mockResolvedValue({ results: mockTimeline });
 
