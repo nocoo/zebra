@@ -1077,7 +1077,7 @@ export function createWorkerDbRead(): DbRead {
       return rpc<LeaderboardSessionStatsRow[]>({
         method: "leaderboard.getUserSessionStats",
         userIds,
-        fromDate,
+        ...(fromDate !== undefined && { fromDate }),
       });
     },
 
