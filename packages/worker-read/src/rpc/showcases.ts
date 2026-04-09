@@ -13,20 +13,31 @@ import type { D1Database } from "@cloudflare/workers-types";
 export interface ShowcaseRow {
   id: string;
   user_id: string;
+  repo_key: string;
+  github_url: string;
   title: string;
   description: string | null;
-  github_url: string;
+  tagline: string | null;
+  og_image_url: string | null;
   is_public: number;
-  upvote_count: number;
   created_at: string;
-  updated_at: string;
-  owner_name: string | null;
-  owner_slug: string | null;
-  owner_image: string | null;
-  languages: string | null;
-  stars: number | null;
-  forks: number | null;
-  repo_description: string | null;
+  refreshed_at: string;
+  // GitHub stats
+  stars: number;
+  forks: number;
+  language: string | null;
+  license: string | null;
+  topics: string | null;
+  homepage: string | null;
+  // Computed via subquery
+  upvote_count: number;
+  // Joined user fields
+  user_name: string | null;
+  user_nickname: string | null;
+  user_image: string | null;
+  user_slug: string | null;
+  // Optional (only for authenticated requests)
+  has_upvoted?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +47,7 @@ export interface ShowcaseRow {
 export interface GetShowcaseByIdRequest {
   method: "showcases.getById";
   showcaseId: string;
+  currentUserId?: string; // For has_upvoted computation
 }
 
 export interface GetShowcaseBySlugRequest {
@@ -69,6 +81,8 @@ export interface ListShowcasesRequest {
   method: "showcases.list";
   userId?: string;
   publicOnly?: boolean;
+  currentUserId?: string; // For has_upvoted computation
+  orderBy?: "created_at" | "upvote_count";
   limit: number;
   offset: number;
 }
@@ -79,11 +93,17 @@ export interface CountShowcasesRequest {
   publicOnly?: boolean;
 }
 
+export interface CheckExistsByRepoKeyRequest {
+  method: "showcases.checkExistsByRepoKey";
+  repoKey: string;
+}
+
 export type ShowcasesRpcRequest =
   | GetShowcaseByIdRequest
   | GetShowcaseBySlugRequest
   | GetShowcaseOwnerRequest
   | CheckShowcaseExistsRequest
+  | CheckExistsByRepoKeyRequest
   | CheckUpvoteExistsRequest
   | GetUpvoteCountRequest
   | ListShowcasesRequest
@@ -101,15 +121,37 @@ async function handleGetShowcaseById(
     return Response.json({ error: "showcaseId is required" }, { status: 400 });
   }
 
-  const result = await db
-    .prepare(
-      `SELECT s.*, u.name AS owner_name, u.slug AS owner_slug, u.image AS owner_image
-       FROM showcases s
-       JOIN users u ON u.id = s.user_id
-       WHERE s.id = ?`
-    )
-    .bind(req.showcaseId)
-    .first<ShowcaseRow>();
+  let sql: string;
+  const params: unknown[] = [];
+
+  if (req.currentUserId) {
+    // Authenticated: include has_upvoted
+    sql = `SELECT
+        s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+        s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+        s.stars, s.forks, s.language, s.license, s.topics, s.homepage,
+        u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+        (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count,
+        EXISTS(SELECT 1 FROM showcase_upvotes WHERE showcase_id = s.id AND user_id = ?) as has_upvoted
+      FROM showcases s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?`;
+    params.push(req.currentUserId, req.showcaseId);
+  } else {
+    // Unauthenticated: no has_upvoted
+    sql = `SELECT
+        s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+        s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+        s.stars, s.forks, s.language, s.license, s.topics, s.homepage,
+        u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+        (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count
+      FROM showcases s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?`;
+    params.push(req.showcaseId);
+  }
+
+  const result = await db.prepare(sql).bind(...params).first<ShowcaseRow>();
 
   return Response.json({ result: result });
 }
@@ -122,15 +164,17 @@ async function handleGetShowcaseBySlug(
     return Response.json({ error: "slug is required" }, { status: 400 });
   }
 
-  const result = await db
-    .prepare(
-      `SELECT s.*, u.name AS owner_name, u.slug AS owner_slug, u.image AS owner_image
-       FROM showcases s
-       JOIN users u ON u.id = s.user_id
-       WHERE s.slug = ?`
-    )
-    .bind(req.slug)
-    .first<ShowcaseRow>();
+  const sql = `SELECT
+      s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+      s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+      s.stars, s.forks, s.language, s.license, s.topics, s.homepage,
+      u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+      (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count
+    FROM showcases s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.slug = ?`;
+
+  const result = await db.prepare(sql).bind(req.slug).first<ShowcaseRow>();
 
   return Response.json({ result: result });
 }
@@ -212,11 +256,35 @@ async function handleListShowcases(
   req: ListShowcasesRequest,
   db: D1Database
 ): Promise<Response> {
-  let sql = `SELECT s.*, u.name AS owner_name, u.slug AS owner_slug, u.image AS owner_image
-             FROM showcases s
-             JOIN users u ON u.id = s.user_id`;
   const params: unknown[] = [];
 
+  // Build SELECT clause based on whether currentUserId is provided
+  let selectClause: string;
+  if (req.currentUserId) {
+    // Authenticated: include has_upvoted
+    selectClause = `SELECT
+      s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+      s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+      s.stars, s.forks, s.language, s.license, s.topics, s.homepage,
+      u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+      (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count,
+      EXISTS(SELECT 1 FROM showcase_upvotes WHERE showcase_id = s.id AND user_id = ?) as has_upvoted`;
+    params.push(req.currentUserId);
+  } else {
+    // Unauthenticated: no has_upvoted
+    selectClause = `SELECT
+      s.id, s.user_id, s.repo_key, s.github_url, s.title, s.description,
+      s.tagline, s.og_image_url, s.is_public, s.created_at, s.refreshed_at,
+      s.stars, s.forks, s.language, s.license, s.topics, s.homepage,
+      u.name as user_name, u.nickname as user_nickname, u.image as user_image, u.slug as user_slug,
+      (SELECT COUNT(*) FROM showcase_upvotes WHERE showcase_id = s.id) as upvote_count`;
+  }
+
+  let sql = `${selectClause}
+    FROM showcases s
+    JOIN users u ON u.id = s.user_id`;
+
+  // Build WHERE clause
   if (req.userId) {
     sql += ` WHERE s.user_id = ?`;
     params.push(req.userId);
@@ -224,7 +292,14 @@ async function handleListShowcases(
     sql += ` WHERE s.is_public = 1`;
   }
 
-  sql += ` ORDER BY s.created_at DESC LIMIT ? OFFSET ?`;
+  // Build ORDER BY clause
+  if (req.orderBy === "upvote_count") {
+    sql += ` ORDER BY upvote_count DESC, s.created_at DESC, s.id DESC`;
+  } else {
+    sql += ` ORDER BY s.created_at DESC, s.id DESC`;
+  }
+
+  sql += ` LIMIT ? OFFSET ?`;
   params.push(req.limit, req.offset);
 
   const results = await db.prepare(sql).bind(...params).all<ShowcaseRow>();
@@ -254,6 +329,22 @@ async function handleCountShowcases(
   return Response.json({ result: result?.count ?? 0 });
 }
 
+async function handleCheckExistsByRepoKey(
+  req: CheckExistsByRepoKeyRequest,
+  db: D1Database
+): Promise<Response> {
+  if (!req.repoKey) {
+    return Response.json({ error: "repoKey is required" }, { status: 400 });
+  }
+
+  const result = await db
+    .prepare(`SELECT id FROM showcases WHERE repo_key = ?`)
+    .bind(req.repoKey)
+    .first<{ id: string }>();
+
+  return Response.json({ result: { exists: result !== null, id: result?.id } });
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -271,6 +362,8 @@ export async function handleShowcasesRpc(
       return handleGetShowcaseOwner(request, db);
     case "showcases.checkExists":
       return handleCheckShowcaseExists(request, db);
+    case "showcases.checkExistsByRepoKey":
+      return handleCheckExistsByRepoKey(request, db);
     case "showcases.checkUpvote":
       return handleCheckUpvoteExists(request, db);
     case "showcases.getUpvoteCount":

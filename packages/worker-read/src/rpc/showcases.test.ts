@@ -5,6 +5,7 @@ import {
   type GetShowcaseBySlugRequest,
   type GetShowcaseOwnerRequest,
   type CheckShowcaseExistsRequest,
+  type CheckExistsByRepoKeyRequest,
   type CheckUpvoteExistsRequest,
   type GetUpvoteCountRequest,
   type ListShowcasesRequest,
@@ -183,6 +184,50 @@ describe("showcases RPC handlers", () => {
         userId: "",
         githubUrl: "https://github.com/test/repo",
       } as CheckShowcaseExistsRequest;
+      const response = await handleShowcasesRpc(request, db);
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // showcases.checkExistsByRepoKey
+  // -------------------------------------------------------------------------
+
+  describe("showcases.checkExistsByRepoKey", () => {
+    it("should return exists: true when showcase exists", async () => {
+      db.first.mockResolvedValue({ id: "s1" });
+
+      const request: CheckExistsByRepoKeyRequest = {
+        method: "showcases.checkExistsByRepoKey",
+        repoKey: "owner/repo",
+      };
+      const response = await handleShowcasesRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: { exists: true, id: "s1" } });
+    });
+
+    it("should return exists: false when not found", async () => {
+      db.first.mockResolvedValue(null);
+
+      const request: CheckExistsByRepoKeyRequest = {
+        method: "showcases.checkExistsByRepoKey",
+        repoKey: "owner/repo",
+      };
+      const response = await handleShowcasesRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: { exists: false, id: undefined } });
+    });
+
+    it("should return 400 when repoKey missing", async () => {
+      const request = {
+        method: "showcases.checkExistsByRepoKey",
+        repoKey: "",
+      } as CheckExistsByRepoKeyRequest;
       const response = await handleShowcasesRpc(request, db);
 
       expect(response.status).toBe(400);

@@ -4,6 +4,7 @@ import {
   type ListOrganizationsRequest,
   type ListUserOrganizationsRequest,
   type GetOrganizationByIdRequest,
+  type GetOrganizationBySlugRequest,
   type CheckOrgMembershipRequest,
   type ListOrgMembersRequest,
 } from "./organizations";
@@ -127,6 +128,59 @@ describe("organizations RPC handlers", () => {
         method: "organizations.getById",
         orgId: "",
       } as GetOrganizationByIdRequest;
+      const response = await handleOrganizationsRpc(request, db);
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.getBySlug
+  // -------------------------------------------------------------------------
+
+  describe("organizations.getBySlug", () => {
+    it("should return organization by slug", async () => {
+      const mockOrg = {
+        id: "o1",
+        name: "Org 1",
+        slug: "org-1",
+        logo_url: null,
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      };
+      db.first.mockResolvedValue(mockOrg);
+
+      const request: GetOrganizationBySlugRequest = {
+        method: "organizations.getBySlug",
+        slug: "org-1",
+      };
+      const response = await handleOrganizationsRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: mockOrg });
+    });
+
+    it("should return null when not found", async () => {
+      db.first.mockResolvedValue(null);
+
+      const request: GetOrganizationBySlugRequest = {
+        method: "organizations.getBySlug",
+        slug: "nonexistent",
+      };
+      const response = await handleOrganizationsRpc(request, db);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: null });
+    });
+
+    it("should return 400 when slug missing", async () => {
+      const request = {
+        method: "organizations.getBySlug",
+        slug: "",
+      } as GetOrganizationBySlugRequest;
       const response = await handleOrganizationsRpc(request, db);
 
       expect(response.status).toBe(400);

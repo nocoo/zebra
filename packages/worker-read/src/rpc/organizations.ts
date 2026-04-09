@@ -14,7 +14,10 @@ export interface OrgRow {
   id: string;
   name: string;
   slug: string;
+  logo_url: string | null;
+  created_by: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface OrgMemberRow {
@@ -54,10 +57,16 @@ export interface ListOrgMembersRequest {
   orgId: string;
 }
 
+export interface GetOrganizationBySlugRequest {
+  method: "organizations.getBySlug";
+  slug: string;
+}
+
 export type OrganizationsRpcRequest =
   | ListOrganizationsRequest
   | ListUserOrganizationsRequest
   | GetOrganizationByIdRequest
+  | GetOrganizationBySlugRequest
   | CheckOrgMembershipRequest
   | ListOrgMembersRequest;
 
@@ -68,7 +77,7 @@ export type OrganizationsRpcRequest =
 async function handleListOrganizations(db: D1Database): Promise<Response> {
   const results = await db
     .prepare(
-      `SELECT id, name, slug, created_at
+      `SELECT id, name, slug, logo_url, created_by, created_at, updated_at
        FROM organizations
        ORDER BY name ASC`
     )
@@ -87,7 +96,7 @@ async function handleListUserOrganizations(
 
   const results = await db
     .prepare(
-      `SELECT o.id, o.name, o.slug, o.created_at
+      `SELECT o.id, o.name, o.slug, o.logo_url, o.created_by, o.created_at, o.updated_at
        FROM organizations o
        JOIN organization_members om ON om.organization_id = o.id
        WHERE om.user_id = ?
@@ -108,8 +117,24 @@ async function handleGetOrganizationById(
   }
 
   const result = await db
-    .prepare(`SELECT id, name, slug, created_at FROM organizations WHERE id = ?`)
+    .prepare(`SELECT id, name, slug, logo_url, created_by, created_at, updated_at FROM organizations WHERE id = ?`)
     .bind(req.orgId)
+    .first<OrgRow>();
+
+  return Response.json({ result: result });
+}
+
+async function handleGetOrganizationBySlug(
+  req: GetOrganizationBySlugRequest,
+  db: D1Database
+): Promise<Response> {
+  if (!req.slug) {
+    return Response.json({ error: "slug is required" }, { status: 400 });
+  }
+
+  const result = await db
+    .prepare(`SELECT id, name, slug, logo_url, created_by, created_at, updated_at FROM organizations WHERE slug = ?`)
+    .bind(req.slug)
     .first<OrgRow>();
 
   return Response.json({ result: result });
@@ -174,6 +199,8 @@ export async function handleOrganizationsRpc(
       return handleListUserOrganizations(request, db);
     case "organizations.getById":
       return handleGetOrganizationById(request, db);
+    case "organizations.getBySlug":
+      return handleGetOrganizationBySlug(request, db);
     case "organizations.checkMembership":
       return handleCheckOrgMembership(request, db);
     case "organizations.listMembers":
