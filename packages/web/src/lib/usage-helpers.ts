@@ -1000,3 +1000,257 @@ export function toHourlyWeekdayWeekend(
     weekend: weekendCount > 0 ? h.weekendTokens / weekendCount : 0,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// toHourlyByDevice
+// ---------------------------------------------------------------------------
+
+/** Per-hour token breakdown by device */
+export interface HourlyByDevicePoint {
+  /** Hour of day (0-23) */
+  hour: number;
+  /** Token counts per device_id */
+  devices: Record<string, number>;
+}
+
+/**
+ * Compute average hourly token usage grouped by device.
+ *
+ * Groups half-hour records by local hour-of-day and device_id,
+ * then divides by the number of days in the date range to get averages.
+ *
+ * @param rows         — raw UsageRow[] (must be half-hour granularity)
+ * @param deviceDetails — DeviceCostDetail[] from useDeviceData, used to get device-level breakdown
+ * @param dateRange    — period boundaries for day counting (local dates "YYYY-MM-DD")
+ * @param tzOffset     — minutes from UTC (positive = west), default 0
+ */
+export function toHourlyByDevice(
+  rows: UsageRow[],
+  deviceDetails: Array<{ device_id: string; source: string; model: string; total_tokens: number }>,
+  dateRange: { from: string; to: string },
+  tzOffset: number = 0,
+): HourlyByDevicePoint[] {
+  // Build a lookup map: (hour_start, source, model) -> device_id
+  // This is needed because UsageRow doesn't have device_id directly
+  const deviceMap = new Map<string, string>();
+  for (const d of deviceDetails) {
+    // Key by source:model to find device_id
+    const key = `${d.source}:${d.model}`;
+    // If multiple devices have same source:model, we can't distinguish
+    // Just use the first one (or we could aggregate by device if we had device_id in UsageRow)
+    if (!deviceMap.has(key)) {
+      deviceMap.set(key, d.device_id);
+    }
+  }
+
+  // Collect all unique device IDs
+  const allDevices = new Set<string>(deviceDetails.map((d) => d.device_id));
+
+  // Accumulators: [hour] -> { [device_id]: tokens }
+  const hourly: Array<Map<string, number>> = [];
+  for (let h = 0; h < 24; h++) {
+    hourly.push(new Map());
+  }
+
+  // Accumulate tokens by local hour and device
+  for (const r of rows) {
+    const utcMs = new Date(r.hour_start).getTime();
+    const localMs = utcMs - tzOffset * 60_000;
+    const localDate = new Date(localMs);
+    const localHour = localDate.getUTCHours();
+
+    const key = `${r.source}:${r.model}`;
+    const deviceId = deviceMap.get(key) ?? "unknown";
+
+    const bucket = hourly[localHour];
+    if (bucket) {
+      bucket.set(deviceId, (bucket.get(deviceId) ?? 0) + r.total_tokens);
+    }
+  }
+
+  // Count days in range for averaging
+  const startMs = new Date(dateRange.from + "T00:00:00Z").getTime();
+  const endMs = new Date(dateRange.to + "T00:00:00Z").getTime();
+  const dayCount = Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1);
+
+  // Build result with averages
+  // Include all known devices plus any "unknown" devices from hourly data
+  const deviceKeys = Array.from(allDevices);
+
+  // Also check hourly maps for any extra device IDs (like "unknown")
+  for (const hourMap of hourly) {
+    for (const deviceId of hourMap.keys()) {
+      if (!allDevices.has(deviceId)) {
+        deviceKeys.push(deviceId);
+        allDevices.add(deviceId);
+      }
+    }
+  }
+
+  return hourly.map((hourMap, hour) => {
+    const devices: Record<string, number> = {};
+    for (const id of deviceKeys) {
+      devices[id] = (hourMap.get(id) ?? 0) / dayCount;
+    }
+    return { hour, devices };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// toHourlyByModel
+// ---------------------------------------------------------------------------
+
+/** Per-hour token breakdown by model */
+export interface HourlyByModelPoint {
+  /** Hour of day (0-23) */
+  hour: number;
+  /** Token counts per model (top N + "Other") */
+  models: Record<string, number>;
+}
+
+/**
+ * Compute average hourly token usage grouped by model.
+ *
+ * Groups half-hour records by local hour-of-day and model name,
+ * keeps top N models by total tokens, buckets rest as "Other",
+ * then divides by the number of days in the date range to get averages.
+ *
+ * @param rows       — raw UsageRow[] (must be half-hour granularity)
+ * @param dateRange  — period boundaries for day counting (local dates "YYYY-MM-DD")
+ * @param tzOffset   — minutes from UTC (positive = west), default 0
+ * @param topN       — number of top models to include (default 5)
+ */
+export function toHourlyByModel(
+  rows: UsageRow[],
+  dateRange: { from: string; to: string },
+  tzOffset: number = 0,
+  topN: number = 5,
+): HourlyByModelPoint[] {
+  if (rows.length === 0) {
+    // Return empty 24-hour structure
+    return Array.from({ length: 24 }, (_, hour) => ({ hour, models: {} }));
+  }
+
+  // 1. Compute global totals per model to determine top N
+  const globalTotals = new Map<string, number>();
+  for (const r of rows) {
+    globalTotals.set(r.model, (globalTotals.get(r.model) ?? 0) + r.total_tokens);
+  }
+
+  // Sort by total descending, pick top N
+  const ranked = Array.from(globalTotals.entries())
+    .sort((a, b) => b[1] - a[1]);
+  const topModels = new Set(ranked.slice(0, topN).map(([m]) => m));
+  const hasOther = ranked.length > topN;
+
+  // Accumulators: [hour] -> { [model]: tokens }
+  const hourly: Array<Map<string, number>> = [];
+  for (let h = 0; h < 24; h++) {
+    hourly.push(new Map());
+  }
+
+  // Accumulate tokens by local hour and model
+  for (const r of rows) {
+    const utcMs = new Date(r.hour_start).getTime();
+    const localMs = utcMs - tzOffset * 60_000;
+    const localDate = new Date(localMs);
+    const localHour = localDate.getUTCHours();
+
+    const model = topModels.has(r.model) ? r.model : "Other";
+
+    const bucket = hourly[localHour];
+    if (bucket) {
+      bucket.set(model, (bucket.get(model) ?? 0) + r.total_tokens);
+    }
+  }
+
+  // Count days in range for averaging
+  const startMs = new Date(dateRange.from + "T00:00:00Z").getTime();
+  const endMs = new Date(dateRange.to + "T00:00:00Z").getTime();
+  const dayCount = Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1);
+
+  // Build result with averages and zero-fill
+  const modelKeys = Array.from(topModels);
+  if (hasOther) modelKeys.push("Other");
+
+  return hourly.map((hourMap, hour) => {
+    const models: Record<string, number> = {};
+    for (const m of modelKeys) {
+      models[m] = (hourMap.get(m) ?? 0) / dayCount;
+    }
+    return { hour, models };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// toHourlyByAgent
+// ---------------------------------------------------------------------------
+
+/** Per-hour token breakdown by agent/source */
+export interface HourlyByAgentPoint {
+  /** Hour of day (0-23) */
+  hour: number;
+  /** Token counts per source */
+  sources: Record<string, number>;
+}
+
+/**
+ * Compute average hourly token usage grouped by agent (source).
+ *
+ * Groups half-hour records by local hour-of-day and source,
+ * then divides by the number of days in the date range to get averages.
+ *
+ * @param rows       — raw UsageRow[] (must be half-hour granularity)
+ * @param dateRange  — period boundaries for day counting (local dates "YYYY-MM-DD")
+ * @param tzOffset   — minutes from UTC (positive = west), default 0
+ */
+export function toHourlyByAgent(
+  rows: UsageRow[],
+  dateRange: { from: string; to: string },
+  tzOffset: number = 0,
+): HourlyByAgentPoint[] {
+  if (rows.length === 0) {
+    return Array.from({ length: 24 }, (_, hour) => ({ hour, sources: {} }));
+  }
+
+  // Collect all unique sources
+  const allSources = new Set<string>();
+  for (const r of rows) {
+    allSources.add(r.source);
+  }
+
+  // Accumulators: [hour] -> { [source]: tokens }
+  const hourly: Array<Map<string, number>> = [];
+  for (let h = 0; h < 24; h++) {
+    hourly.push(new Map());
+  }
+
+  // Accumulate tokens by local hour and source
+  for (const r of rows) {
+    const utcMs = new Date(r.hour_start).getTime();
+    const localMs = utcMs - tzOffset * 60_000;
+    const localDate = new Date(localMs);
+    const localHour = localDate.getUTCHours();
+
+    const bucket = hourly[localHour];
+    if (bucket) {
+      bucket.set(r.source, (bucket.get(r.source) ?? 0) + r.total_tokens);
+    }
+  }
+
+  // Count days in range for averaging
+  const startMs = new Date(dateRange.from + "T00:00:00Z").getTime();
+  const endMs = new Date(dateRange.to + "T00:00:00Z").getTime();
+  const dayCount = Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1);
+
+  // Build result with averages and zero-fill
+  const sourceKeys = Array.from(allSources).sort();
+
+  return hourly.map((hourMap, hour) => {
+    const sources: Record<string, number> = {};
+    for (const s of sourceKeys) {
+      sources[s] = (hourMap.get(s) ?? 0) / dayCount;
+    }
+    return { hour, sources };
+  });
+}
