@@ -71,6 +71,7 @@ export interface GetUsageRequest {
   fromDate: string;
   toDate: string;
   source?: string;
+  deviceId?: string;
   granularity?: "half-hour" | "day";
 }
 
@@ -135,6 +136,11 @@ async function handleGetUsage(
   if (req.source) {
     conditions.push("source = ?");
     params.push(req.source);
+  }
+
+  if (req.deviceId) {
+    conditions.push("device_id = ?");
+    params.push(req.deviceId);
   }
 
   const sql = `
