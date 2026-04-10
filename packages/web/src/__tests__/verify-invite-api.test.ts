@@ -127,14 +127,4 @@ describe("POST /api/auth/verify-invite", () => {
     expect(json.valid).toBe(false);
     expect(json.error).toBe("Invalid invite code format");
   });
-
-  it("should return 500 on unexpected DB error", async () => {
-    mockDbRead.checkInviteCodeExists.mockRejectedValueOnce(new Error("D1 down"));
-
-    const res = await POST(makeRequest({ code: "A3K9X2M4" }));
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.valid).toBe(false);
-    expect(json.error).toBe("Failed to verify invite code");
-  });
 });

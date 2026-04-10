@@ -50,9 +50,11 @@ describe("GET /api/pricing", () => {
 
   it("should return pricing map from DB rows", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.listModelPricing.mockResolvedValueOnce([
-      { model: "gpt-4o", input: 2.5, output: 10.0, cached: 1.25, source: null, note: null },
-    ]);
+    mockDbRead.query.mockResolvedValueOnce({
+      results: [
+        { model: "gpt-4o", input: 2.5, output: 10.0, cached: 1.25, source: null, note: null },
+      ],
+    });
 
     const res = await GET(new Request("http://localhost:7020/api/pricing"));
 
@@ -65,7 +67,7 @@ describe("GET /api/pricing", () => {
 
   it("should fall back to defaults when table does not exist", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.listModelPricing.mockRejectedValueOnce(
+    mockDbRead.query.mockRejectedValueOnce(
       new Error("no such table: model_pricing"),
     );
 
@@ -79,7 +81,7 @@ describe("GET /api/pricing", () => {
 
   it("should fall back to defaults on unexpected error", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
-    mockDbRead.listModelPricing.mockRejectedValueOnce(new Error("D1 down"));
+    mockDbRead.query.mockRejectedValueOnce(new Error("D1 down"));
 
     const res = await GET(new Request("http://localhost:7020/api/pricing"));
 
