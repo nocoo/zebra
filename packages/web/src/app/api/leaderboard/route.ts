@@ -7,11 +7,14 @@
  *   offset — number of entries to skip for pagination (default: 0)
  *   team   — team ID for team-scoped leaderboard (optional, mutually exclusive with org)
  *   org    — organization ID for org-scoped leaderboard (optional, mutually exclusive with team)
+ *   source — filter by agent source slug (optional, mutually exclusive with model)
+ *   model  — filter by model name (optional, mutually exclusive with source)
  *
  * Returns { period, scope, scopeId?, entries[], hasMore } where each entry has user info + total tokens.
  * Only users with is_public = 1 are included.
  *
- * Scoped requests use Cache-Control: private, no-store.
+ * Scoped requests (team/org) use Cache-Control: private, no-store.
+ * source/model filters are identity-independent → public cache.
  * Anonymous requests with scope params are silently downgraded to global.
  */
 
@@ -24,6 +27,19 @@ import { resolveUser } from "@/lib/auth-helpers";
 // ---------------------------------------------------------------------------
 
 const VALID_PERIODS = new Set(["week", "month", "all"]);
+const VALID_SOURCES = new Set([
+  "claude-code",
+  "codex",
+  "copilot-cli",
+  "gemini-cli",
+  "hermes",
+  "kosmos",
+  "opencode",
+  "openclaw",
+  "pi",
+  "pmstudio",
+  "vscode-copilot",
+]);
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 
@@ -55,6 +71,8 @@ export async function GET(request: Request) {
   const offsetParam = url.searchParams.get("offset");
   const teamIdParam = url.searchParams.get("team");
   const orgIdParam = url.searchParams.get("org");
+  const sourceFilter = url.searchParams.get("source");
+  const modelFilter = url.searchParams.get("model");
 
   // Validate period
   if (!VALID_PERIODS.has(period)) {
@@ -68,6 +86,22 @@ export async function GET(request: Request) {
   if (teamIdParam && orgIdParam) {
     return NextResponse.json(
       { error: "Cannot specify both team and org parameters" },
+      { status: 400 },
+    );
+  }
+
+  // Validate: source and model are mutually exclusive
+  if (sourceFilter && modelFilter) {
+    return NextResponse.json(
+      { error: "Cannot specify both source and model parameters" },
+      { status: 400 },
+    );
+  }
+
+  // Validate source filter
+  if (sourceFilter && !VALID_SOURCES.has(sourceFilter)) {
+    return NextResponse.json(
+      { error: `Invalid source: "${sourceFilter}"` },
       { status: 400 },
     );
   }
@@ -120,6 +154,8 @@ export async function GET(request: Request) {
       ...(fromDate !== undefined && { fromDate }),
       ...(teamId !== undefined && { teamId }),
       ...(orgId !== undefined && { orgId }),
+      ...(sourceFilter && { source: sourceFilter }),
+      ...(modelFilter && { model: modelFilter }),
       limit: limit + 1,
       ...(offset > 0 && { offset }),
     });
@@ -142,10 +178,17 @@ export async function GET(request: Request) {
     }
 
     // Fetch session stats for all users
+    // When model filter is active, session stats are not meaningful (session_records
+    // has no reliable model column) — return null to signal "not applicable".
+    const skipSessionStats = !!modelFilter;
     const sessionStatsByUser = new Map<string, { session_count: number; total_duration_seconds: number }>();
 
-    if (userIds.length > 0) {
-      const sessionRows = await db.getLeaderboardSessionStats(userIds, fromDate);
+    if (userIds.length > 0 && !skipSessionStats) {
+      const sessionRows = await db.getLeaderboardSessionStats(
+        userIds,
+        fromDate,
+        sourceFilter ?? undefined,
+      );
       for (const row of sessionRows) {
         sessionStatsByUser.set(row.user_id, {
           session_count: row.session_count,
@@ -155,7 +198,7 @@ export async function GET(request: Request) {
     }
 
     const entries = actualRows.map((row, index) => {
-      const sessionStats = sessionStatsByUser.get(row.user_id);
+      const sessionStats = skipSessionStats ? null : sessionStatsByUser.get(row.user_id);
       return {
         rank: offset + index + 1,
         user: {
@@ -169,8 +212,8 @@ export async function GET(request: Request) {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
         cached_input_tokens: row.cached_input_tokens,
-        session_count: sessionStats?.session_count ?? 0,
-        total_duration_seconds: sessionStats?.total_duration_seconds ?? 0,
+        session_count: skipSessionStats ? null : (sessionStats?.session_count ?? 0),
+        total_duration_seconds: skipSessionStats ? null : (sessionStats?.total_duration_seconds ?? 0),
       };
     });
 
@@ -178,9 +221,9 @@ export async function GET(request: Request) {
     const scope = orgId ? "org" : teamId ? "team" : "global";
     const scopeId = orgId ?? teamId ?? undefined;
 
-    // Cache policy: any request with scope params (even anonymous, degraded to global)
-    // must use private, no-store to prevent cache pollution.
-    // Only truly global requests (no scope params at all) can be publicly cached.
+    // Cache policy: team/org scoped requests must use private, no-store to prevent
+    // cache pollution (depends on user membership). Source/model filters are
+    // identity-independent (public data), so they use public cache like global.
     const hasAnyScopeParam = !!(teamIdParam || orgIdParam);
     const headers: HeadersInit = hasAnyScopeParam
       ? { "Cache-Control": "private, no-store" }

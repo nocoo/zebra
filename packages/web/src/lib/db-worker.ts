@@ -1052,6 +1052,8 @@ export function createWorkerDbRead(): DbRead {
       fromDate?: string;
       teamId?: string;
       orgId?: string;
+      source?: string;
+      model?: string;
       limit: number;
       offset?: number;
     }): Promise<LeaderboardEntryRow[]> {
@@ -1060,6 +1062,8 @@ export function createWorkerDbRead(): DbRead {
         ...(options.fromDate !== undefined && { fromDate: options.fromDate }),
         ...(options.teamId !== undefined && { teamId: options.teamId }),
         ...(options.orgId !== undefined && { orgId: options.orgId }),
+        ...(options.source !== undefined && { source: options.source }),
+        ...(options.model !== undefined && { model: options.model }),
         limit: options.limit,
         ...(options.offset !== undefined && { offset: options.offset }),
       });
@@ -1077,11 +1081,13 @@ export function createWorkerDbRead(): DbRead {
     async getLeaderboardSessionStats(
       userIds: string[],
       fromDate?: string,
+      source?: string,
     ): Promise<LeaderboardSessionStatsRow[]> {
       return rpc<LeaderboardSessionStatsRow[]>({
         method: "leaderboard.getUserSessionStats",
         userIds,
         ...(fromDate !== undefined && { fromDate }),
+        ...(source !== undefined && { source }),
       });
     },
 

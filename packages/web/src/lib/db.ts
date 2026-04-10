@@ -587,6 +587,8 @@ export interface DbRead {
     fromDate?: string;
     teamId?: string;
     orgId?: string;
+    source?: string;
+    model?: string;
     limit: number;
     offset?: number;
   }): Promise<LeaderboardEntryRow[]>;
@@ -598,6 +600,7 @@ export interface DbRead {
   getLeaderboardSessionStats(
     userIds: string[],
     fromDate?: string,
+    source?: string,
   ): Promise<LeaderboardSessionStatsRow[]>;
 
   // ---------------------------------------------------------------------------
