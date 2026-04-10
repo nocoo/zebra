@@ -196,6 +196,16 @@ describe("GET /api/organizations/mine", () => {
     const json = await res.json();
     expect(json.organizations).toEqual([]);
   });
+
+  it("should return 500 on unexpected error", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockDbRead.listUserOrganizations.mockRejectedValueOnce(new Error("DB connection failed"));
+
+    const res = await LIST_MINE(makeJsonRequest("GET", "/api/organizations/mine"));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to list organizations");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -287,6 +297,19 @@ describe("GET /api/organizations/[orgId]/members", () => {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(503);
+  });
+
+  it("should return 500 on unexpected error", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "org-1" });
+    mockDbRead.query.mockRejectedValueOnce(new Error("DB connection failed"));
+
+    const res = await LIST_MEMBERS(makeOrgRequest("GET", "org-1/members"), {
+      params: Promise.resolve({ orgId: "org-1" }),
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to list members");
   });
 });
 
@@ -380,6 +403,28 @@ describe("POST /api/organizations/[orgId]/join", () => {
     });
     expect(res.status).toBe(503);
   });
+
+  it("should return 500 on unexpected error after org check passes", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(false);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB write failed"));
+
+    const res = await JOIN(makeOrgRequest("POST", "org-1/join"), {
+      params: Promise.resolve({ orgId: "org-1" }),
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to join organization");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -469,5 +514,27 @@ describe("DELETE /api/organizations/[orgId]/leave", () => {
       params: Promise.resolve({ orgId: "org-1" }),
     });
     expect(res.status).toBe(503);
+  });
+
+  it("should return 500 on unexpected error after membership check passes", async () => {
+    resolveUser.mockResolvedValueOnce(USER);
+    mockDbRead.getOrganizationById.mockResolvedValueOnce({
+      id: "org-1",
+      name: "Anthropic",
+      slug: "anthropic",
+      logo_url: null,
+      created_by: "admin-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockDbRead.checkOrgMembership.mockResolvedValueOnce(true);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("DB write failed"));
+
+    const res = await LEAVE(makeOrgRequest("DELETE", "org-1/leave"), {
+      params: Promise.resolve({ orgId: "org-1" }),
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to leave organization");
   });
 });

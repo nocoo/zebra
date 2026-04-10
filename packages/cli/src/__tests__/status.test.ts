@@ -341,4 +341,34 @@ describe("executeStatus", () => {
       codex: "error",
     });
   });
+
+  it("should classify unrecognized file paths as 'unknown'", async () => {
+    const cursorStore = new CursorStore(stateDir);
+    await cursorStore.save({
+      files: {
+        "/some/random/path/session.jsonl": {
+          type: "byte-offset",
+          offset: 100,
+          inode: 1,
+          size: 100,
+          mtimeMs: 1000,
+        },
+        "/another/unknown/dir/chat.json": {
+          type: "byte-offset",
+          offset: 200,
+          inode: 2,
+          size: 200,
+          mtimeMs: 2000,
+        },
+      },
+      updatedAt: "2026-03-10T10:00:00.000Z",
+    });
+
+    const result = await executeStatus({
+      stateDir,
+      sourceDirs: defaultDirs,
+    });
+    expect(result.trackedFiles).toBe(2);
+    expect(result.sources["unknown"]).toBe(2);
+  });
 });
