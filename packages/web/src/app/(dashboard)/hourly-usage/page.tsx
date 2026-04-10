@@ -7,15 +7,20 @@ import {
   sourceLabel,
 } from "@/hooks/use-usage-data";
 import type { UsageRow } from "@/hooks/use-usage-data";
+import { useDeviceData } from "@/hooks/use-device-data";
 import { RecentBarChart } from "@/components/dashboard/recent-bar-chart";
 import type { HalfHourPoint } from "@/components/dashboard/recent-bar-chart";
+import { HourlyAgentChart } from "@/components/dashboard/hourly-agent-chart";
+import { HourlyModelChart } from "@/components/dashboard/hourly-model-chart";
+import { HourlyDeviceChart } from "@/components/dashboard/hourly-device-chart";
+import { DashboardSegment } from "@/components/dashboard/dashboard-segment";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatTokens } from "@/lib/utils";
-import { groupByDate } from "@/lib/usage-helpers";
+import { groupByDate, toHourlyByAgent, toHourlyByModel, toHourlyByDevice } from "@/lib/usage-helpers";
 import type { DailyGroup } from "@/lib/usage-helpers";
 import { usePricingMap, lookupPricing, estimateCost, formatCost } from "@/hooks/use-pricing";
 import type { PricingMap } from "@/hooks/use-pricing";
-import { formatDate } from "@/lib/date-helpers";
+import { formatDate, getLocalToday } from "@/lib/date-helpers";
 
 // ---------------------------------------------------------------------------
 // Transform UsageRow[] → HalfHourPoint[] (zero-filled 144 slots)
@@ -312,9 +317,31 @@ export default function RecentPage() {
     granularity: "half-hour",
   });
 
-  const { pricingMap } = usePricingMap();
-
+  // For hourly pattern charts, fetch last 30 days of half-hour data
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+  const { patternFrom, patternTo } = useMemo(() => {
+    const today = getLocalToday(tzOffset);
+    const fromDate = new Date(today + "T00:00:00Z");
+    fromDate.setUTCDate(fromDate.getUTCDate() - 30);
+    return {
+      patternFrom: fromDate.toISOString().slice(0, 10),
+      patternTo: today,
+    };
+  }, [tzOffset]);
+
+  const { data: patternData } = useUsageData({
+    from: patternFrom,
+    to: patternTo,
+    granularity: "half-hour",
+  });
+
+  // Fetch device data for the same period
+  const { data: deviceData } = useDeviceData({
+    from: patternFrom,
+    to: patternTo,
+  });
+
+  const { pricingMap } = usePricingMap();
 
   const halfHourPoints = useMemo(() => {
     return data
@@ -326,6 +353,44 @@ export default function RecentPage() {
     () => (data ? groupByDate(data.records, pricingMap, tzOffset) : []),
     [data, pricingMap, tzOffset],
   );
+
+  // Compute hourly breakdowns from 30-day data
+  const dateRange = useMemo(
+    () => ({ from: patternFrom, to: patternTo }),
+    [patternFrom, patternTo],
+  );
+
+  const hourlyByAgent = useMemo(
+    () =>
+      patternData
+        ? toHourlyByAgent(patternData.records, dateRange, tzOffset)
+        : [],
+    [patternData, dateRange, tzOffset],
+  );
+
+  const hourlyByModel = useMemo(
+    () =>
+      patternData
+        ? toHourlyByModel(patternData.records, dateRange, tzOffset, 5)
+        : [],
+    [patternData, dateRange, tzOffset],
+  );
+
+  const hourlyByDevice = useMemo(
+    () =>
+      patternData && deviceData
+        ? toHourlyByDevice(
+            patternData.records,
+            deviceData.deviceDetails,
+            dateRange,
+            tzOffset,
+          )
+        : [],
+    [patternData, deviceData, dateRange, tzOffset],
+  );
+
+  // Device details for labels
+  const devices = useMemo(() => deviceData?.devices ?? [], [deviceData]);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -395,6 +460,17 @@ export default function RecentPage() {
                   </table>
                 </div>
               )}
+
+              {/* Hourly pattern analysis (30-day averages) */}
+              <DashboardSegment title="Hourly Patterns (30-Day Avg)">
+                <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
+                  <HourlyAgentChart data={hourlyByAgent} />
+                  <HourlyModelChart data={hourlyByModel} />
+                </div>
+                {devices.length > 0 && (
+                  <HourlyDeviceChart data={hourlyByDevice} deviceDetails={devices} />
+                )}
+              </DashboardSegment>
             </>
           ) : (
             <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
