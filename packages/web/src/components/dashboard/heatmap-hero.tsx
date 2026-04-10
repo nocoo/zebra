@@ -155,95 +155,92 @@ export function HeatmapHero({
 
   if (loading) {
     return (
-      <div className={cn("rounded-[var(--radius-card)] bg-secondary p-4 md:p-6", className)}>
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
-          {/* Left: Heatmap skeleton (60%) */}
-          <div className="min-w-0">
-            <Skeleton className="h-5 w-24 mb-4" />
-            <div className="flex items-start justify-between mb-4">
-              <div className="space-y-2">
-                <Skeleton className="h-8 w-32" />
-                <Skeleton className="h-5 w-48" />
-              </div>
-              <Skeleton className="h-8 w-24" />
+      <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4", className)}>
+        {/* Left: Activity skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+          <Skeleton className="h-5 w-24 mb-4" />
+          <div className="flex items-start justify-between mb-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-5 w-48" />
             </div>
-            <Skeleton className="h-[120px] w-full" />
-            <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-5 w-32" />
-            </div>
+            <Skeleton className="h-8 w-24" />
           </div>
-          {/* Right: Achievements skeleton (40%) */}
-          <div className="lg:border-l lg:border-border/50 lg:pl-6 space-y-2">
-            <Skeleton className="h-5 w-24 mb-3" />
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
-            ))}
+          <Skeleton className="h-[120px] w-full" />
+          <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-5 w-32" />
           </div>
+        </div>
+        {/* Right: Achievements skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 space-y-2">
+          <Skeleton className="h-5 w-24 mb-3" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn("rounded-[var(--radius-card)] bg-secondary p-4 md:p-6", className)}>
-      <div className={cn(
-        "grid grid-cols-1 gap-6",
-        hasAchievements ? "lg:grid-cols-[3fr_2fr]" : ""
-      )}>
-        {/* Left: Heatmap section (60%) */}
-        <div className="min-w-0">
-          {/* Section title */}
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Activity
-            </span>
-          </div>
-
-          {/* Header row: Year total + Streak badge */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl md:text-4xl font-bold font-display tracking-tight text-foreground">
-                  {formatTokens(totalTokens)}
-                </span>
-                <span className="text-sm text-muted-foreground">tokens</span>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {year} contribution · {activityRate}% active days
-              </p>
-            </div>
-            <StreakBadge current={currentStreak} longest={longestStreak} />
-          </div>
-
-          {/* Heatmap */}
-          <HeatmapCalendar
-            data={data}
-            year={year}
-            valueFormatter={(v) => formatTokens(v)}
-            metricLabel="Tokens"
-          />
-
-          {/* Footer stats */}
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border/50 pt-4">
-            <MiniStat icon={Calendar} value={activeDays} label="active days" />
-            <MiniStat icon={Flame} value={longestStreak} label="longest streak" />
-            <MiniStat
-              icon={Zap}
-              value={activeDays > 0 ? formatTokens(Math.round(totalTokens / activeDays)) : "0"}
-              label="avg per active day"
-            />
-          </div>
+    <div className={cn(
+      "grid grid-cols-1 gap-3 md:gap-4",
+      hasAchievements ? "lg:grid-cols-2" : "",
+      className,
+    )}>
+      {/* Left: Activity card */}
+      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 min-w-0">
+        {/* Section title */}
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Activity
+          </span>
         </div>
 
-        {/* Right: Top Achievement (40%) */}
-        {hasAchievements && (
-          <div className="lg:border-l lg:border-border/50 lg:pl-6">
-            <TopAchievement achievements={achievements} />
+        {/* Header row: Year total + Streak badge */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+          <div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl md:text-4xl font-bold font-display tracking-tight text-foreground">
+                {formatTokens(totalTokens)}
+              </span>
+              <span className="text-sm text-muted-foreground">tokens</span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {year} contribution · {activityRate}% active days
+            </p>
           </div>
-        )}
+          <StreakBadge current={currentStreak} longest={longestStreak} />
+        </div>
+
+        {/* Heatmap */}
+        <HeatmapCalendar
+          data={data}
+          year={year}
+          valueFormatter={(v) => formatTokens(v)}
+          metricLabel="Tokens"
+        />
+
+        {/* Footer stats */}
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border/50 pt-4">
+          <MiniStat icon={Calendar} value={activeDays} label="active days" />
+          <MiniStat icon={Flame} value={longestStreak} label="longest streak" />
+          <MiniStat
+            icon={Zap}
+            value={activeDays > 0 ? formatTokens(Math.round(totalTokens / activeDays)) : "0"}
+            label="avg per active day"
+          />
+        </div>
       </div>
+
+      {/* Right: Top Achievements card */}
+      {hasAchievements && (
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+          <TopAchievement achievements={achievements} />
+        </div>
+      )}
     </div>
   );
 }
