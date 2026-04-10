@@ -95,6 +95,36 @@ function computeStreak(activeDays: Set<string>, today: string): number {
 }
 
 /**
+ * Compute the longest streak of consecutive active days.
+ */
+function computeLongestStreak(activeDays: Set<string>): number {
+  if (activeDays.size === 0) return 0;
+
+  const sortedDays = Array.from(activeDays).sort();
+  let longest = 1;
+  let current = 1;
+
+  for (let i = 1; i < sortedDays.length; i++) {
+    const prevDay = sortedDays[i - 1];
+    const currDay = sortedDays[i];
+    if (!prevDay || !currDay) continue;
+
+    const prevDate = new Date(prevDay);
+    const currDate = new Date(currDay);
+    const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (diffDays === 1) {
+      current++;
+      longest = Math.max(longest, current);
+    } else {
+      current = 1;
+    }
+  }
+
+  return longest;
+}
+
+/**
  * Check if a UTC hour_start falls within local weekend (Saturday or Sunday).
  */
 function isLocalWeekend(hourStart: string, tzOffset: number): boolean {
@@ -579,6 +609,7 @@ export async function GET(request: Request) {
     });
     const totalUnlocked = allAchievements.filter((a) => a.tier !== "locked").length;
     const diamondCount = allAchievements.filter((a) => a.tier === "diamond").length;
+    const longestStreak = computeLongestStreak(activeDays);
 
     return NextResponse.json({
       achievements,
@@ -587,6 +618,8 @@ export async function GET(request: Request) {
         totalAchievements: ACHIEVEMENT_DEFS.length,
         diamondCount,
         currentStreak: streak,
+        longestStreak,
+        activeDays: activeDays.size,
       },
     });
   } catch (err) {

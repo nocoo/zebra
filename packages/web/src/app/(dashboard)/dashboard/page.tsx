@@ -15,7 +15,7 @@ import { useAchievements } from "@/hooks/use-achievements";
 import { formatTokens, cn } from "@/lib/utils";
 import { usePricingMap, formatCost } from "@/hooks/use-pricing";
 import { computeTotalCost, toDailyCostPoints, computeCacheSavings, forecastMonthlyCost, toDailyCacheRates } from "@/lib/cost-helpers";
-import { compareWeekdayWeekend, computeMoMGrowth, computeWoWGrowth, computeStreak, toLocalDailyBuckets, toHourlyWeekdayWeekend } from "@/lib/usage-helpers";
+import { compareWeekdayWeekend, computeMoMGrowth, computeWoWGrowth, toHourlyWeekdayWeekend } from "@/lib/usage-helpers";
 import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
 import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
 import { CostTrendChart } from "@/components/dashboard/cost-trend-chart";
@@ -65,8 +65,6 @@ export default function DashboardPage() {
 
   // Fixed 62-day window for MoM comparison (ensures both months are present)
   const momData = useUsageData({ days: 62, granularity: "half-hour" });
-  // Half-hour granularity for streak (needs 365 days of data)
-  const yearHalfHourData = useUsageData({ days: 365, granularity: "half-hour" });
 
   // Responsive achievements limit: 9 on large screens, 6 on medium, 3 on small
   const [achievementsLimit, setAchievementsLimit] = useState<3 | 6 | 9>(9);
@@ -166,23 +164,10 @@ export default function DashboardPage() {
     return toHourlyWeekdayWeekend(halfHourData.data.records, { from, to: toStr }, tzOffset);
   }, [halfHourData.data, from, to, tzOffset]);
 
-  // Streak data for HeatmapHero (from server-side achievements or fallback)
+  // Streak data for HeatmapHero (from server-side achievements)
   const currentStreak = achievementsData?.summary.currentStreak ?? 0;
-
-  // Longest streak computed client-side with UTC to match server-side currentStreak
-  const todayUtc = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const longestStreak = useMemo(() => {
-    if (!yearHalfHourData.data) return 0;
-    // Use tzOffset=0 (UTC) to match server-side streak calculation
-    return computeStreak(yearHalfHourData.data.records, todayUtc, 0).longestStreak;
-  }, [yearHalfHourData.data, todayUtc]);
-
-  // Active days count for HeatmapHero (UTC-based to match streak)
-  const activeDays = useMemo(() => {
-    if (!yearHalfHourData.data) return 0;
-    // Use tzOffset=0 (UTC) to match server-side day boundaries
-    return toLocalDailyBuckets(yearHalfHourData.data.records, 0).length;
-  }, [yearHalfHourData.data]);
+  const longestStreak = achievementsData?.summary.longestStreak ?? 0;
+  const activeDays = achievementsData?.summary.activeDays ?? 0;
 
   // Year total tokens for HeatmapHero
   const yearTotalTokens = yearData.data?.summary.total_tokens ?? 0;
@@ -235,7 +220,7 @@ export default function DashboardPage() {
             longestStreak={longestStreak}
             activeDays={activeDays}
             achievements={achievementsData?.achievements ?? []}
-            loading={yearData.loading || yearHalfHourData.loading || achievementsLoading}
+            loading={yearData.loading || achievementsLoading}
           />
 
           {/* ── Overview ────────────────────────────────────── */}

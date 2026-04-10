@@ -37,6 +37,8 @@ export interface AchievementSummary {
   totalAchievements: number;
   diamondCount: number;
   currentStreak: number;
+  longestStreak: number;
+  activeDays: number;
 }
 
 export interface AchievementData {
