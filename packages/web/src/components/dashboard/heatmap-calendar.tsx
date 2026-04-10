@@ -23,8 +23,12 @@ export interface HeatmapCalendarProps {
   data: HeatmapDataPoint[];
   year: number;
   colorScale?: readonly string[];
+  /** External boundaries — when provided, skip internal percentile computation */
+  boundaries?: number[];
   valueFormatter?: (value: number, date: string) => string;
   metricLabel?: string;
+  /** Custom legend labels [start, end] — replaces default "Less"/"More" */
+  legendLabels?: [string, string];
   cellSize?: number;
   cellGap?: number;
   className?: string;
@@ -60,8 +64,10 @@ export function HeatmapCalendar({
   data,
   year,
   colorScale = defaultColorScale,
+  boundaries: externalBoundaries,
   valueFormatter = (v) => v.toLocaleString(),
   metricLabel = "Tokens",
+  legendLabels,
   cellSize = 12,
   cellGap = 2,
   className,
@@ -76,10 +82,15 @@ export function HeatmapCalendar({
       if (d.value > 0) nonZeroValues.push(d.value);
     }
 
-    // Sort for percentile computation
-    nonZeroValues.sort((a, b) => a - b);
-    const levels = colorScale.length - 1; // index 0 = zero/empty
-    const boundaries = computePercentileBoundaries(nonZeroValues, levels);
+    // Use external boundaries if provided, otherwise compute percentile-based
+    let boundaries: number[];
+    if (externalBoundaries) {
+      boundaries = externalBoundaries;
+    } else {
+      nonZeroValues.sort((a, b) => a - b);
+      const levels = colorScale.length - 1;
+      boundaries = computePercentileBoundaries(nonZeroValues, levels);
+    }
 
     // Month label positions
     const monthLabels: { month: string; weekIndex: number }[] = [];
@@ -99,7 +110,7 @@ export function HeatmapCalendar({
     }
 
     return { weeks, dataMap, boundaries, monthLabels };
-  }, [data, year, colorScale]);
+  }, [data, year, colorScale, externalBoundaries]);
 
   const labelWidth = 30;
 
@@ -207,7 +218,7 @@ export function HeatmapCalendar({
 
           {/* Legend */}
           <div className="flex items-center justify-end gap-1 mt-2 text-xs text-muted-foreground">
-            <span>Less</span>
+            <span>{legendLabels?.[0] ?? "Less"}</span>
             {colorScale.map((color, i) => (
               <div
                 key={i}
@@ -222,7 +233,7 @@ export function HeatmapCalendar({
                 }}
               />
             ))}
-            <span>More</span>
+            <span>{legendLabels?.[1] ?? "More"}</span>
           </div>
         </div>
       </TooltipProvider>

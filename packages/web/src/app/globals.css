@@ -76,6 +76,11 @@
   --color-heatmap-green-3: hsl(var(--heatmap-green-3));
   --color-heatmap-green-4: hsl(var(--heatmap-green-4));
 
+  /* Heatmap color scales — goal (red/yellow/green traffic-light) */
+  --color-heatmap-goal-red: hsl(var(--heatmap-goal-red));
+  --color-heatmap-goal-yellow: hsl(var(--heatmap-goal-yellow));
+  --color-heatmap-goal-green: hsl(var(--heatmap-goal-green));
+
   /* Rank badge colors (leaderboard podium) */
   --color-rank-gold: hsl(var(--rank-gold));
   --color-rank-silver: hsl(var(--rank-silver));
@@ -193,6 +198,11 @@
   --heatmap-green-3: 82 85% 42%;
   --heatmap-green-4: 82 92% 32%;
 
+  /* Heatmap goal traffic-light — light mode */
+  --heatmap-goal-red: 0 72% 55%;
+  --heatmap-goal-yellow: 45 88% 48%;
+  --heatmap-goal-green: 142 65% 38%;
+
   /* Rank badge colors (leaderboard podium) */
   --rank-gold: 45 92% 42%;
   --rank-silver: 260 8% 48%;
@@ -268,6 +278,11 @@
   --heatmap-green-2: 82 70% 32%;
   --heatmap-green-3: 82 85% 45%;
   --heatmap-green-4: 82 95% 58%;
+
+  /* Heatmap goal traffic-light — dark mode (boosted) */
+  --heatmap-goal-red: 0 70% 55%;
+  --heatmap-goal-yellow: 45 90% 58%;
+  --heatmap-goal-green: 142 70% 48%;
 
   /* Rank badge colors — boosted for dark bg */
   --rank-gold: 45 90% 58%;

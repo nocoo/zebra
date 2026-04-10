@@ -5,6 +5,7 @@ import { Flame, Zap, Calendar, Activity } from "lucide-react";
 import { cn, formatTokens } from "@/lib/utils";
 import { HeatmapCalendar, type HeatmapDataPoint } from "./heatmap-calendar";
 import { TopAchievement } from "./top-achievement";
+import { GoalHeatmap } from "./goal-heatmap";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Achievement } from "@/hooks/use-achievements";
 
@@ -155,7 +156,7 @@ export function HeatmapHero({
 
   if (loading) {
     return (
-      <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4", className)}>
+      <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4", className)}>
         {/* Left: Activity skeleton */}
         <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
           <Skeleton className="h-5 w-24 mb-4" />
@@ -172,6 +173,20 @@ export function HeatmapHero({
             <Skeleton className="h-5 w-32" />
           </div>
         </div>
+        {/* Center: Goal skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+          <Skeleton className="h-5 w-24 mb-4" />
+          <div className="space-y-2 mb-4">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-5 w-40" />
+          </div>
+          <Skeleton className="h-[120px] w-full" />
+          <div className="mt-4 flex gap-4 border-t border-border/50 pt-4">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
         {/* Right: Achievements skeleton */}
         <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 space-y-2">
           <Skeleton className="h-5 w-24 mb-3" />
@@ -186,7 +201,7 @@ export function HeatmapHero({
   return (
     <div className={cn(
       "grid grid-cols-1 gap-3 md:gap-4",
-      hasAchievements ? "lg:grid-cols-2" : "",
+      hasAchievements ? "lg:grid-cols-3" : "lg:grid-cols-2",
       className,
     )}>
       {/* Left: Activity card */}
@@ -233,6 +248,11 @@ export function HeatmapHero({
             label="avg per active day"
           />
         </div>
+      </div>
+
+      {/* Center: Goal Tracker card */}
+      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 min-w-0">
+        <GoalHeatmap data={data} year={year} />
       </div>
 
       {/* Right: Top Achievements card */}
