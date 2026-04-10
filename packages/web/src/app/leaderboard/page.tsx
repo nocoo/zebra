@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   Globe,
@@ -24,6 +23,7 @@ import { LeaderboardSkeleton } from "@/components/leaderboard/leaderboard-skelet
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
 import { PageHeader } from "@/components/leaderboard/page-header";
 import { TokenTierBadge } from "@/components/leaderboard/token-tier-badge";
+import { UserProfileDialog } from "@/components/user-profile-dialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -343,11 +343,14 @@ function LeaderboardRow({
   entry,
   index,
   animationStartIndex,
+  onSelect,
 }: {
   entry: LeaderboardEntry;
   index: number;
   /** Index of first newly loaded entry — entries before this don't animate */
   animationStartIndex: number;
+  /** Callback when user clicks the row */
+  onSelect: (entry: LeaderboardEntry) => void;
 }) {
   const { rank, user, teams, total_tokens, session_count, total_duration_seconds } =
     entry;
@@ -428,12 +431,10 @@ function LeaderboardRow({
     </div>
   );
 
-  const profilePath = user.slug ? `/u/${user.slug}` : `/u/${user.id}`;
-
   return (
-    <Link href={profilePath} className="block">
+    <button type="button" className="block w-full text-left" onClick={() => onSelect(entry)}>
       {content}
-    </Link>
+    </button>
   );
 }
 
@@ -458,6 +459,15 @@ export default function LeaderboardPage() {
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+
+  // Dialog state for user profile popup
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogEntry, setDialogEntry] = useState<LeaderboardEntry | null>(null);
+
+  const handleRowSelect = useCallback((entry: LeaderboardEntry) => {
+    setDialogEntry(entry);
+    setDialogOpen(true);
+  }, []);
 
   const teamId = scope.type === "team" ? scope.id ?? null : null;
   const orgId = scope.type === "org" ? scope.id ?? null : null;
@@ -633,6 +643,7 @@ export default function LeaderboardPage() {
                 entry={entry}
                 index={i}
                 animationStartIndex={animationStartIndex}
+                onSelect={handleRowSelect}
               />
             ))}
             {/* Load more button — hide when reached max or no more data */}
@@ -655,6 +666,15 @@ export default function LeaderboardPage() {
           </div>
         )}
       </main>
+
+      {/* User profile dialog — stays in-page, preserves scroll & pagination */}
+      <UserProfileDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        slug={dialogEntry?.user.slug ?? dialogEntry?.user.id ?? null}
+        name={dialogEntry?.user.name ?? null}
+        image={dialogEntry?.user.image ?? null}
+      />
     </>
   );
 }
