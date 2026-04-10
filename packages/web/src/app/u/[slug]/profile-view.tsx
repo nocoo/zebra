@@ -1,78 +1,61 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import {
-  Zap,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Database,
-  DollarSign,
   Calendar,
   ArrowLeft,
   Github,
   ShieldCheck,
 } from "lucide-react";
-import { usePublicProfile } from "@/hooks/use-public-profile";
-import { formatTokens } from "@/lib/utils";
-import { usePricingMap, formatCost } from "@/hooks/use-pricing";
-import { computeTotalCost } from "@/lib/cost-helpers";
-import { formatMemberSince } from "@/lib/date-helpers";
-import { StatCard, StatGrid } from "@/components/dashboard/stat-card";
-import { UsageTrendChart } from "@/components/dashboard/usage-trend-chart";
-import { SourceDonutChart } from "@/components/dashboard/source-donut-chart";
-import { ModelBreakdownChart } from "@/components/dashboard/model-breakdown-chart";
-import { HeatmapCalendar } from "@/components/dashboard/heatmap-calendar";
-import { ProfileAchievements } from "@/components/profile/profile-achievements";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/leaderboard/page-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { formatMemberSince } from "@/lib/date-helpers";
+import { ProfileContent } from "@/components/profile/profile-content";
 
 // ---------------------------------------------------------------------------
-// Skeleton
+// Page shell (top-right icons + header)
 // ---------------------------------------------------------------------------
 
-function ProfileSkeleton() {
+function TopRightIcons() {
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* 3-col stat grid × 2 rows */}
-      {Array.from({ length: 2 }).map((_, row) => (
-        <StatGrid key={row} columns={3}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 space-y-3"
-            >
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-7 w-28" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-          ))}
-        </StatGrid>
-      ))}
-
-      {/* Charts row: trend + donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 md:gap-4">
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-          <Skeleton className="h-3 w-24 mb-4" />
-          <Skeleton className="h-[240px] md:h-[280px] w-full" />
-        </div>
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-          <Skeleton className="h-3 w-20 mb-4" />
-          <div className="flex justify-center">
-            <Skeleton className="h-[180px] w-[180px] rounded-full" />
-          </div>
-        </div>
-      </div>
-
-      {/* Model breakdown */}
-      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-        <Skeleton className="h-3 w-28 mb-4" />
-        <Skeleton className="h-[200px] md:h-[240px] w-full" />
-      </div>
+    <div className="absolute right-6 top-4 z-50 flex items-center gap-1">
+      <a
+        href="/privacy"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
+        aria-label="Privacy policy"
+      >
+        <ShieldCheck className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+      </a>
+      <a
+        href="https://github.com/nocoo/pew"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
+        aria-label="View source on GitHub"
+      >
+        <Github className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+      </a>
+      <ThemeToggle />
     </div>
+  );
+}
+
+function PewPageHeader() {
+  return (
+    <PageHeader>
+      <h1 className="tracking-tight text-foreground">
+        <span className="text-[36px] font-bold font-handwriting leading-none mr-2">
+          pew
+        </span>
+        <span className="text-[19px] font-normal text-muted-foreground">
+          Profile
+        </span>
+      </h1>
+    </PageHeader>
   );
 }
 
@@ -85,50 +68,19 @@ interface PublicProfileViewProps {
 }
 
 export function PublicProfileView({ slug }: PublicProfileViewProps) {
-  const { user, data, daily, sources, models, loading, error, notFound } =
-    usePublicProfile({ slug, days: 30 });
-
-  const yearData = usePublicProfile({ slug, days: 365 });
-
-  const { pricingMap } = usePricingMap();
-
-  const currentYear = new Date().getFullYear();
-  const estimatedCost = useMemo(() => computeTotalCost(models, pricingMap), [models, pricingMap]);
+  // Light fetch for user info + 404 detection
+  const { user, loading, error, notFound } = useUserProfile({
+    slug,
+    days: 30,
+  });
 
   // 404
   if (notFound) {
     return (
       <div className="relative flex min-h-screen flex-col bg-background">
-        {/* Top-right icons */}
-        <div className="absolute right-6 top-4 z-50 flex items-center gap-1">
-          <a
-            href="/privacy"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-            aria-label="Privacy policy"
-          >
-            <ShieldCheck className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-          </a>
-          <a
-            href="https://github.com/nocoo/pew"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-            aria-label="View source on GitHub"
-          >
-            <Github className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-          </a>
-          <ThemeToggle />
-        </div>
-
+        <TopRightIcons />
         <div className="mx-auto w-full max-w-4xl flex-1 flex flex-col px-6">
-          <PageHeader>
-            <h1 className="tracking-tight text-foreground">
-              <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-              <span className="text-[19px] font-normal text-muted-foreground">
-                Profile
-              </span>
-            </h1>
-          </PageHeader>
+          <PewPageHeader />
           <main className="flex-1 py-8">
             <div className="text-center space-y-4">
               <h2 className="text-4xl font-bold font-display text-foreground">
@@ -147,7 +99,6 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             </div>
           </main>
         </div>
-
         <SiteFooter />
       </div>
     );
@@ -157,39 +108,14 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
   if (error && !loading) {
     return (
       <div className="relative flex min-h-screen flex-col bg-background">
-        {/* Top-right icons */}
-        <div className="absolute right-6 top-4 z-50 flex items-center gap-1">
-          <a
-            href="/privacy"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-            aria-label="Privacy policy"
-          >
-            <ShieldCheck className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-          </a>
-          <a
-            href="https://github.com/nocoo/pew"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-            aria-label="View source on GitHub"
-          >
-            <Github className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-          </a>
-          <ThemeToggle />
-        </div>
-
+        <TopRightIcons />
         <div className="mx-auto w-full max-w-4xl flex-1 flex flex-col px-6">
-          <PageHeader>
-            <h1 className="tracking-tight text-foreground">
-              <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-              <span className="text-[19px] font-normal text-muted-foreground">
-                Profile
-              </span>
-            </h1>
-          </PageHeader>
+          <PewPageHeader />
           <main className="flex-1 py-8">
             <div className="text-center space-y-4">
-              <p className="text-destructive">Failed to load profile: {error}</p>
+              <p className="text-destructive">
+                Failed to load profile: {error}
+              </p>
               <Link
                 href="/leaderboard"
                 className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
@@ -200,7 +126,6 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             </div>
           </main>
         </div>
-
         <SiteFooter />
       </div>
     );
@@ -208,37 +133,10 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background">
-      {/* Top-right icons */}
-      <div className="absolute right-6 top-4 z-50 flex items-center gap-1">
-        <a
-          href="/privacy"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-          aria-label="Privacy policy"
-        >
-          <ShieldCheck className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-        </a>
-        <a
-          href="https://github.com/nocoo/pew"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-[color] duration-200 hover:text-foreground"
-          aria-label="View source on GitHub"
-        >
-          <Github className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-        </a>
-        <ThemeToggle />
-      </div>
+      <TopRightIcons />
 
       <div className="mx-auto w-full max-w-4xl flex-1 flex flex-col px-6">
-        {/* Header */}
-        <PageHeader>
-          <h1 className="tracking-tight text-foreground">
-            <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-            <span className="text-[19px] font-normal text-muted-foreground">
-              Profile
-            </span>
-          </h1>
-        </PageHeader>
+        <PewPageHeader />
 
         <main className="flex-1 py-4 space-y-4 md:space-y-6">
           {/* Profile header */}
@@ -274,92 +172,8 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
             )
           )}
 
-          {/* Loading */}
-          {loading && <ProfileSkeleton />}
-
-          {/* Content */}
-          {!loading && data && (
-            <>
-              {/* Stat cards — top row */}
-              <StatGrid columns={3}>
-                <StatCard
-                  title="Total Tokens"
-                  value={formatTokens(data.summary.total_tokens)}
-                  subtitle="Last 30 days"
-                  icon={Zap}
-                  iconColor="text-primary"
-                />
-                <StatCard
-                  title="Est. Cost"
-                  value={formatCost(estimatedCost)}
-                  subtitle="Based on public pricing"
-                  icon={DollarSign}
-                  iconColor="text-chart-6"
-                />
-                <StatCard
-                  title="Cache Savings"
-                  value={
-                    data.summary.input_tokens > 0
-                      ? `${Math.round((data.summary.cached_input_tokens / data.summary.input_tokens) * 100)}%`
-                      : "0%"
-                  }
-                  subtitle={`${formatTokens(data.summary.cached_input_tokens)} cached tokens`}
-                  icon={Database}
-                  iconColor="text-success"
-                />
-              </StatGrid>
-
-              {/* Token breakdown — secondary row */}
-              <StatGrid columns={3}>
-                <StatCard
-                  title="Input Tokens"
-                  value={formatTokens(data.summary.input_tokens)}
-                  subtitle="Prompts & context"
-                  icon={ArrowDownToLine}
-                />
-                <StatCard
-                  title="Output Tokens"
-                  value={formatTokens(data.summary.output_tokens)}
-                  subtitle="Responses & reasoning"
-                  icon={ArrowUpFromLine}
-                />
-                <StatCard
-                  title="Cached Tokens"
-                  value={formatTokens(data.summary.cached_input_tokens)}
-                  subtitle="Cache hits"
-                  icon={Database}
-                />
-              </StatGrid>
-
-              {/* Charts row */}
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 md:gap-4">
-                <UsageTrendChart data={daily} />
-                <SourceDonutChart data={sources} />
-              </div>
-
-              {/* Model breakdown */}
-              <ModelBreakdownChart data={models} />
-
-              {/* Achievements */}
-              <ProfileAchievements slug={slug} />
-
-              {/* Activity heatmap */}
-              <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-                <p className="mb-3 text-xs md:text-sm text-muted-foreground">
-                  {currentYear} Activity
-                </p>
-                {yearData.loading ? (
-                  <Skeleton className="h-[120px] w-full" />
-                ) : (
-                  <HeatmapCalendar
-                    data={yearData.heatmap}
-                    year={currentYear}
-                    valueFormatter={(v) => formatTokens(v)}
-                  />
-                )}
-              </div>
-            </>
-          )}
+          {/* Profile content — tabs + all data sections */}
+          <ProfileContent slug={slug} defaultTab="30d" />
         </main>
       </div>
 

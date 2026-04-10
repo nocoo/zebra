@@ -7,11 +7,13 @@ import type {
   DailyPoint,
   SourceAggregate,
   ModelAggregate,
+  HeatmapPoint,
 } from "@/hooks/use-usage-data";
 import {
   toDailyPoints,
   toSourceAggregates,
   toModelAggregates,
+  toHeatmapData,
   sourceLabel,
 } from "@/hooks/use-usage-data";
 
@@ -56,6 +58,7 @@ interface UseUserProfileResult {
   daily: DailyPoint[];
   sources: SourceAggregate[];
   models: ModelAggregate[];
+  heatmap: HeatmapPoint[];
   loading: boolean;
   error: string | null;
   notFound: boolean;
@@ -129,6 +132,7 @@ export function useUserProfile(
       }))
     : [];
   const models = data ? toModelAggregates(data.records) : [];
+  const heatmap = toHeatmapData(daily);
 
   return {
     user: data?.user ?? null,
@@ -136,6 +140,7 @@ export function useUserProfile(
     daily,
     sources,
     models,
+    heatmap,
     loading,
     error,
     notFound,
