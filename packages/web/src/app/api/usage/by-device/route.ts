@@ -70,11 +70,20 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
+  const tzOffsetParam = url.searchParams.get("tzOffset");
+  const tzOffset = tzOffsetParam !== null ? parseInt(tzOffsetParam, 10) : 0;
 
   const dateRange = parseDateRange(fromParam, toParam);
   if (!dateRange) {
     return NextResponse.json(
       { error: "Invalid date format" },
+      { status: 400 }
+    );
+  }
+
+  if (!Number.isFinite(tzOffset) || Math.abs(tzOffset) > 840) {
+    return NextResponse.json(
+      { error: "Invalid tzOffset value" },
       { status: 400 }
     );
   }
@@ -91,7 +100,7 @@ export async function GET(request: Request) {
     const costRows = await db.getDeviceCostDetails(userId, fromDate, toDate);
 
     // Timeline query — daily totals per device
-    const timelineRows = await db.getDeviceTimeline(userId, fromDate, toDate);
+    const timelineRows = await db.getDeviceTimeline(userId, fromDate, toDate, { tzOffset });
 
     // 4. Build pricing map (merge static defaults + DB overrides)
     let pricingMap;

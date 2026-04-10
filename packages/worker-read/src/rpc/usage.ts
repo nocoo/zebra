@@ -73,6 +73,7 @@ export interface GetUsageRequest {
   source?: string;
   deviceId?: string;
   granularity?: "half-hour" | "day";
+  tzOffset?: number;
 }
 
 export interface GetDeviceSummaryRequest {
@@ -94,6 +95,7 @@ export interface GetDeviceTimelineRequest {
   userId: string;
   fromDate: string;
   toDate: string;
+  tzOffset?: number;
 }
 
 export interface GetModelPricingRequest {
@@ -123,12 +125,30 @@ async function handleGetUsage(
   }
 
   const granularity = req.granularity ?? "half-hour";
-  const timeColumn =
-    granularity === "day" ? "date(hour_start) AS hour_start" : "hour_start";
-  const groupBy =
-    granularity === "day"
-      ? "date(hour_start), source, model"
-      : "hour_start, source, model";
+  const rawTz = req.tzOffset ?? 0;
+  const tzOffset =
+    Number.isFinite(rawTz) && Math.abs(rawTz) <= 840 ? rawTz : 0;
+
+  let timeColumn: string;
+  let groupBy: string;
+  const prependParams: unknown[] = [];
+
+  if (granularity === "day") {
+    if (tzOffset !== 0) {
+      const offsetStr = String(-tzOffset);
+      timeColumn =
+        "date(datetime(hour_start, ? || ' minutes')) AS hour_start";
+      groupBy =
+        "date(datetime(hour_start, ? || ' minutes')), source, model";
+      prependParams.push(offsetStr, offsetStr);
+    } else {
+      timeColumn = "date(hour_start) AS hour_start";
+      groupBy = "date(hour_start), source, model";
+    }
+  } else {
+    timeColumn = "hour_start";
+    groupBy = "hour_start, source, model";
+  }
 
   const conditions = ["user_id = ?", "hour_start >= ?", "hour_start < ?"];
   const params: unknown[] = [req.userId, req.fromDate, req.toDate];
@@ -160,7 +180,9 @@ async function handleGetUsage(
   `;
 
   const stmt = db.prepare(sql);
-  const results = await stmt.bind(...params).all<UsageRow>();
+  const results = await stmt
+    .bind(...prependParams, ...params)
+    .all<UsageRow>();
 
   return Response.json({ result: results.results });
 }
@@ -248,10 +270,25 @@ async function handleGetDeviceTimeline(
     );
   }
 
+  const rawTz = req.tzOffset ?? 0;
+  const tzOffset =
+    Number.isFinite(rawTz) && Math.abs(rawTz) <= 840 ? rawTz : 0;
+
+  let dateExpr: string;
+  const tzParams: unknown[] = [];
+
+  if (tzOffset !== 0) {
+    const offsetStr = String(-tzOffset);
+    dateExpr = "date(datetime(ur.hour_start, ? || ' minutes'))";
+    tzParams.push(offsetStr, offsetStr);
+  } else {
+    dateExpr = "date(ur.hour_start)";
+  }
+
   const results = await db
     .prepare(
       `SELECT
-        date(ur.hour_start) AS date,
+        ${dateExpr} AS date,
         ur.device_id,
         SUM(ur.total_tokens) AS total_tokens,
         SUM(ur.input_tokens) AS input_tokens,
@@ -261,10 +298,10 @@ async function handleGetDeviceTimeline(
       WHERE ur.user_id = ?
         AND ur.hour_start >= ?
         AND ur.hour_start < ?
-      GROUP BY date(ur.hour_start), ur.device_id
+      GROUP BY ${dateExpr}, ur.device_id
       ORDER BY date ASC`
     )
-    .bind(req.userId, req.fromDate, req.toDate)
+    .bind(...tzParams, req.userId, req.fromDate, req.toDate)
     .all<TimelineRow>();
 
   return Response.json({ result: results.results });

@@ -226,6 +226,9 @@ export function useUsageData(
       if (toDate) params.set("to", toDate);
       if (source) params.set("source", source);
       if (deviceId) params.set("deviceId", deviceId);
+      if (granularity === "day") {
+        params.set("tzOffset", String(new Date().getTimezoneOffset()));
+      }
 
       const res = await fetch(`/api/usage?${params.toString()}`);
       if (!res.ok) {
