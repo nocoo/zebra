@@ -5,6 +5,7 @@
  *   from  — ISO date string (default: 30 days ago)
  *   to    — ISO date string (default: now)
  *   source — filter by source (optional)
+ *   deviceId — filter by device (optional)
  *   granularity — "half-hour" | "day" (default: "half-hour")
  *
  * Returns { records, summary }.
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
   // 2. Parse query params
   const url = new URL(request.url);
   const sourceFilter = url.searchParams.get("source");
+  const deviceIdFilter = url.searchParams.get("deviceId");
   const granularity = url.searchParams.get("granularity") ?? "half-hour";
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
@@ -113,6 +115,7 @@ export async function GET(request: Request) {
   try {
     const records = await db.getUsageRecords(userId, fromDate, toDate, {
       ...(sourceFilter && { source: sourceFilter }),
+      ...(deviceIdFilter && { deviceId: deviceIdFilter }),
       granularity: granularity as "half-hour" | "day",
     });
 
