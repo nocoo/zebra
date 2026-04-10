@@ -359,6 +359,102 @@ describe("GET /api/users/[slug]", () => {
       expect(body.error).toBe("User not found");
     });
 
+    it("should allow admins to view private profiles", async () => {
+      vi.mocked(authHelpersModule.resolveUser).mockResolvedValueOnce({
+        userId: "admin-1",
+        email: "admin@example.com",
+      });
+      vi.mocked(adminModule.isAdmin).mockReturnValueOnce(true);
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
+        id: "u1",
+        name: "Private User",
+        image: null,
+        slug: "privuser",
+        is_public: 0,
+        created_at: "2026-01-01",
+      });
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
+
+      const [req, ctx] = makeRequest("privuser");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      expect(mockDbRead.checkSharedTeam).not.toHaveBeenCalled();
+      expect(mockDbRead.checkSharedSeason).not.toHaveBeenCalled();
+    });
+
+    it("should allow teammates to view private profiles", async () => {
+      vi.mocked(authHelpersModule.resolveUser).mockResolvedValueOnce({
+        userId: "viewer-1",
+        email: "viewer@example.com",
+      });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
+        id: "u1",
+        name: "Private User",
+        image: null,
+        slug: "privuser",
+        is_public: 0,
+        created_at: "2026-01-01",
+      });
+      mockDbRead.checkSharedTeam.mockResolvedValueOnce(true);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
+
+      const [req, ctx] = makeRequest("privuser");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      expect(mockDbRead.checkSharedTeam).toHaveBeenCalledWith("viewer-1", "u1");
+      expect(mockDbRead.checkSharedSeason).not.toHaveBeenCalled();
+    });
+
+    it("should allow users in the same season to view private profiles", async () => {
+      vi.mocked(authHelpersModule.resolveUser).mockResolvedValueOnce({
+        userId: "viewer-1",
+        email: "viewer@example.com",
+      });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
+        id: "u1",
+        name: "Private User",
+        image: null,
+        slug: "privuser",
+        is_public: 0,
+        created_at: "2026-01-01",
+      });
+      mockDbRead.checkSharedTeam.mockResolvedValueOnce(false);
+      mockDbRead.checkSharedSeason.mockResolvedValueOnce(true);
+      mockDbRead.getUsageRecords.mockResolvedValueOnce([]);
+
+      const [req, ctx] = makeRequest("privuser");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      expect(mockDbRead.checkSharedSeason).toHaveBeenCalledWith("viewer-1", "u1");
+    });
+
+    it("should deny access when shared-team and shared-season checks fail closed", async () => {
+      vi.mocked(authHelpersModule.resolveUser).mockResolvedValueOnce({
+        userId: "viewer-1",
+        email: "viewer@example.com",
+      });
+      mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce({
+        id: "u1",
+        name: "Private User",
+        image: null,
+        slug: "privuser",
+        is_public: 0,
+        created_at: "2026-01-01",
+      });
+      mockDbRead.checkSharedTeam.mockRejectedValueOnce(new Error("no such table: team_members"));
+      mockDbRead.checkSharedSeason.mockRejectedValueOnce(new Error("no such table: season_teams"));
+
+      const [req, ctx] = makeRequest("privuser");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("User not found");
+    });
+
     it("should return 404 when user not found", async () => {
       mockDbRead.getPublicUserBySlugOrId.mockResolvedValueOnce(null);
 
