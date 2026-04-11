@@ -1,22 +1,51 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatGrid } from "./stat-card";
 import { DashboardSegment } from "./dashboard-segment";
-import { ChevronRight } from "lucide-react";
 
 /** Loading skeleton for the dashboard overview. */
 export function DashboardSkeleton() {
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* ── Achievements (collapsed skeleton — matches real layout) ── */}
-      <section className="space-y-3 md:space-y-4">
-        <div className="flex items-center gap-3">
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <h2 className="shrink-0 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Achievements
-          </h2>
-          <div className="h-px flex-1 bg-border/60" />
+      {/* ── Hero: Activity + Goal + Achievements (3-col grid) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
+        {/* Left: Activity skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+          <Skeleton className="h-5 w-24 mb-4" />
+          <div className="flex items-start justify-between mb-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-5 w-48" />
+            </div>
+            <Skeleton className="h-8 w-24" />
+          </div>
+          <Skeleton className="h-[120px] w-full" />
+          <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-5 w-32" />
+          </div>
         </div>
-      </section>
+        {/* Center: Goal skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+          <Skeleton className="h-5 w-24 mb-4" />
+          <div className="space-y-2 mb-4">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-5 w-40" />
+          </div>
+          <Skeleton className="h-[120px] w-full" />
+          <div className="mt-4 flex gap-4 border-t border-border/50 pt-4">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+        {/* Right: Achievements skeleton */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 space-y-2">
+          <Skeleton className="h-5 w-24 mb-3" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
 
       {/* ── Overview ────────────────────────────────────── */}
       <DashboardSegment title="Overview">
@@ -88,15 +117,23 @@ export function DashboardSkeleton() {
 
       {/* ── Insights ────────────────────────────────────── */}
       <DashboardSegment title="Insights">
-        {/* Bottom row — heatmap + weekday/weekend side by side */}
+        {/* Row 1: Weekday vs Weekend + Hourly Chart */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-          <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
-            <Skeleton className="h-3 w-24 mb-4" />
-            <Skeleton className="h-[120px] w-full" />
-          </div>
           <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
             <Skeleton className="h-3 w-28 mb-4" />
             <Skeleton className="h-[180px] w-full" />
+          </div>
+          <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+            <Skeleton className="h-3 w-24 mb-4" />
+            <Skeleton className="h-[180px] w-full" />
+          </div>
+        </div>
+        {/* Row 2: Salary Estimator */}
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+          <Skeleton className="h-3 w-32 mb-4" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Skeleton className="h-[200px] w-full" />
+            <Skeleton className="h-[200px] w-full" />
           </div>
         </div>
       </DashboardSegment>
