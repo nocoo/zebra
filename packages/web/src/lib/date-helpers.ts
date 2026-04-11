@@ -14,9 +14,9 @@ import type { UsageRow } from "@/hooks/use-usage-data";
 export type Period = "all" | "month" | "week";
 
 export const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: "week", label: "This Week" },
-  { value: "month", label: "This Month" },
   { value: "all", label: "All Time" },
+  { value: "month", label: "This Month" },
+  { value: "week", label: "This Week" },
 ];
 
 // ---------------------------------------------------------------------------
