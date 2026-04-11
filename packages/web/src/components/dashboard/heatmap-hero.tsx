@@ -206,12 +206,15 @@ export function HeatmapHero({
     )}>
       {/* Left: Activity card */}
       <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 min-w-0 flex flex-col">
-        {/* Section title */}
-        <div className="flex items-center gap-2 mb-3">
-          <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Activity
-          </span>
+        {/* Section title — height matches Goal Tracker (h-7 placeholder for alignment) */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Activity
+            </span>
+          </div>
+          <div className="h-7 w-7 shrink-0" aria-hidden="true" />
         </div>
 
         {/* Header row: Year total + Streak badge */}

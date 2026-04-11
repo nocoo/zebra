@@ -131,11 +131,14 @@ export function TopAchievement({
   if (loading) {
     return (
       <div className={cn("space-y-3", className)}>
-        <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Top Achievements
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Top Achievements
+            </span>
+          </div>
+          <div className="h-7 w-7 shrink-0" aria-hidden="true" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -154,11 +157,14 @@ export function TopAchievement({
   if (unlocked.length === 0) {
     return (
       <div className={cn("space-y-3", className)}>
-        <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Top Achievements
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Top Achievements
+            </span>
+          </div>
+          <div className="h-7 w-7 shrink-0" aria-hidden="true" />
         </div>
         <div className="rounded-xl bg-muted/30 p-4">
           <p className="text-sm text-muted-foreground">
@@ -178,11 +184,15 @@ export function TopAchievement({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center gap-2">
-        <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Top Achievements
-        </span>
+      {/* Section title — height matches Goal Tracker (h-7 placeholder for alignment) */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Top Achievements
+          </span>
+        </div>
+        <div className="h-7 w-7 shrink-0" aria-hidden="true" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
