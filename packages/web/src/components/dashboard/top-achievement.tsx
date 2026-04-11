@@ -119,9 +119,9 @@ export interface TopAchievementProps {
 
 /**
  * Displays the user's top achievements in a responsive grid.
- * - Large screens (md+): 3x3 grid (9 achievements)
- * - Medium screens: 2x3 grid (6 achievements)
- * - Small screens: 1x3 grid (3 achievements)
+ * - Large screens (lg+): 3 cols × 4 rows = 12 max
+ * - Medium screens (sm+): 2 cols × 4 rows = 8 max
+ * - Small screens: 1 col × 4 rows = 4 max
  */
 export function TopAchievement({
   achievements,
@@ -137,8 +137,8 @@ export function TopAchievement({
             Top Achievements
           </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {Array.from({ length: 9 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {Array.from({ length: 12 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
@@ -147,7 +147,8 @@ export function TopAchievement({
   }
 
   // Filter to only unlocked achievements (already sorted by tier/progress from API)
-  const unlocked = achievements.filter((a) => a.tier !== "locked");
+  // Limit to 12 max (4 rows × 3 cols on large screens)
+  const unlocked = achievements.filter((a) => a.tier !== "locked").slice(0, 12);
 
   // If no achievements unlocked, show placeholder
   if (unlocked.length === 0) {
@@ -184,7 +185,7 @@ export function TopAchievement({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {unlocked.map((ach) => {
           const styles = TIER_STYLES[ach.tier];
           const Icon = ICON_MAP[ach.icon] ?? Trophy;
