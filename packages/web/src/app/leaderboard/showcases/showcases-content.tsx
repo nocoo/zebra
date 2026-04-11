@@ -8,8 +8,9 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useShowcases } from "@/hooks/use-showcases";
+import { useShowcases, type Showcase } from "@/hooks/use-showcases";
 import { ShowcaseCard, ShowcaseFormModal } from "@/components/showcase";
+import { UserProfileDialog } from "@/components/user-profile-dialog";
 
 interface ShowcasesContentProps {
   isLoggedIn: boolean;
@@ -21,6 +22,10 @@ export function ShowcasesContent({ isLoggedIn }: ShowcasesContentProps) {
   const router = useRouter();
   const [offset, setOffset] = useState(0);
   const [showModal, setShowModal] = useState(false);
+
+  // User profile dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogUser, setDialogUser] = useState<Showcase["user"] | null>(null);
 
   const { data, loading, refreshing, error, refetch } = useShowcases({
     limit: PAGE_SIZE,
@@ -34,6 +39,11 @@ export function ShowcasesContent({ isLoggedIn }: ShowcasesContentProps) {
   const handleAddSuccess = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  const handleUserClick = useCallback((user: Showcase["user"]) => {
+    setDialogUser(user);
+    setDialogOpen(true);
+  }, []);
 
   // Loading state
   if (loading) {
@@ -122,6 +132,7 @@ export function ShowcasesContent({ isLoggedIn }: ShowcasesContentProps) {
             isLoggedIn={isLoggedIn}
             onLoginRequired={handleLoginRequired}
             onUpvoteChange={refetch}
+            onUserClick={handleUserClick}
           />
         ))}
       </div>
@@ -166,6 +177,15 @@ export function ShowcasesContent({ isLoggedIn }: ShowcasesContentProps) {
         open={showModal}
         onOpenChange={setShowModal}
         onSuccess={handleAddSuccess}
+      />
+
+      {/* User profile dialog */}
+      <UserProfileDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        slug={dialogUser?.slug ?? dialogUser?.id ?? null}
+        name={dialogUser?.nickname ?? dialogUser?.name ?? null}
+        image={dialogUser?.image ?? null}
       />
     </div>
   );

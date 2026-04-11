@@ -22,9 +22,10 @@ interface ShowcaseCardProps {
   isLoggedIn: boolean;
   onLoginRequired?: () => void;
   onUpvoteChange?: () => void;
+  onUserClick?: (user: Showcase["user"]) => void;
 }
 
-export function ShowcaseCard({ showcase, isLoggedIn, onLoginRequired, onUpvoteChange }: ShowcaseCardProps) {
+export function ShowcaseCard({ showcase, isLoggedIn, onLoginRequired, onUpvoteChange, onUserClick }: ShowcaseCardProps) {
   const displayName = showcase.user.nickname || showcase.user.name || "Anonymous";
   const githubOwner = showcase.repo_key.split("/")[0];
 
@@ -109,7 +110,11 @@ export function ShowcaseCard({ showcase, isLoggedIn, onLoginRequired, onUpvoteCh
         {/* Footer: Submitter + GitHub owner */}
         <div className="mt-2 flex items-center gap-3">
           {/* Pew user */}
-          <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onUserClick?.(showcase.user)}
+            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer"
+          >
             {showcase.user.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -124,10 +129,10 @@ export function ShowcaseCard({ showcase, isLoggedIn, onLoginRequired, onUpvoteCh
                 </span>
               </div>
             )}
-            <span className="text-xs text-muted-foreground truncate">
+            <span className="text-xs text-muted-foreground truncate hover:text-foreground transition-colors">
               {displayName}
             </span>
-          </div>
+          </button>
 
           {/* GitHub owner */}
           <a
