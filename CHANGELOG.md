@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.18.3
+
+### Added
+- Add centralized chart config constants
+
+### Changed
+- Add retrospective for CLI build before npm publish
+
+### Fixed
+- Align showcase-card border radius with design system
+- Unify header margin to mb-4 in hourly-chart
+- Unify legend text size to text-xs across charts
+- Unify chart axis fontSize to 11 across all components
+
 ## v2.18.2
 
 ## v2.18.1
