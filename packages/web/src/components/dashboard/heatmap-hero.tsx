@@ -243,8 +243,8 @@ export function HeatmapHero({
           />
         </div>
 
-        {/* Footer stats */}
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-border/50 pt-3">
+        {/* Footer stats — fixed height for alignment across cards */}
+        <div className="mt-auto flex h-10 flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-border/50 pt-3">
           <MiniStat icon={Calendar} value={activeDays} label="active days" />
           <MiniStat icon={Flame} value={longestStreak} label="longest streak" />
           <MiniStat

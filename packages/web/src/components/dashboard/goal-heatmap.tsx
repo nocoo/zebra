@@ -103,8 +103,8 @@ export function GoalHeatmap({ data, year, className }: GoalHeatmapProps) {
         />
       </div>
 
-      {/* Threshold hints */}
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/50 pt-3 text-xs text-muted-foreground">
+      {/* Threshold hints — fixed height for alignment across cards */}
+      <div className="mt-auto flex h-10 flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/50 pt-3 text-xs text-muted-foreground">
         <span>
           <span
             className="inline-block w-2.5 h-2.5 rounded-sm mr-1 align-[-1px]"

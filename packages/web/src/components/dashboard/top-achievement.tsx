@@ -183,7 +183,7 @@ export function TopAchievement({
   }
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("flex flex-col", className)}>
       {/* Section title — height matches Goal Tracker (h-7 placeholder for alignment) */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -195,7 +195,8 @@ export function TopAchievement({
         <div className="h-7 w-7 shrink-0" aria-hidden="true" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="mt-3 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {unlocked.map((ach) => {
           const styles = TIER_STYLES[ach.tier];
           const Icon = ICON_MAP[ach.icon] ?? Trophy;
@@ -236,15 +237,19 @@ export function TopAchievement({
             </div>
           );
         })}
+        </div>
       </div>
 
-      <Link
-        href="/leaderboard/achievements"
-        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-      >
-        View all achievements
-        <ChevronRight className="h-3 w-3" />
-      </Link>
+      {/* Footer — fixed height for alignment across cards */}
+      <div className="mt-auto flex h-10 items-center border-t border-border/50 pt-3">
+        <Link
+          href="/leaderboard/achievements"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          View all achievements
+          <ChevronRight className="h-3 w-3" />
+        </Link>
+      </div>
     </div>
   );
 }
