@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.18.6
+
+### Added
+- Reorder period selector, default to This Week
+
+### Changed
+- Restore period selector order and default to All Time
+- Fix StatCard side layout text overlap
+- Unify footer text size across hero cards
+- Align hero card headers with fixed h-14 height
+- Align hero card footers with fixed height
+- Align hero card headers with h-7 placeholder
+- Unify hero cards spacing and typography
+
+### Fixed
+- Show forecast cards for all periods
+- TopAchievement max 2 rows (6 items on lg, 4 on sm)
+- TopAchievement responsive grid with 4 rows max
+- Limit TopAchievement grid to 2 columns max
+- Improve TopAchievement readability on medium screens
+- Update LeaderboardSkeleton to match row structure
+- Update DashboardSkeleton to match current page structure
+
+### Removed
+- Remove interactive confirmation prompt
+
 ## v2.18.5
 
 ### Changed
