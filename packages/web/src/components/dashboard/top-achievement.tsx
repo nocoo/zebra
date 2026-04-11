@@ -119,9 +119,9 @@ export interface TopAchievementProps {
 
 /**
  * Displays the user's top achievements in a responsive grid.
- * - Large screens (lg+): 3 cols × 4 rows = 12 max
- * - Medium screens (sm+): 2 cols × 4 rows = 8 max
- * - Small screens: 1 col × 4 rows = 4 max
+ * - Large screens (lg+): 3 cols × 2 rows = 6 max
+ * - Medium screens (sm+): 2 cols × 2 rows = 4 max
+ * - Small screens: 1 col × 2 rows = 2 max
  */
 export function TopAchievement({
   achievements,
@@ -138,7 +138,7 @@ export function TopAchievement({
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {Array.from({ length: 12 }).map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
@@ -147,8 +147,8 @@ export function TopAchievement({
   }
 
   // Filter to only unlocked achievements (already sorted by tier/progress from API)
-  // Limit to 12 max (4 rows × 3 cols on large screens)
-  const unlocked = achievements.filter((a) => a.tier !== "locked").slice(0, 12);
+  // Limit to 6 max (2 rows × 3 cols on large screens)
+  const unlocked = achievements.filter((a) => a.tier !== "locked").slice(0, 6);
 
   // If no achievements unlocked, show placeholder
   if (unlocked.length === 0) {
