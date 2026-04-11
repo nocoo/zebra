@@ -434,77 +434,79 @@ export default function RecentPage() {
       {!loading && data && (
         <>
           {data.summary.total_tokens > 0 ? (
-            <>
-              {/* Half-hour bar chart */}
-              <RecentBarChart
-                data={halfHourPoints}
-                deviceTimeline={recentDeviceData?.timeline}
-                devices={recentDeviceData?.devices}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-              />
+            <div className="grid gap-4 md:gap-6 xl:grid-cols-4">
+              {/* Left column: Timeline + Detail table (3/4) */}
+              <div className="xl:col-span-3 space-y-4 md:space-y-6">
+                {/* Half-hour bar chart */}
+                <RecentBarChart
+                  data={halfHourPoints}
+                  deviceTimeline={recentDeviceData?.timeline}
+                  devices={recentDeviceData?.devices}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                />
 
-              {/* Per-day detail table */}
-              {dailyGroups.length > 0 && (
-                <div className="rounded-xl bg-secondary p-1 overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
-                          Date
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
-                          Input
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
-                          Output
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground hidden md:table-cell">
-                          Cached
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
-                          Total
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground hidden sm:table-cell">
-                          Est. Cost
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyGroups.map((group) => (
-                        <DayRow
-                          key={group.date}
-                          group={group}
-                          pricingMap={pricingMap}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Hourly pattern analysis (30-day averages) */}
-              <DashboardSegment title="Hourly Patterns (30-Day Avg)">
-                {patternChartsLoading ? (
-                  <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                    <Skeleton className="h-[280px] w-full rounded-xl" />
-                    <Skeleton className="h-[280px] w-full rounded-xl" />
+                {/* Per-day detail table */}
+                {dailyGroups.length > 0 && (
+                  <div className="rounded-xl bg-secondary p-1 overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                            Date
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                            Input
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                            Output
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground hidden md:table-cell">
+                            Cached
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                            Total
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground hidden sm:table-cell">
+                            Est. Cost
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyGroups.map((group) => (
+                          <DayRow
+                            key={group.date}
+                            group={group}
+                            pricingMap={pricingMap}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ) : (
-                  <>
-                    <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                      <HourlyAgentChart data={hourlyByAgent} />
-                      <HourlyModelChart data={hourlyByModel} />
-                    </div>
-                    {devices.length > 0 && (
-                      <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                        <HourlyDeviceChart data={hourlyByDevice} deviceDetails={devices} />
-                      </div>
-                    )}
-                  </>
                 )}
-              </DashboardSegment>
-            </>
+              </div>
+
+              {/* Right column: Hourly pattern charts (1/4) */}
+              <div className="xl:col-span-1 space-y-4 md:space-y-6">
+                <DashboardSegment title="Hourly Patterns">
+                  {patternChartsLoading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-[200px] w-full rounded-xl" />
+                      <Skeleton className="h-[200px] w-full rounded-xl" />
+                      <Skeleton className="h-[200px] w-full rounded-xl" />
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <HourlyAgentChart data={hourlyByAgent} compact />
+                      <HourlyModelChart data={hourlyByModel} compact />
+                      {devices.length > 0 && (
+                        <HourlyDeviceChart data={hourlyByDevice} deviceDetails={devices} compact />
+                      )}
+                    </div>
+                  )}
+                </DashboardSegment>
+              </div>
+            </div>
           ) : (
             <div className="rounded-[var(--radius-card)] bg-secondary p-8 text-center text-sm text-muted-foreground">
               No usage data in the last 72 hours.

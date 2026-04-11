@@ -27,6 +27,8 @@ import {
 interface HourlyModelChartProps {
   data: HourlyByModelPoint[];
   className?: string;
+  /** Compact mode for sidebar layout: smaller height, no legend */
+  compact?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +81,7 @@ function ModelTooltip({
 export function HourlyModelChart({
   data,
   className,
+  compact = false,
 }: HourlyModelChartProps) {
   if (!data.length || data.every((d) => Object.keys(d.models).length === 0)) {
     return (
@@ -116,26 +119,28 @@ export function HourlyModelChart({
         className,
       )}
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className={cn("flex flex-wrap items-center justify-between gap-2", compact ? "mb-2" : "mb-4")}>
         <p className="text-xs md:text-sm text-muted-foreground">
-          Hourly By Model
+          {compact ? "By Model" : "Hourly By Model"}
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          {legendItems.map(({ key, label, color }) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <div
-                className="h-2 w-2 rounded-full"
-                style={{ background: color }}
-              />
-              <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                {label}
-              </span>
-            </div>
-          ))}
-        </div>
+        {!compact && (
+          <div className="flex flex-wrap items-center gap-3">
+            {legendItems.map(({ key, label, color }) => (
+              <div key={key} className="flex items-center gap-1.5">
+                <div
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: color }}
+                />
+                <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div style={{ height: 280 }}>
+      <div style={{ height: compact ? 160 : 280 }}>
         <DashboardResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -150,17 +155,17 @@ export function HourlyModelChart({
             <XAxis
               dataKey="hour"
               tickFormatter={fmtHour}
-              tick={{ fill: chartAxis, fontSize: 11 }}
+              tick={{ fill: chartAxis, fontSize: compact ? 9 : 11 }}
               axisLine={false}
               tickLine={false}
-              interval={2}
+              interval={compact ? 5 : 2}
             />
             <YAxis
               tickFormatter={formatTokens}
-              tick={{ fill: chartAxis, fontSize: 11 }}
+              tick={{ fill: chartAxis, fontSize: compact ? 9 : 11 }}
               axisLine={false}
               tickLine={false}
-              width={50}
+              width={compact ? 40 : 50}
             />
             <Tooltip
               content={<ModelTooltip />}
