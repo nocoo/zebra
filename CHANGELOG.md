@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.18.7
+
+### Fixed
+- Make hermes and copilot-cli token uploads idempotent
+
 ## v2.18.6
 
 ### Added
