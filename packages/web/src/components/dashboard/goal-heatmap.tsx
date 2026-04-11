@@ -59,9 +59,9 @@ export function GoalHeatmap({ data, year, className }: GoalHeatmapProps) {
   }, [data, thresholds]);
 
   return (
-    <div className={cn("min-w-0", className)}>
+    <div className={cn("min-w-0 flex flex-col", className)}>
       {/* Section title */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -78,31 +78,33 @@ export function GoalHeatmap({ data, year, className }: GoalHeatmapProps) {
       </div>
 
       {/* Header: achievement rate + days on target */}
-      <div className="mb-4">
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl md:text-4xl font-bold font-display tracking-tight text-foreground">
+      <div className="mb-3">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">
             {achievementRate}%
           </span>
-          <span className="text-sm text-muted-foreground">on target</span>
+          <span className="text-xs text-muted-foreground">on target</span>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           {daysOnTarget} day{daysOnTarget !== 1 ? "s" : ""} above {formatTokens(thresholds.upper)}/day
         </p>
       </div>
 
-      {/* Heatmap */}
-      <HeatmapCalendar
+      {/* Heatmap — flex-1 to push footer down */}
+      <div className="flex-1">
+        <HeatmapCalendar
         data={data}
         year={year}
         colorScale={goalColorScale}
         boundaries={boundaries}
         valueFormatter={(v) => formatTokens(v)}
-        metricLabel="Tokens"
-        legendLabels={["Below", "Above"]}
-      />
+          metricLabel="Tokens"
+          legendLabels={["Below", "Above"]}
+        />
+      </div>
 
       {/* Threshold hints */}
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/50 pt-4 text-xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/50 pt-3 text-xs text-muted-foreground">
         <span>
           <span
             className="inline-block w-2.5 h-2.5 rounded-sm mr-1 align-[-1px]"

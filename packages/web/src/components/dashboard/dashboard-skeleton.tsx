@@ -9,40 +9,40 @@ export function DashboardSkeleton() {
       {/* ── Hero: Activity + Goal + Achievements (3-col grid) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
         {/* Left: Activity skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
-          <Skeleton className="h-5 w-24 mb-4" />
-          <div className="flex items-start justify-between mb-4">
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-32" />
-              <Skeleton className="h-5 w-48" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+          <Skeleton className="h-4 w-24 mb-3" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="space-y-1">
+              <Skeleton className="h-7 w-28" />
+              <Skeleton className="h-3 w-40" />
             </div>
-            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-6 w-20" />
           </div>
           <Skeleton className="h-[120px] w-full" />
-          <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-5 w-32" />
+          <div className="mt-3 flex gap-5 border-t border-border/50 pt-3">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-28" />
           </div>
         </div>
         {/* Center: Goal skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
-          <Skeleton className="h-5 w-24 mb-4" />
-          <div className="space-y-2 mb-4">
-            <Skeleton className="h-8 w-24" />
-            <Skeleton className="h-5 w-40" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+          <Skeleton className="h-4 w-24 mb-3" />
+          <div className="space-y-1 mb-3">
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-3 w-36" />
           </div>
           <Skeleton className="h-[120px] w-full" />
-          <div className="mt-4 flex gap-4 border-t border-border/50 pt-4">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-4 w-20" />
+          <div className="mt-3 flex gap-4 border-t border-border/50 pt-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
           </div>
         </div>
         {/* Right: Achievements skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 space-y-2">
-          <Skeleton className="h-5 w-24 mb-3" />
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 space-y-2">
+          <Skeleton className="h-4 w-28 mb-3" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
       </div>

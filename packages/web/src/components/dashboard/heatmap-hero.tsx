@@ -158,40 +158,40 @@ export function HeatmapHero({
     return (
       <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4", className)}>
         {/* Left: Activity skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
-          <Skeleton className="h-5 w-24 mb-4" />
-          <div className="flex items-start justify-between mb-4">
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-32" />
-              <Skeleton className="h-5 w-48" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+          <Skeleton className="h-4 w-24 mb-3" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="space-y-1">
+              <Skeleton className="h-7 w-28" />
+              <Skeleton className="h-3 w-40" />
             </div>
-            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-6 w-20" />
           </div>
           <Skeleton className="h-[120px] w-full" />
-          <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-5 w-32" />
+          <div className="mt-3 flex gap-5 border-t border-border/50 pt-3">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-28" />
           </div>
         </div>
         {/* Center: Goal skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
-          <Skeleton className="h-5 w-24 mb-4" />
-          <div className="space-y-2 mb-4">
-            <Skeleton className="h-8 w-24" />
-            <Skeleton className="h-5 w-40" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
+          <Skeleton className="h-4 w-24 mb-3" />
+          <div className="space-y-1 mb-3">
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-3 w-36" />
           </div>
           <Skeleton className="h-[120px] w-full" />
-          <div className="mt-4 flex gap-4 border-t border-border/50 pt-4">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-4 w-20" />
+          <div className="mt-3 flex gap-4 border-t border-border/50 pt-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
           </div>
         </div>
         {/* Right: Achievements skeleton */}
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 space-y-2">
-          <Skeleton className="h-5 w-24 mb-3" />
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 space-y-2">
+          <Skeleton className="h-4 w-28 mb-3" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
       </div>
@@ -205,9 +205,9 @@ export function HeatmapHero({
       className,
     )}>
       {/* Left: Activity card */}
-      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 min-w-0">
+      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 min-w-0 flex flex-col">
         {/* Section title */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-3">
           <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Activity
@@ -215,31 +215,33 @@ export function HeatmapHero({
         </div>
 
         {/* Header row: Year total + Streak badge */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+        <div className="flex items-start justify-between gap-2 mb-3">
           <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl md:text-4xl font-bold font-display tracking-tight text-foreground">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">
                 {formatTokens(totalTokens)}
               </span>
-              <span className="text-sm text-muted-foreground">tokens</span>
+              <span className="text-xs text-muted-foreground">tokens</span>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {year} contribution · {activityRate}% active days
             </p>
           </div>
           <StreakBadge current={currentStreak} longest={longestStreak} />
         </div>
 
-        {/* Heatmap */}
-        <HeatmapCalendar
-          data={data}
-          year={year}
-          valueFormatter={(v) => formatTokens(v)}
-          metricLabel="Tokens"
-        />
+        {/* Heatmap — flex-1 to push footer down */}
+        <div className="flex-1">
+          <HeatmapCalendar
+            data={data}
+            year={year}
+            valueFormatter={(v) => formatTokens(v)}
+            metricLabel="Tokens"
+          />
+        </div>
 
         {/* Footer stats */}
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border/50 pt-4">
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-border/50 pt-3">
           <MiniStat icon={Calendar} value={activeDays} label="active days" />
           <MiniStat icon={Flame} value={longestStreak} label="longest streak" />
           <MiniStat
@@ -251,13 +253,13 @@ export function HeatmapHero({
       </div>
 
       {/* Center: Goal Tracker card */}
-      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6 min-w-0">
+      <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5 min-w-0">
         <GoalHeatmap data={data} year={year} />
       </div>
 
       {/* Right: Top Achievements card */}
       {hasAchievements && (
-        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-6">
+        <div className="rounded-[var(--radius-card)] bg-secondary p-4 md:p-5">
           <TopAchievement achievements={achievements} />
         </div>
       )}
