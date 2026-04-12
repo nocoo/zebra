@@ -28,6 +28,7 @@ export async function GET(request: Request) {
       | "active"
       | "expired"
       | "revoked"
+      | "cleared"
       | "all") ?? "all";
   const limit = Math.min(
     Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10)),

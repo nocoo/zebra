@@ -657,7 +657,7 @@ export interface DbRead {
   listBadgeAssignments(options: {
     badgeId?: string;
     userId?: string;
-    status?: "active" | "expired" | "revoked" | "all";
+    status?: "active" | "expired" | "revoked" | "cleared" | "all";
     limit: number;
     offset: number;
   }): Promise<BadgeAssignmentRow[]>;
