@@ -18,8 +18,8 @@
 | 9 | Add `cache.*` RPC domain + DbRead interface methods | ✅ done |
 | 10 | Add KV management card to Admin Storage page | ✅ done |
 | 11 | Tests (unit + integration) | ✅ done |
-| 12 | Deploy + verify | |
-| 13 | Retrospective | |
+| 12 | Deploy + verify | ✅ done |
+| 13 | Retrospective | ✅ done |
 
 ---
 
@@ -1036,4 +1036,26 @@ describe("leaderboard.getGlobal caching", () => {
 
 ## Retrospective
 
-(To be filled after implementation)
+### What Went Well
+
+1. **Scope-aware caching worked cleanly**: The `hasPrivateScope = !!(req.teamId || req.orgId)` pattern made it trivial to skip caching for team/org-scoped requests without any complex logic.
+
+2. **Conditional caching for frozen seasons**: The light query to check `snapshot_ready` before caching was simple to implement and keeps the caching logic honest about what's frozen vs. live.
+
+3. **Paginated key management**: The cursor-based pagination with `truncated` flag provides honest feedback to admins about whether they've seen all keys or hit the limit.
+
+4. **Test coverage was already in place**: The TDD approach meant all cache behaviors (hits, misses, error fallback, TTL values, scope checks) were verified before deployment.
+
+### Lessons Learned
+
+1. **API route imports**: Admin API routes should use `resolveAdmin()` from `@/lib/admin` rather than importing auth directly. The helper handles the full admin check flow and the import path is consistent with other admin routes.
+
+2. **Cache key format stability**: The `lb:global:{from}:{source}:{model}:{limit}:{offset}` pattern with 5 colon-separated segments (after `lb:global:`) means tests need to account for empty segments rendering as `::` not single colons.
+
+3. **Worker deployment is atomic with KV**: The KV binding was already configured in wrangler.toml for production, so deployment "just worked". For test environments, the binding needs explicit setup.
+
+### Future Improvements
+
+- **Cache warming on deploy**: Pre-populate pricing and frozen season snapshots immediately after deployment
+- **TTL visibility in admin UI**: Show remaining TTL per key (requires storing metadata or using KV's `getWithMetadata`)
+- **Proactive invalidation**: Clear specific cache keys when admin updates pricing or generates season snapshots
