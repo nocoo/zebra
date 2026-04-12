@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.19.1
+
+### Added
+- Add user profile dialog on username click
+
+### Changed
+- Add Cloudflare KV cache design (doc 38)
+
 ## v2.19.0
 
 ### Added
