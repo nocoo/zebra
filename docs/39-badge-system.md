@@ -74,9 +74,9 @@ CREATE TABLE IF NOT EXISTS badge_assignments (
   assigned_by     TEXT NOT NULL REFERENCES users(id),       -- admin who assigned
   note            TEXT,                                     -- admin note for this assignment
   
-  -- Revocation tracking (null = not revoked)
-  revoked_at      TEXT,                                     -- when revoked (null if active or naturally expired)
-  revoked_by      TEXT REFERENCES users(id),                -- admin who revoked (null if not revoked)
+  -- Revocation tracking (null = never revoked, only set by manual admin action)
+  revoked_at      TEXT,                                     -- when manually revoked by admin
+  revoked_by      TEXT REFERENCES users(id),                -- admin who revoked
   revoke_reason   TEXT,                                     -- reason for revocation
   
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -86,8 +86,13 @@ CREATE TABLE IF NOT EXISTS badge_assignments (
 CREATE INDEX IF NOT EXISTS idx_badge_assignments_user ON badge_assignments(user_id);
 CREATE INDEX IF NOT EXISTS idx_badge_assignments_badge ON badge_assignments(badge_id);
 CREATE INDEX IF NOT EXISTS idx_badge_assignments_expires ON badge_assignments(expires_at);
--- Active = not revoked AND not expired
 CREATE INDEX IF NOT EXISTS idx_badge_assignments_active ON badge_assignments(user_id, revoked_at, expires_at);
+
+-- Prevent multiple non-revoked assignments of same badge to same user
+-- (covers both active and naturally-expired-but-not-revoked states)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_badge_assignments_unique_non_revoked
+  ON badge_assignments(badge_id, user_id) 
+  WHERE revoked_at IS NULL;
 ```
 
 ### Schema Notes
@@ -95,36 +100,45 @@ CREATE INDEX IF NOT EXISTS idx_badge_assignments_active ON badge_assignments(use
 - **Badge definitions are immutable once created** — no PATCH/DELETE endpoints; typos require archive + recreate
 - **`is_archived`** hides badge from assignment UI but preserves renderability for historical assignments
 - **Snapshot fields** (`snapshot_*`) capture badge appearance at assignment time for audit fidelity
-- **`revoked_at/by/reason`** distinguish manual revocation from natural expiry
+- **`revoked_at/by/reason`** only set by manual admin revocation, never by system
 - **`expires_at`** computed at assignment time: `datetime(assigned_at, '+7 days')`
-- **Active badge** = `revoked_at IS NULL AND expires_at > datetime('now')`
+
+### Assignment States
+
+An assignment has exactly one of three terminal states, **determined at read time**:
+
+| State | Condition | Meaning |
+|-------|-----------|---------|
+| **Active** | `revoked_at IS NULL AND expires_at > now` | Visible on leaderboard/profile |
+| **Expired** | `revoked_at IS NULL AND expires_at <= now` | Naturally ended, history preserved |
+| **Revoked** | `revoked_at IS NOT NULL` | Manually ended by admin |
+
+```typescript
+type AssignmentStatus = 'active' | 'expired' | 'revoked';
+
+function deriveStatus(assignment: BadgeAssignment, now: Date): AssignmentStatus {
+  if (assignment.revoked_at) return 'revoked';
+  if (new Date(assignment.expires_at) <= now) return 'expired';
+  return 'active';
+}
+```
 
 ### Unique Active Assignment (Database-Level)
 
-SQLite partial indexes don't support `datetime('now')` as a dynamic condition. Instead, we use a **static partial unique index** on `revoked_at IS NULL`:
+The partial unique index `WHERE revoked_at IS NULL` prevents multiple non-revoked assignments of the same badge to the same user. This covers:
+- **Active** assignments (should never duplicate)
+- **Expired but not revoked** assignments (also blocks new assignment)
 
-```sql
--- Prevent multiple non-revoked assignments of same badge to same user
-CREATE UNIQUE INDEX IF NOT EXISTS idx_badge_assignments_unique_non_revoked
-  ON badge_assignments(badge_id, user_id) 
-  WHERE revoked_at IS NULL;
-```
+**Re-assignment after expiry**: Admin must explicitly revoke the expired assignment first, then create a new one. This is intentional:
+1. Preserves clean audit trail (expired stays expired, revoked means admin action)
+2. Two-step process prevents accidental double-assignment
+3. No "system" actor needed — all revocations are admin actions
 
-**Invariant**: At most one non-revoked assignment per (badge_id, user_id). This covers:
-- **Active**: `revoked_at IS NULL AND expires_at > now` — visible on leaderboard/profile
-- **Expired but not revoked**: `revoked_at IS NULL AND expires_at <= now` — no longer visible, but blocks new assignment
-
-**Assignment flow**:
-1. Admin assigns badge A to user X → INSERT succeeds (no existing non-revoked row)
-2. Badge expires naturally → row stays with `revoked_at IS NULL`, `expires_at` in past
-3. Admin wants to re-assign → must first "clear" the expired row by setting `revoked_at = now` (treated as "auto-cleared"), then INSERT new assignment
-
-**API behavior**:
-- POST `/api/admin/badges/assignments` checks if non-revoked row exists:
-  - If active (not expired): return 409 Conflict
-  - If expired (not revoked): auto-set `revoked_at = now, revoked_by = 'system', revoke_reason = 'auto-cleared for re-assignment'`, then INSERT new row
-  - If no non-revoked row: INSERT directly
-- This ensures the unique index is never violated, while still allowing re-assignment after expiry
+**API behavior for POST `/api/admin/badges/assignments`**:
+- Check for existing non-revoked row for (badge_id, user_id)
+- If found and active → 409 Conflict ("badge already active for this user")
+- If found and expired → 409 Conflict ("previous assignment expired; revoke it first to re-assign")
+- If no non-revoked row → INSERT succeeds
 
 ### Active Badge Query
 
@@ -144,18 +158,6 @@ WHERE ba.user_id = ?
   AND ba.revoked_at IS NULL
   AND ba.expires_at > datetime('now')
 ORDER BY ba.assigned_at DESC;
-```
-
-### Assignment Status Derivation
-
-```typescript
-type AssignmentStatus = 'active' | 'expired' | 'revoked';
-
-function deriveStatus(assignment: BadgeAssignment): AssignmentStatus {
-  if (assignment.revoked_at) return 'revoked';
-  if (new Date(assignment.expires_at) <= new Date()) return 'expired';
-  return 'active';
-}
 ```
 
 ## Badge Visual Design
@@ -335,7 +337,7 @@ Records `revoked_at`, `revoked_by`, `revoke_reason` for audit.
 |--------|------|-------------|
 | GET | `/api/users/[slug]/badges` | Get user's active badges (respects `is_public`) |
 
-**Privacy**: Returns 404 if user has `is_public=0`, consistent with existing `/api/users/[slug]` and `/api/users/[slug]/achievements` behavior.
+**Privacy**: Returns 404 if user has `is_public=0`, consistent with `/api/users/[slug]/achievements` behavior. Note: the main profile route (`/api/users/[slug]`) has additional bypasses (admin, teammate, same-season), but the badges endpoint uses the simpler achievements-style check for simplicity.
 
 ### Leaderboard Integration
 
@@ -354,7 +356,7 @@ interface LeaderboardEntry {
 }
 ```
 
-**Cache behavior**: Leaderboard uses `s-maxage=60, stale-while-revalidate=120`. Badge changes (assign/revoke/expire) will be visible within ~60s on the main leaderboard. This is acceptable — badges are not time-critical like real-time notifications. The admin UI and profile popup (no cache) show immediate state.
+**Cache behavior**: Leaderboard uses `s-maxage=60, stale-while-revalidate=120`. Badge changes (assign/revoke/expire) will be visible within **1-3 minutes** on the main leaderboard. This is acceptable — badges are not time-critical. The admin UI and profile popup (no cache) show immediate state.
 
 ## Worker-Read RPC
 
@@ -444,9 +446,9 @@ Add new RPC handlers in `packages/worker-read`:
 | Scenario | Expected |
 |----------|----------|
 | Assign badge A to user X (no existing non-revoked) | 201, assignment created |
-| Assign badge A to user X (active exists) | 409 Conflict |
+| Assign badge A to user X (active exists) | 409 Conflict ("badge already active") |
 | Assign badge A to user X (previous revoked) | 201, new assignment created |
-| Assign badge A to user X (previous expired, not revoked) | 201, auto-clears expired row then creates new |
+| Assign badge A to user X (previous expired, not revoked) | 409 Conflict ("revoke expired assignment first") |
 | Two concurrent POST for same badge+user | One succeeds, one fails with UNIQUE constraint (DB-level) |
 
 ### Revocation vs Expiry Tests
@@ -456,8 +458,9 @@ Add new RPC handlers in `packages/worker-read`:
 | Active, not expired | active | NULL | NULL |
 | Past expires_at, not revoked | expired | NULL | NULL |
 | Admin clicked revoke | revoked | timestamp | admin_id |
-| Auto-cleared for re-assignment | revoked | timestamp | 'system' |
 | Query history for user | All states distinguishable via revoked_at + expires_at | | |
+
+**Note**: No "auto-clear" or "system" actor. Expired assignments stay expired; admin must explicitly revoke before re-assigning.
 
 ### Badge Immutability Tests
 
