@@ -386,6 +386,7 @@ function ModelsLeaderboardContent() {
         slug={dialogEntry?.user.slug ?? dialogEntry?.user.id ?? null}
         name={dialogEntry?.user.name ?? null}
         image={dialogEntry?.user.image ?? null}
+        badges={dialogEntry?.badges ?? []}
         defaultTab={PERIOD_TO_TAB[period]}
       />
     </>

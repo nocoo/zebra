@@ -16,10 +16,18 @@ import {
   toHeatmapData,
   sourceLabel,
 } from "@/hooks/use-usage-data";
+import type { BadgeShape } from "@pew/core";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export interface UserProfileBadge {
+  text: string;
+  shape: BadgeShape;
+  colorBg: string;
+  colorText: string;
+}
 
 export interface UserProfileUser {
   name: string | null;
@@ -27,6 +35,7 @@ export interface UserProfileUser {
   slug: string;
   created_at: string;
   first_seen: string | null;
+  badges?: UserProfileBadge[];
 }
 
 export interface UserProfileData {

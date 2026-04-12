@@ -9,10 +9,12 @@ import { useSeasons } from "@/hooks/use-seasons";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BadgeIcon } from "@/components/badges/badge-icon";
 import {
   ProfileContent,
   type ProfileTab,
 } from "@/components/profile/profile-content";
+import type { LeaderboardBadge } from "@/hooks/use-leaderboard";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +39,8 @@ export interface UserProfileDialogProps {
   name?: string | null;
   /** Avatar image URL (shown while loading) */
   image?: string | null;
+  /** Active badges for this user (from leaderboard entry) */
+  badges?: LeaderboardBadge[];
   /** Which tab to select initially (default: "7d") */
   defaultTab?: ProfileDialogTab;
   /** Pre-fetched season name (from season leaderboard entry point) */
@@ -139,10 +143,11 @@ interface DialogHeaderProps {
   slug: string | null;
   name?: string | null | undefined;
   image?: string | null | undefined;
+  badges?: LeaderboardBadge[];
   isAdmin: boolean;
 }
 
-function DialogHeader({ slug, name, image, isAdmin }: DialogHeaderProps) {
+function DialogHeader({ slug, name, image, badges, isAdmin }: DialogHeaderProps) {
   // Light fetch just for user info (name, avatar, member since)
   const { user, loading } = useUserProfile({ slug: slug ?? "", days: 7 });
 
@@ -163,13 +168,29 @@ function DialogHeader({ slug, name, image, isAdmin }: DialogHeaderProps) {
           </AvatarFallback>
         </Avatar>
         <div>
-          <Dialog.Title className="text-xl font-semibold text-foreground">
-            {isFirstLoad && !user ? (
-              <Skeleton className="h-6 w-40" />
-            ) : (
-              displayName
+          <div className="flex items-center gap-2">
+            <Dialog.Title className="text-xl font-semibold text-foreground">
+              {isFirstLoad && !user ? (
+                <Skeleton className="h-6 w-40" />
+              ) : (
+                displayName
+              )}
+            </Dialog.Title>
+            {badges && badges.length > 0 && (
+              <div className="flex gap-1">
+                {badges.map((badge, idx) => (
+                  <BadgeIcon
+                    key={idx}
+                    text={badge.text}
+                    shape={badge.shape}
+                    colorBg={badge.colorBg}
+                    colorText={badge.colorText}
+                    size="sm"
+                  />
+                ))}
+              </div>
             )}
-          </Dialog.Title>
+          </div>
           {user && (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
               <Calendar className="h-3.5 w-3.5" />
@@ -205,6 +226,7 @@ export function UserProfileDialog({
   slug,
   name,
   image,
+  badges,
   defaultTab = "7d",
   seasonName,
   seasonStart,
@@ -257,6 +279,7 @@ export function UserProfileDialog({
                 slug={slug}
                 name={name}
                 image={image}
+                {...(badges && badges.length > 0 && { badges })}
                 isAdmin={isAdmin}
               />
               <ProfileContent

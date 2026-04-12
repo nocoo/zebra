@@ -10,6 +10,7 @@ import {
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BadgeIcon } from "@/components/badges/badge-icon";
 import { PageHeader } from "@/components/leaderboard/page-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -160,9 +161,25 @@ export function PublicProfileView({ slug }: PublicProfileViewProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h2 className="text-2xl font-bold font-display text-foreground">
-                    {user.name ?? slug}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-bold font-display text-foreground">
+                      {user.name ?? slug}
+                    </h2>
+                    {user.badges && user.badges.length > 0 && (
+                      <div className="flex gap-1">
+                        {user.badges.map((badge, idx) => (
+                          <BadgeIcon
+                            key={idx}
+                            text={badge.text}
+                            shape={badge.shape}
+                            colorBg={badge.colorBg}
+                            colorText={badge.colorText}
+                            size="sm"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Calendar className="h-3.5 w-3.5" />
                     Member since {formatMemberSince(user.created_at)}
