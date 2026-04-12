@@ -64,6 +64,10 @@ import type {
   AchievementHourlyUsageRow,
   AchievementCostByModelSourceRow,
   AchievementEarnerRow,
+  BadgeRow,
+  BadgeAssignmentRow,
+  ActiveBadgeRow,
+  BadgeAssignmentCheckResult,
 } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
@@ -630,6 +634,42 @@ export interface DbRead {
 
   /** Invalidate a single cache key */
   invalidateCacheKey(key: string): Promise<void>;
+
+  // ---------------------------------------------------------------------------
+  // Badges domain RPC methods
+  // ---------------------------------------------------------------------------
+
+  /** List all badge definitions */
+  listBadges(includeArchived?: boolean): Promise<BadgeRow[]>;
+
+  /** Get a single badge by ID */
+  getBadge(badgeId: string): Promise<BadgeRow | null>;
+
+  /** Get active badges for a single user */
+  getActiveBadgesForUser(userId: string): Promise<ActiveBadgeRow[]>;
+
+  /** Get active badges for multiple users (batch) */
+  getActiveBadgesForUsers(
+    userIds: string[],
+  ): Promise<Record<string, ActiveBadgeRow[]>>;
+
+  /** List badge assignments with filters */
+  listBadgeAssignments(options: {
+    badgeId?: string;
+    userId?: string;
+    status?: "active" | "expired" | "revoked" | "all";
+    limit: number;
+    offset: number;
+  }): Promise<BadgeAssignmentRow[]>;
+
+  /** Get a single badge assignment by ID */
+  getBadgeAssignment(assignmentId: string): Promise<BadgeAssignmentRow | null>;
+
+  /** Check if user has a non-revoked assignment for a badge */
+  checkNonRevokedAssignment(
+    badgeId: string,
+    userId: string,
+  ): Promise<BadgeAssignmentCheckResult>;
 }
 
 // ---------------------------------------------------------------------------

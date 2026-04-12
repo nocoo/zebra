@@ -65,6 +65,10 @@ import type {
   AchievementHourlyUsageRow,
   AchievementCostByModelSourceRow,
   AchievementEarnerRow,
+  BadgeRow,
+  BadgeAssignmentRow,
+  ActiveBadgeRow,
+  BadgeAssignmentCheckResult,
 } from "./rpc-types";
 
 export function createWorkerDbRead(): DbRead {
@@ -1127,6 +1131,99 @@ export function createWorkerDbRead(): DbRead {
       await rpc<{ invalidated: string }>({
         method: "cache.invalidate",
         key,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // Badges domain RPC methods
+    // -------------------------------------------------------------------------
+
+    async listBadges(includeArchived = false): Promise<BadgeRow[]> {
+      const result = await rpc<{ badges: BadgeRow[] }>({
+        method: "badges.list",
+        includeArchived,
+      });
+      return result.badges;
+    },
+
+    async getBadge(badgeId: string): Promise<BadgeRow | null> {
+      try {
+        const result = await rpc<{ badge: BadgeRow }>({
+          method: "badges.get",
+          badgeId,
+        });
+        return result.badge;
+      } catch (err) {
+        // 404 -> null
+        if (err instanceof Error && err.message.includes("404")) {
+          return null;
+        }
+        throw err;
+      }
+    },
+
+    async getActiveBadgesForUser(userId: string): Promise<ActiveBadgeRow[]> {
+      const result = await rpc<{ badges: ActiveBadgeRow[] }>({
+        method: "badges.getActiveForUser",
+        userId,
+      });
+      return result.badges;
+    },
+
+    async getActiveBadgesForUsers(
+      userIds: string[],
+    ): Promise<Record<string, ActiveBadgeRow[]>> {
+      const result = await rpc<{ badges: Record<string, ActiveBadgeRow[]> }>({
+        method: "badges.getActiveForUsers",
+        userIds,
+      });
+      return result.badges;
+    },
+
+    async listBadgeAssignments(options: {
+      badgeId?: string;
+      userId?: string;
+      status?: "active" | "expired" | "revoked" | "all";
+      limit: number;
+      offset: number;
+    }): Promise<BadgeAssignmentRow[]> {
+      const result = await rpc<{ assignments: BadgeAssignmentRow[] }>({
+        method: "badges.listAssignments",
+        ...(options.badgeId !== undefined && { badgeId: options.badgeId }),
+        ...(options.userId !== undefined && { userId: options.userId }),
+        ...(options.status !== undefined && { status: options.status }),
+        limit: options.limit,
+        offset: options.offset,
+      });
+      return result.assignments;
+    },
+
+    async getBadgeAssignment(
+      assignmentId: string,
+    ): Promise<BadgeAssignmentRow | null> {
+      try {
+        const result = await rpc<{ assignment: BadgeAssignmentRow }>({
+          method: "badges.getAssignment",
+          assignmentId,
+        });
+        return result.assignment;
+      } catch (err) {
+        // 404 -> null
+        if (err instanceof Error && err.message.includes("404")) {
+          return null;
+        }
+        throw err;
+      }
+    },
+
+    async checkNonRevokedAssignment(
+      badgeId: string,
+      userId: string,
+    ): Promise<BadgeAssignmentCheckResult> {
+      return rpc<BadgeAssignmentCheckResult>({
+        method: "badges.checkNonRevokedAssignment",
+        badgeId,
+        userId,
       });
     },
   };
