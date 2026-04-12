@@ -13,7 +13,7 @@ Badges are admin-created awards assigned to users. Unlike achievements (computed
 | Creation | Admin-only, via `/admin/badges` |
 | Assignment | Admin assigns badge to user, visible on leaderboard within 1-3 min (cache TTL) |
 | Duration | 7 days from assignment, auto-expires |
-| Visibility | Leaderboard rank column, profile avatar area (respects user `is_public`) |
+| Visibility | Leaderboard (public users only), profile popup/page (same access as profile) |
 | Stacking | User can have multiple active badges (one per badge definition) |
 | Re-assignment | Admin can re-assign same badge after current assignment expires or is revoked |
 | History | All assignments preserved with full snapshot for audit |
@@ -23,7 +23,7 @@ Badges are admin-created awards assigned to users. Unlike achievements (computed
 1. **Admin creates badge**: "I want to create a badge with 1-3 characters that represents a specific honor"
 2. **Admin assigns badge**: "I want to award this badge to a user for their contribution"
 3. **User sees badge**: "I see my badge on the leaderboard instead of my rank number"
-4. **Viewer sees badge**: "I see other users' badges in their profile popup (if user is public)"
+4. **Viewer sees badge**: "I see other users' badges in their profile popup (if I have access to view their profile)"
 5. **Auto-expiry**: "Badge disappears after 7 days without manual intervention"
 6. **Admin re-assigns**: "I want to give the same badge again after it expired or was revoked"
 7. **Admin revokes badge**: "I want to immediately remove a badge with audit trail"
@@ -426,7 +426,7 @@ Add new RPC handlers in `packages/worker-read`:
 - Badge text sanitized (1-3 chars, alphanumeric + limited unicode)
 - No HTML/script injection in badge text or description
 - Rate limiting on assignment API to prevent spam
-- Public badge query respects user `is_public` flag (404 for private users)
+- Badge query uses `canBypassPublic()` — same access control as profile route
 
 ## Future Considerations
 
