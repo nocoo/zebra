@@ -1100,6 +1100,35 @@ export function createWorkerDbRead(): DbRead {
     async ping(): Promise<void> {
       await rpc<{ ok: boolean }>({ method: "live.ping" });
     },
+
+    // -------------------------------------------------------------------------
+    // Cache management (admin only)
+    // -------------------------------------------------------------------------
+
+    async getCacheKeys(
+      prefix?: string,
+    ): Promise<{ keys: string[]; truncated: boolean; count: number }> {
+      return rpc<{ keys: string[]; truncated: boolean; count: number }>({
+        method: "cache.list",
+        ...(prefix !== undefined && { prefix }),
+      });
+    },
+
+    async clearCache(
+      prefix?: string,
+    ): Promise<{ deleted: number; truncated: boolean }> {
+      return rpc<{ deleted: number; truncated: boolean }>({
+        method: "cache.clear",
+        ...(prefix !== undefined && { prefix }),
+      });
+    },
+
+    async invalidateCacheKey(key: string): Promise<void> {
+      await rpc<{ invalidated: string }>({
+        method: "cache.invalidate",
+        key,
+      });
+    },
   };
 
   return reader;

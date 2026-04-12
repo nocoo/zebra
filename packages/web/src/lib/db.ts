@@ -610,6 +610,26 @@ export interface DbRead {
 
   /** Ping database (health check) */
   ping(): Promise<void>;
+
+  // ---------------------------------------------------------------------------
+  // Cache management (admin only)
+  // ---------------------------------------------------------------------------
+
+  /** List all cache keys */
+  getCacheKeys(prefix?: string): Promise<{
+    keys: string[];
+    truncated: boolean;
+    count: number; // Number of keys returned, not total in KV
+  }>;
+
+  /** Clear all cache entries */
+  clearCache(prefix?: string): Promise<{
+    deleted: number;
+    truncated: boolean; // true if more keys remain after hitting limit
+  }>;
+
+  /** Invalidate a single cache key */
+  invalidateCacheKey(key: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
