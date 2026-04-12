@@ -28,3 +28,7 @@ database_id = "aa08a894-6a65-4baf-b756-2e611dff437d"
 [[env.test.routes]]
 pattern = "pew-test.worker.hexly.ai"
 custom_domain = true
+
+[[env.test.kv_namespaces]]
+binding = "CACHE"
+id = "d5d3f97da82241da83ba91eea3cd3a6c"

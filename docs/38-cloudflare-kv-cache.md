@@ -7,14 +7,14 @@
 
 | # | Description | Status |
 |---|-------------|--------|
-| 1 | This document | |
-| 2 | Add test environment KV binding | |
+| 1 | This document | ✅ done |
+| 2 | Add test environment KV binding | ✅ done |
 | 3 | Implement cache helper (`withCache`) | |
 | 4 | Cache `pricing.listModelPricing` (24h TTL) | |
 | 5 | Cache `seasons.getSnapshots` for frozen seasons (24h TTL) | |
 | 6 | Cache `seasons.list` (5min TTL) | |
 | 7 | Cache `leaderboard.getGlobal` — **public only** (5min TTL) | |
-| 8 | ~~Cache `achievements.getEarners`~~ — **deferred** (see Decision 3) | |
+| 8 | ~~Cache `achievements.getEarners`~~ — **deferred** (see Decision 3) | ⏭️ skipped |
 | 9 | Add `cache.*` RPC domain + DbRead interface methods | |
 | 10 | Add KV management card to Admin Storage page | |
 | 11 | Tests (unit + integration) | |

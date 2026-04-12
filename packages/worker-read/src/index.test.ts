@@ -9,9 +9,20 @@ import { WORKER_VERSION } from "./index";
 
 const SECRET = "test-read-secret";
 
+function createMockKV(): KVNamespace {
+  return {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    list: vi.fn().mockResolvedValue({ keys: [], list_complete: true }),
+    getWithMetadata: vi.fn().mockResolvedValue({ value: null, metadata: null }),
+  } as unknown as KVNamespace;
+}
+
 function createEnv(overrides?: Partial<Env>): Env {
   return {
     DB: createMockDB(),
+    CACHE: createMockKV(),
     WORKER_READ_SECRET: SECRET,
     ...overrides,
   };
