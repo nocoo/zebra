@@ -14,7 +14,7 @@ import {
   type GetSeasonMemberSessionStatsRequest,
   type GetSeasonTeamMembersRequest,
 } from "./seasons";
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
 
 // ---------------------------------------------------------------------------
 // Mock D1Database
@@ -34,11 +34,30 @@ function createMockDb() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Mock KVNamespace
+// ---------------------------------------------------------------------------
+
+function createMockKv() {
+  return {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    list: vi.fn().mockResolvedValue({ keys: [], list_complete: true }),
+    getWithMetadata: vi.fn().mockResolvedValue({ value: null, metadata: null }),
+  } as unknown as KVNamespace & {
+    get: ReturnType<typeof vi.fn>;
+    put: ReturnType<typeof vi.fn>;
+  };
+}
+
 describe("seasons RPC handlers", () => {
   let db: ReturnType<typeof createMockDb>;
+  let kv: ReturnType<typeof createMockKv>;
 
   beforeEach(() => {
     db = createMockDb();
+    kv = createMockKv();
   });
 
   // -------------------------------------------------------------------------
@@ -46,7 +65,7 @@ describe("seasons RPC handlers", () => {
   // -------------------------------------------------------------------------
 
   describe("seasons.list", () => {
-    it("should return list of seasons", async () => {
+    it("should return list of seasons on cache miss", async () => {
       const mockSeasons = [
         {
           id: "s1",
@@ -64,11 +83,41 @@ describe("seasons RPC handlers", () => {
       db.all.mockResolvedValue({ results: mockSeasons });
 
       const request: ListSeasonsRequest = { method: "seasons.list" };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ result: mockSeasons });
+      expect(body).toEqual({ result: mockSeasons, _cached: false });
+      expect(kv.get).toHaveBeenCalledWith("seasons:list", "json");
+      expect(kv.put).toHaveBeenCalledWith(
+        "seasons:list",
+        JSON.stringify(mockSeasons),
+        { expirationTtl: 300 }
+      );
+    });
+
+    it("should return cached seasons list on cache hit", async () => {
+      const cachedSeasons = [
+        {
+          id: "s1",
+          name: "Season 1",
+          slug: "season-1",
+          start_date: "2026-01-01T00:00:00Z",
+          end_date: "2026-03-31T23:59:00Z",
+          created_at: "2025-12-01T00:00:00Z",
+          team_count: 5,
+          has_snapshot: 0,
+        },
+      ];
+      kv.get.mockResolvedValue(cachedSeasons);
+
+      const request: ListSeasonsRequest = { method: "seasons.list" };
+      const response = await handleSeasonsRpc(request, db, kv);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: cachedSeasons, _cached: true });
+      expect(db.all).not.toHaveBeenCalled();
     });
   });
 
@@ -94,7 +143,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getById",
         seasonId: "s1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -108,7 +157,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getById",
         seasonId: "nonexistent",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -120,7 +169,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getById",
         seasonId: "",
       } as GetSeasonByIdRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -148,7 +197,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getBySlug",
         slug: "season-1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -160,7 +209,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getBySlug",
         slug: "",
       } as GetSeasonBySlugRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -186,7 +235,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "s1",
         teamId: "t1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -201,7 +250,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "s1",
         teamId: "t1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -214,7 +263,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "",
         teamId: "t1",
       } as GetSeasonRegistrationRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -233,7 +282,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "s1",
         userIds: ["u1", "u2", "u3"],
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -248,7 +297,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "s1",
         userIds: ["u1"],
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -261,7 +310,7 @@ describe("seasons RPC handlers", () => {
         seasonId: "s1",
         userIds: [],
       } as CheckSeasonMemberConflictRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -272,7 +321,7 @@ describe("seasons RPC handlers", () => {
   // -------------------------------------------------------------------------
 
   describe("seasons.getSnapshots", () => {
-    it("should return snapshots", async () => {
+    it("should return snapshots without cache when not frozen", async () => {
       const mockSnapshots = [
         {
           team_id: "t1",
@@ -286,17 +335,89 @@ describe("seasons RPC handlers", () => {
           cached_input_tokens: 100000,
         },
       ];
+      // Season is NOT frozen (snapshot_ready = 0)
+      db.first.mockResolvedValue({ snapshot_ready: 0 });
       db.all.mockResolvedValue({ results: mockSnapshots });
 
       const request: GetSeasonSnapshotsRequest = {
         method: "seasons.getSnapshots",
         seasonId: "s1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual({ result: mockSnapshots });
+      expect(body).toEqual({ result: mockSnapshots, _cached: false });
+      // Should NOT check cache or write to cache when not frozen
+      expect(kv.get).not.toHaveBeenCalled();
+      expect(kv.put).not.toHaveBeenCalled();
+    });
+
+    it("should cache snapshots when frozen (snapshot_ready = 1)", async () => {
+      const mockSnapshots = [
+        {
+          team_id: "t1",
+          team_name: "Team 1",
+          team_slug: "team-1",
+          team_logo_url: null,
+          rank: 1,
+          total_tokens: 1000000,
+          input_tokens: 600000,
+          output_tokens: 400000,
+          cached_input_tokens: 100000,
+        },
+      ];
+      // Season IS frozen (snapshot_ready = 1)
+      db.first.mockResolvedValue({ snapshot_ready: 1 });
+      db.all.mockResolvedValue({ results: mockSnapshots });
+
+      const request: GetSeasonSnapshotsRequest = {
+        method: "seasons.getSnapshots",
+        seasonId: "s1",
+      };
+      const response = await handleSeasonsRpc(request, db, kv);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: mockSnapshots, _cached: false });
+      expect(kv.get).toHaveBeenCalledWith("season:s1:snapshots", "json");
+      expect(kv.put).toHaveBeenCalledWith(
+        "season:s1:snapshots",
+        JSON.stringify(mockSnapshots),
+        { expirationTtl: 86400 }
+      );
+    });
+
+    it("should return cached snapshots when frozen and cache hit", async () => {
+      const cachedSnapshots = [
+        {
+          team_id: "t1",
+          team_name: "Team 1",
+          team_slug: "team-1",
+          team_logo_url: null,
+          rank: 1,
+          total_tokens: 1000000,
+          input_tokens: 600000,
+          output_tokens: 400000,
+          cached_input_tokens: 100000,
+        },
+      ];
+      // Season IS frozen
+      db.first.mockResolvedValue({ snapshot_ready: 1 });
+      // Cache HIT
+      kv.get.mockResolvedValue(cachedSnapshots);
+
+      const request: GetSeasonSnapshotsRequest = {
+        method: "seasons.getSnapshots",
+        seasonId: "s1",
+      };
+      const response = await handleSeasonsRpc(request, db, kv);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ result: cachedSnapshots, _cached: true });
+      // Should NOT call D1 for snapshots (only for frozen check)
+      expect(db.all).not.toHaveBeenCalled();
     });
 
     it("should return 400 when seasonId missing", async () => {
@@ -304,7 +425,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getSnapshots",
         seasonId: "",
       } as GetSeasonSnapshotsRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -337,7 +458,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getMemberSnapshots",
         seasonId: "s1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -349,7 +470,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getMemberSnapshots",
         seasonId: "",
       } as GetSeasonMemberSnapshotsRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -381,7 +502,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -395,7 +516,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "",
         toDate: "2026-04-01T00:00:00.000Z",
       } as GetSeasonTeamTokensRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -431,7 +552,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -446,7 +567,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       } as GetSeasonMemberTokensRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -474,7 +595,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -489,7 +610,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       } as GetSeasonTeamSessionStatsRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -518,7 +639,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -533,7 +654,7 @@ describe("seasons RPC handlers", () => {
         fromDate: "2026-01-01T00:00:00.000Z",
         toDate: "2026-04-01T00:00:00.000Z",
       } as GetSeasonMemberSessionStatsRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -553,7 +674,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getTeamMembers",
         teamId: "t1",
       };
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -565,7 +686,7 @@ describe("seasons RPC handlers", () => {
         method: "seasons.getTeamMembers",
         teamId: "",
       } as GetSeasonTeamMembersRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
     });
@@ -578,7 +699,7 @@ describe("seasons RPC handlers", () => {
   describe("unknown method", () => {
     it("should return 400 for unknown method", async () => {
       const request = { method: "seasons.unknown" } as unknown as ListSeasonsRequest;
-      const response = await handleSeasonsRpc(request, db);
+      const response = await handleSeasonsRpc(request, db, kv);
 
       expect(response.status).toBe(400);
       const body = (await response.json()) as { error: string };

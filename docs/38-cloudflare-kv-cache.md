@@ -11,8 +11,8 @@
 | 2 | Add test environment KV binding | ✅ done |
 | 3 | Implement cache helper (`withCache`) | ✅ done |
 | 4 | Cache `pricing.listModelPricing` (24h TTL) | ✅ done |
-| 5 | Cache `seasons.getSnapshots` for frozen seasons (24h TTL) | |
-| 6 | Cache `seasons.list` (5min TTL) | |
+| 5 | Cache `seasons.getSnapshots` for frozen seasons (24h TTL) | ✅ done |
+| 6 | Cache `seasons.list` (5min TTL) | ✅ done |
 | 7 | Cache `leaderboard.getGlobal` — **public only** (5min TTL) | |
 | 8 | ~~Cache `achievements.getEarners`~~ — **deferred** (see Decision 3) | ⏭️ skipped |
 | 9 | Add `cache.*` RPC domain + DbRead interface methods | |

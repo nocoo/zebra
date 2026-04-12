@@ -4,7 +4,19 @@
  * Handles all season-related read queries with typed interfaces.
  */
 
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
+import { withCache, TTL_24H, TTL_5M } from "../cache";
+
+// ---------------------------------------------------------------------------
+// Cache Keys
+// ---------------------------------------------------------------------------
+
+const CACHE_KEY_SEASONS_LIST = "seasons:list";
+
+/** Generate cache key for frozen season snapshots */
+function cacheKeySeasonSnapshots(seasonId: string): string {
+  return `season:${seasonId}:snapshots`;
+}
 
 // ---------------------------------------------------------------------------
 // Response Types
@@ -240,22 +252,33 @@ export type SeasonsRpcRequest =
 // Handlers
 // ---------------------------------------------------------------------------
 
-async function handleListSeasons(db: D1Database): Promise<Response> {
-  const results = await db
-    .prepare(
-      `SELECT
-         s.id, s.name, s.slug, s.start_date, s.end_date, s.created_at,
-         s.allow_late_registration, s.allow_roster_changes, s.allow_late_withdrawal,
-         COUNT(st.id) AS team_count,
-         s.snapshot_ready AS has_snapshot
-       FROM seasons s
-       LEFT JOIN season_teams st ON st.season_id = s.id
-       GROUP BY s.id
-       ORDER BY s.start_date DESC`
-    )
-    .all<SeasonRow>();
+async function handleListSeasons(
+  db: D1Database,
+  kv: KVNamespace
+): Promise<Response> {
+  const { data, cached } = await withCache(
+    kv,
+    CACHE_KEY_SEASONS_LIST,
+    async () => {
+      const results = await db
+        .prepare(
+          `SELECT
+             s.id, s.name, s.slug, s.start_date, s.end_date, s.created_at,
+             s.allow_late_registration, s.allow_roster_changes, s.allow_late_withdrawal,
+             COUNT(st.id) AS team_count,
+             s.snapshot_ready AS has_snapshot
+           FROM seasons s
+           LEFT JOIN season_teams st ON st.season_id = s.id
+           GROUP BY s.id
+           ORDER BY s.start_date DESC`
+        )
+        .all<SeasonRow>();
+      return results.results;
+    },
+    { ttlSeconds: TTL_5M }
+  );
 
-  return Response.json({ result: results.results });
+  return Response.json({ result: data, _cached: cached });
 }
 
 async function handleGetSeasonById(
@@ -349,33 +372,59 @@ async function handleCheckSeasonMemberConflict(
 
 async function handleGetSeasonSnapshots(
   req: GetSeasonSnapshotsRequest,
-  db: D1Database
+  db: D1Database,
+  kv: KVNamespace
 ): Promise<Response> {
   if (!req.seasonId) {
     return Response.json({ error: "seasonId is required" }, { status: 400 });
   }
 
-  const results = await db
-    .prepare(
-      `SELECT
-        ss.team_id,
-        t.name AS team_name,
-        t.slug AS team_slug,
-        t.logo_url AS team_logo_url,
-        ss.rank,
-        ss.total_tokens,
-        ss.input_tokens,
-        ss.output_tokens,
-        ss.cached_input_tokens
-      FROM season_snapshots ss
-      JOIN teams t ON t.id = ss.team_id
-      WHERE ss.season_id = ?
-      ORDER BY ss.rank ASC`
-    )
+  // Check if season is frozen (snapshot_ready = 1)
+  const season = await db
+    .prepare("SELECT snapshot_ready FROM seasons WHERE id = ?")
     .bind(req.seasonId)
-    .all<SeasonSnapshotRow>();
+    .first<{ snapshot_ready: number }>();
 
-  return Response.json({ result: results.results });
+  const isFrozen = season?.snapshot_ready === 1;
+
+  // Helper to fetch snapshots from D1
+  const fetchSnapshots = async () => {
+    const results = await db
+      .prepare(
+        `SELECT
+          ss.team_id,
+          t.name AS team_name,
+          t.slug AS team_slug,
+          t.logo_url AS team_logo_url,
+          ss.rank,
+          ss.total_tokens,
+          ss.input_tokens,
+          ss.output_tokens,
+          ss.cached_input_tokens
+        FROM season_snapshots ss
+        JOIN teams t ON t.id = ss.team_id
+        WHERE ss.season_id = ?
+        ORDER BY ss.rank ASC`
+      )
+      .bind(req.seasonId)
+      .all<SeasonSnapshotRow>();
+    return results.results;
+  };
+
+  // Only cache if frozen
+  if (isFrozen) {
+    const { data, cached } = await withCache(
+      kv,
+      cacheKeySeasonSnapshots(req.seasonId),
+      fetchSnapshots,
+      { ttlSeconds: TTL_24H }
+    );
+    return Response.json({ result: data, _cached: cached });
+  }
+
+  // Not frozen — skip cache
+  const data = await fetchSnapshots();
+  return Response.json({ result: data, _cached: false });
 }
 
 async function handleGetSeasonMemberSnapshots(
@@ -652,11 +701,12 @@ async function handleAggregateMemberTokens(
 
 export async function handleSeasonsRpc(
   request: SeasonsRpcRequest,
-  db: D1Database
+  db: D1Database,
+  kv: KVNamespace
 ): Promise<Response> {
   switch (request.method) {
     case "seasons.list":
-      return handleListSeasons(db);
+      return handleListSeasons(db, kv);
     case "seasons.getById":
       return handleGetSeasonById(request, db);
     case "seasons.getBySlug":
@@ -666,7 +716,7 @@ export async function handleSeasonsRpc(
     case "seasons.checkMemberConflict":
       return handleCheckSeasonMemberConflict(request, db);
     case "seasons.getSnapshots":
-      return handleGetSeasonSnapshots(request, db);
+      return handleGetSeasonSnapshots(request, db, kv);
     case "seasons.getMemberSnapshots":
       return handleGetSeasonMemberSnapshots(request, db);
     case "seasons.getTeamTokens":

@@ -334,7 +334,7 @@ async function handleRpc(body: unknown, env: Env): Promise<Response> {
       case "teams":
         return handleTeamsRpc(body as TeamsRpcRequest, env.DB);
       case "seasons":
-        return handleSeasonsRpc(body as SeasonsRpcRequest, env.DB);
+        return handleSeasonsRpc(body as SeasonsRpcRequest, env.DB, env.CACHE);
       case "usage":
         return handleUsageRpc(body as UsageRpcRequest, env.DB);
       case "achievements":
