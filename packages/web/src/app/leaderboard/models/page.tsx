@@ -18,6 +18,7 @@ import {
   FilterDropdown,
   type FilterDropdownItem,
 } from "@/components/leaderboard/filter-dropdown";
+import { PAGE_SIZE } from "@/lib/leaderboard-constants";
 
 // ---------------------------------------------------------------------------
 // Model list — Top 20 by token usage from D1 (2026-04-10 snapshot)
@@ -56,12 +57,6 @@ const MODEL_ITEMS: FilterDropdownItem[] = MODEL_LIST.map((m) => ({
   label: shortModel(m),
   color: modelColor(m).color,
 }));
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 20;
 
 // ---------------------------------------------------------------------------
 // Page

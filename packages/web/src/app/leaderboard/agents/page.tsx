@@ -18,6 +18,7 @@ import {
   FilterDropdown,
   type FilterDropdownItem,
 } from "@/components/leaderboard/filter-dropdown";
+import { PAGE_SIZE } from "@/lib/leaderboard-constants";
 
 // ---------------------------------------------------------------------------
 // Agent list (matches VALID_SOURCES in API route)
@@ -45,12 +46,6 @@ const AGENT_ITEMS: FilterDropdownItem[] = AGENTS.map((a) => ({
   label: sourceLabel(a),
   color: agentColor(a).color,
 }));
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 20;
 
 // ---------------------------------------------------------------------------
 // Page

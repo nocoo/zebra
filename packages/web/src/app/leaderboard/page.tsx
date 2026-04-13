@@ -11,12 +11,7 @@ import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-
 import { PeriodTabs } from "@/components/leaderboard/period-tabs";
 import { ScopeDropdown } from "@/components/leaderboard/scope-dropdown";
 import { LeaderboardPageShell } from "@/components/leaderboard/leaderboard-page-shell";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 20;
+import { PAGE_SIZE } from "@/lib/leaderboard-constants";
 
 // ---------------------------------------------------------------------------
 // Page
