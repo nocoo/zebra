@@ -48,6 +48,15 @@ type SortDir = "asc" | "desc";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Format duration in seconds to human-readable string */
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 /** Parse cache key and return human-readable description */
 function describeCacheKey(key: string): { type: string; description: string } {
   if (key === "pricing:all") {
@@ -456,22 +465,47 @@ export default function AdminStoragePage() {
               {/* Summary cards */}
               {summary && (
                 <div className="grid grid-cols-3 gap-3 shrink-0">
-                  <div className="rounded-xl bg-card p-4">
+                  <div className="rounded-xl bg-secondary p-4">
                     <p className="text-xs text-muted-foreground">Users</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_users.toLocaleString()}
                     </p>
                   </div>
-                  <div className="rounded-xl bg-card p-4">
+                  <div className="rounded-xl bg-secondary p-4">
                     <p className="text-xs text-muted-foreground">Usage Rows</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_usage_rows.toLocaleString()}
                     </p>
                   </div>
-                  <div className="rounded-xl bg-card p-4">
+                  <div className="rounded-xl bg-secondary p-4">
+                    <p className="text-xs text-muted-foreground">Tokens</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-xl font-semibold tabular-nums mt-1 cursor-default">
+                          {formatTokens(summary.total_tokens)}
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {formatTokensFull(summary.total_tokens)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="rounded-xl bg-secondary p-4">
                     <p className="text-xs text-muted-foreground">Sessions</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_sessions.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-secondary p-4">
+                    <p className="text-xs text-muted-foreground">Messages</p>
+                    <p className="text-xl font-semibold tabular-nums mt-1">
+                      {summary.total_messages.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-secondary p-4">
+                    <p className="text-xs text-muted-foreground">Duration</p>
+                    <p className="text-xl font-semibold tabular-nums mt-1">
+                      {formatDuration(summary.total_duration_seconds)}
                     </p>
                   </div>
                 </div>
@@ -513,10 +547,10 @@ export default function AdminStoragePage() {
                   {search ? "No users match your filter." : "No users found."}
                 </div>
               ) : (
-                <div className="rounded-xl bg-card p-1 overflow-x-auto flex-1 lg:overflow-y-auto min-h-0">
+                <div className="rounded-xl bg-secondary overflow-x-auto flex-1 lg:overflow-y-auto min-h-0">
                   <table className="w-full">
-                    <thead className="sticky top-0 bg-card">
-                      <tr className="border-b border-border">
+                    <thead className="sticky top-0 z-10 bg-secondary shadow-[0_1px_0_0_hsl(var(--border)/0.3)]">
+                      <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
                           User
                         </th>
@@ -550,7 +584,7 @@ export default function AdminStoragePage() {
                       {filteredUsers.map((user) => (
                         <tr
                           key={user.user_id}
-                          className="border-b border-border/50 last:border-0 hover:bg-accent/50 transition-colors"
+                          className="border-b border-border/30 last:border-0 hover:bg-accent/30 transition-colors"
                         >
                           {/* User */}
                           <td className="px-4 py-3">
@@ -664,7 +698,7 @@ export default function AdminStoragePage() {
 
               {/* Summary cards */}
               <div className="grid grid-cols-2 gap-3 shrink-0">
-                <div className="rounded-xl bg-card p-4">
+                <div className="rounded-xl bg-secondary p-4">
                   <p className="text-xs text-muted-foreground">Cached Keys</p>
                   <p className="text-xl font-semibold tabular-nums mt-1">
                     {cacheCount.toLocaleString()}
@@ -675,13 +709,13 @@ export default function AdminStoragePage() {
                     )}
                   </p>
                 </div>
-                <div className="rounded-xl bg-card p-4">
+                <div className="rounded-xl bg-secondary p-4">
                   <p className="text-xs text-muted-foreground">Cache Types</p>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {Object.entries(cacheTypeCounts).map(([type, count]) => (
                       <span
                         key={type}
-                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
+                        className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-xs"
                       >
                         <span className="text-muted-foreground">{type}:</span>
                         <span className="font-medium tabular-nums">{count}</span>

@@ -91,6 +91,8 @@ describe("GET /api/admin/storage", () => {
     expect(data.summary.total_tokens).toBe(1500000);
     expect(data.summary.total_sessions).toBe(75);
     expect(data.summary.total_usage_rows).toBe(150);
+    expect(data.summary.total_messages).toBe(300);
+    expect(data.summary.total_duration_seconds).toBe(5400);
   });
 
   it("should return empty results when tables do not exist", async () => {
@@ -107,6 +109,8 @@ describe("GET /api/admin/storage", () => {
       total_tokens: 0,
       total_sessions: 0,
       total_usage_rows: 0,
+      total_messages: 0,
+      total_duration_seconds: 0,
     });
   });
 

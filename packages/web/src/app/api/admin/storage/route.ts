@@ -20,6 +20,8 @@ export interface StorageSummary {
   total_tokens: number;
   total_sessions: number;
   total_usage_rows: number;
+  total_messages: number;
+  total_duration_seconds: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +46,8 @@ export async function GET(request: Request) {
       total_tokens: users.reduce((s, r) => s + r.total_tokens, 0),
       total_sessions: users.reduce((s, r) => s + r.session_count, 0),
       total_usage_rows: users.reduce((s, r) => s + r.usage_row_count, 0),
+      total_messages: users.reduce((s, r) => s + r.total_messages, 0),
+      total_duration_seconds: users.reduce((s, r) => s + r.total_duration_seconds, 0),
     };
 
     return NextResponse.json({ users, summary });
@@ -52,7 +56,7 @@ export async function GET(request: Request) {
     if (msg.includes("no such table")) {
       return NextResponse.json({
         users: [],
-        summary: { total_users: 0, total_tokens: 0, total_sessions: 0, total_usage_rows: 0 },
+        summary: { total_users: 0, total_tokens: 0, total_sessions: 0, total_usage_rows: 0, total_messages: 0, total_duration_seconds: 0 },
       });
     }
     console.error("Failed to load storage stats:", err);
