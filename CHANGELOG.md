@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.20.2
+
+### Added
+- Add summary cards and fix table header in Storage page
+
+### Changed
+- Ignore .claude directory
+- Redesign Storage page with two-column layout
+- Split Compare Users into selection + result pages
+- Add CI monitoring reminder after release
+- Add railway up bypass warning to retrospective
+
+### Fixed
+- Improve Compare Users validation and accessibility
+- Add Medal and GitCompareArrows icons to sidebar icon map
+- Storage page color hierarchy and scroll behavior
+- Improve Compare Users checkbox with purple checkmark
+- Add lockfile sync check to pre-commit (G0 gate)
+- Add @pew/core dependency for type imports
+
 ## v2.20.1
 
 ### Added
