@@ -9,6 +9,7 @@ import { executeSync } from "./commands/sync.js";
 import { executeSessionSync } from "./commands/session-sync.js";
 import { executeStatus } from "./commands/status.js";
 import { executeLogin, resolveHost } from "./commands/login.js";
+import { executeLogout } from "./commands/logout.js";
 import { executeUpload } from "./commands/upload.js";
 import { executeSessionUpload } from "./commands/session-upload.js";
 import { executeNotify } from "./commands/notify.js";
@@ -482,6 +483,41 @@ const loginCommand = defineCommand({
   },
 });
 
+const logoutCommand = defineCommand({
+  meta: {
+    name: "logout",
+    description: "Disconnect your CLI from the pew dashboard",
+  },
+  args: {
+    dev: {
+      type: "boolean",
+      description: "Use the dev host (pew.dev.hexly.ai)",
+      default: false,
+    },
+  },
+  async run() {
+    const paths = resolveDefaultPaths();
+    const dev = isDevMode();
+
+    const result = await executeLogout({
+      configDir: paths.stateDir,
+      dev,
+    });
+
+    if (result.alreadyLoggedOut) {
+      log.info("Not logged in.");
+      return;
+    }
+
+    if (result.success) {
+      log.success("Logged out successfully.");
+    } else {
+      log.error(`Logout failed: ${result.error}`);
+      process.exitCode = 1;
+    }
+  },
+});
+
 const notifyCommand = defineCommand({
   meta: {
     name: "notify",
@@ -825,6 +861,7 @@ export const main = defineCommand({
     sync: syncCommand,
     status: statusCommand,
     login: loginCommand,
+    logout: logoutCommand,
     notify: notifyCommand,
     init: initCommand,
     uninstall: uninstallCommand,
