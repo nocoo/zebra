@@ -53,14 +53,24 @@ export async function GET(request: Request) {
     );
   }
 
-  const userIds = userIdsParam
+  // Parse, dedupe, and preserve order
+  const rawIds = userIdsParam
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
 
-  if (userIds.length === 0) {
+  const seen = new Set<string>();
+  const userIds: string[] = [];
+  for (const id of rawIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      userIds.push(id);
+    }
+  }
+
+  if (userIds.length < 2) {
     return NextResponse.json(
-      { error: "At least one user ID is required" },
+      { error: "At least 2 unique user IDs are required" },
       { status: 400 }
     );
   }
@@ -99,10 +109,26 @@ export async function GET(request: Request) {
   try {
     // Fetch user info
     const userPlaceholders = userIds.map(() => "?").join(", ");
-    const { results: users } = await db.query<CompareUser>(
+    const { results: usersUnordered } = await db.query<CompareUser>(
       `SELECT id, name, email, image, slug FROM users WHERE id IN (${userPlaceholders})`,
       userIds
     );
+
+    // Re-order users to match request order and filter out non-existent IDs
+    const userMap = new Map(usersUnordered.map((u) => [u.id, u]));
+    const users: CompareUser[] = [];
+    for (const id of userIds) {
+      const user = userMap.get(id);
+      if (user) users.push(user);
+    }
+
+    // Validate we have at least 2 valid users
+    if (users.length < 2) {
+      return NextResponse.json(
+        { error: "At least 2 valid users are required" },
+        { status: 400 }
+      );
+    }
 
     // Build usage query with optional filters
     let usageQuery = `

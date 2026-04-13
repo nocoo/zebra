@@ -110,6 +110,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   pricing: "Token Pricing",
   invites: "Invite Codes",
   compare: "Compare Users",
+  result: "Results",
 };
 
 /**

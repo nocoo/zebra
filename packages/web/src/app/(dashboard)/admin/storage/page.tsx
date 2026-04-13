@@ -784,7 +784,7 @@ export default function AdminStoragePage() {
                         <button
                           onClick={() => handleInvalidateKey(key)}
                           disabled={isDeleting}
-                          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 focus:text-destructive focus:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
                           title="Delete this cache entry"
                         >
                           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />

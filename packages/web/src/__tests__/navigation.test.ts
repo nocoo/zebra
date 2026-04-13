@@ -233,6 +233,7 @@ describe("route labels", () => {
       pricing: "Token Pricing",
       invites: "Invite Codes",
       compare: "Compare Users",
+      result: "Results",
     });
   });
 });

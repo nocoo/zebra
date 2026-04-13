@@ -319,7 +319,9 @@ function CompareResultContent() {
               Compare Users
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Comparing {userIds.length} user{userIds.length !== 1 ? "s" : ""}.
+              {data
+                ? `Comparing ${data.users.length} user${data.users.length !== 1 ? "s" : ""}.`
+                : "Loading comparison..."}
             </p>
           </div>
         </div>
