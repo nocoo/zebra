@@ -270,7 +270,7 @@ export function useUsageData(
   }, [fetchData]);
 
   // Memoize derived data to avoid recalculation on every render
-  const tzOffset = new Date().getTimezoneOffset();
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
   const daily = useMemo(
     () => (data ? toDailyPoints(data.records, tzOffset) : []),
     [data, tzOffset],
