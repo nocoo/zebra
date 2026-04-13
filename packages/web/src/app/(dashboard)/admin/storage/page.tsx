@@ -443,9 +443,9 @@ export default function AdminStoragePage() {
         {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Column: DB Usage */}
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-12rem)] lg:overflow-hidden">
               {/* Section header */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Database
                   className="h-4 w-4 text-muted-foreground"
                   strokeWidth={1.5}
@@ -455,20 +455,20 @@ export default function AdminStoragePage() {
 
               {/* Summary cards */}
               {summary && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-secondary p-4">
+                <div className="grid grid-cols-3 gap-3 shrink-0">
+                  <div className="rounded-xl bg-card p-4">
                     <p className="text-xs text-muted-foreground">Users</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_users.toLocaleString()}
                     </p>
                   </div>
-                  <div className="rounded-xl bg-secondary p-4">
+                  <div className="rounded-xl bg-card p-4">
                     <p className="text-xs text-muted-foreground">Usage Rows</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_usage_rows.toLocaleString()}
                     </p>
                   </div>
-                  <div className="rounded-xl bg-secondary p-4">
+                  <div className="rounded-xl bg-card p-4">
                     <p className="text-xs text-muted-foreground">Sessions</p>
                     <p className="text-xl font-semibold tabular-nums mt-1">
                       {summary.total_sessions.toLocaleString()}
@@ -479,7 +479,7 @@ export default function AdminStoragePage() {
 
               {/* Search bar */}
               {users.length > 0 && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="relative flex-1">
                     <Search
                       className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
@@ -490,7 +490,7 @@ export default function AdminStoragePage() {
                       placeholder="Filter users..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background pl-9 pr-8 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
+                      className="w-full rounded-lg border border-border bg-card pl-9 pr-8 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
                     />
                     {search && (
                       <button
@@ -509,13 +509,13 @@ export default function AdminStoragePage() {
 
               {/* User table */}
               {filteredUsers.length === 0 ? (
-                <div className="rounded-xl bg-secondary p-8 text-center text-sm text-muted-foreground">
+                <div className="rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
                   {search ? "No users match your filter." : "No users found."}
                 </div>
               ) : (
-                <div className="rounded-xl bg-secondary p-1 overflow-x-auto max-h-[500px] overflow-y-auto">
+                <div className="rounded-xl bg-card p-1 overflow-x-auto flex-1 lg:overflow-y-auto min-h-0">
                   <table className="w-full">
-                    <thead className="sticky top-0 bg-secondary">
+                    <thead className="sticky top-0 bg-card">
                       <tr className="border-b border-border">
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
                           User
@@ -619,9 +619,9 @@ export default function AdminStoragePage() {
             </div>
 
             {/* Right Column: KV Cache */}
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-12rem)] lg:overflow-hidden">
               {/* Section header with actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <HardDrive
                     className="h-4 w-4 text-muted-foreground"
@@ -633,7 +633,7 @@ export default function AdminStoragePage() {
                   <button
                     onClick={fetchCacheKeys}
                     disabled={cacheLoading}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-md bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
                   >
                     <RefreshCw
                       className={cn(
@@ -657,14 +657,14 @@ export default function AdminStoragePage() {
 
               {/* Cache error */}
               {cacheError && (
-                <div className="rounded-md bg-destructive/10 p-3 text-xs text-destructive">
+                <div className="rounded-md bg-destructive/10 p-3 text-xs text-destructive shrink-0">
                   {cacheError}
                 </div>
               )}
 
               {/* Summary cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-secondary p-4">
+              <div className="grid grid-cols-2 gap-3 shrink-0">
+                <div className="rounded-xl bg-card p-4">
                   <p className="text-xs text-muted-foreground">Cached Keys</p>
                   <p className="text-xl font-semibold tabular-nums mt-1">
                     {cacheCount.toLocaleString()}
@@ -675,13 +675,13 @@ export default function AdminStoragePage() {
                     )}
                   </p>
                 </div>
-                <div className="rounded-xl bg-secondary p-4">
+                <div className="rounded-xl bg-card p-4">
                   <p className="text-xs text-muted-foreground">Cache Types</p>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {Object.entries(cacheTypeCounts).map(([type, count]) => (
                       <span
                         key={type}
-                        className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-xs"
+                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
                       >
                         <span className="text-muted-foreground">{type}:</span>
                         <span className="font-medium tabular-nums">{count}</span>
@@ -696,18 +696,18 @@ export default function AdminStoragePage() {
 
               {/* Cache key list */}
               {cacheLoading ? (
-                <div className="rounded-xl bg-secondary p-4 space-y-2">
+                <div className="rounded-xl bg-card p-4 space-y-2">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : cacheKeys.length === 0 ? (
-                <div className="rounded-xl bg-secondary p-8 text-center text-sm text-muted-foreground">
+                <div className="rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
                   No cached entries. Cache will be populated as users access
                   pricing, seasons, and leaderboards.
                 </div>
               ) : (
-                <div className="rounded-xl bg-secondary p-1 space-y-1 max-h-[400px] overflow-y-auto">
+                <div className="rounded-xl bg-card p-1 space-y-1 flex-1 lg:overflow-y-auto min-h-0">
                   {cacheKeys.map((key) => {
                     const { type, description } = describeCacheKey(key);
                     const isDeleting = cacheDeletingKey === key;
@@ -716,7 +716,7 @@ export default function AdminStoragePage() {
                       <div
                         key={key}
                         className={cn(
-                          "flex items-start gap-3 rounded-lg bg-background p-3 group",
+                          "flex items-start gap-3 rounded-lg bg-secondary p-3 group",
                           isDeleting && "opacity-50"
                         )}
                       >
@@ -734,7 +734,7 @@ export default function AdminStoragePage() {
                                 type === "Leaderboard" &&
                                   "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
                                 type === "Unknown" &&
-                                  "bg-secondary text-muted-foreground"
+                                  "bg-card text-muted-foreground"
                               )}
                             >
                               {type}
