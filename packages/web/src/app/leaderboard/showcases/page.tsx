@@ -6,7 +6,7 @@
 
 import { auth } from "@/auth";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
-import { PageHeader } from "@/components/leaderboard/page-header";
+import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-title";
 import { ShowcasesContent } from "./showcases-content";
 
 export const metadata = {
@@ -20,17 +20,10 @@ export default async function ShowcasesPage() {
 
   return (
     <>
-      <PageHeader>
-        <h1 className="tracking-tight text-foreground">
-          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-          <span className="text-[19px] font-normal text-muted-foreground">
-            Showcases
-          </span>
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Community-submitted GitHub projects worth checking out.
-        </p>
-      </PageHeader>
+      <LeaderboardPageTitle
+        subtitle="Showcases"
+        description="Community-submitted GitHub projects worth checking out."
+      />
 
       <main className="flex-1 py-4 space-y-4">
         <LeaderboardNav />

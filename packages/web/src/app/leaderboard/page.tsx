@@ -7,7 +7,7 @@ import {
 } from "@/hooks/use-leaderboard";
 import { useLeaderboardScope } from "@/hooks/use-leaderboard-scope";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
-import { PageHeader } from "@/components/leaderboard/page-header";
+import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-title";
 import { PeriodTabs } from "@/components/leaderboard/period-tabs";
 import { ScopeDropdown } from "@/components/leaderboard/scope-dropdown";
 import { LeaderboardPageShell } from "@/components/leaderboard/leaderboard-page-shell";
@@ -56,17 +56,10 @@ export default function LeaderboardPage() {
   return (
     <>
       {/* Header */}
-      <PageHeader>
-        <h1 className="tracking-tight text-foreground">
-          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-          <span className="text-[19px] font-normal text-muted-foreground">
-            Leaderboard
-          </span>
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Join the ultimate AI token horse race today.
-        </p>
-      </PageHeader>
+      <LeaderboardPageTitle
+        subtitle="Leaderboard"
+        description="Join the ultimate AI token horse race today."
+      />
 
       {/* Main content */}
       <main className="flex-1 py-4 space-y-4">

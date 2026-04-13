@@ -47,7 +47,7 @@ import {
   formatShortTokens,
 } from "@/lib/achievement-helpers";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
-import { PageHeader } from "@/components/leaderboard/page-header";
+import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-title";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserProfileDialog } from "@/components/user-profile-dialog";
 
@@ -627,17 +627,10 @@ export default function AchievementsPage() {
   return (
     <>
       {/* Header */}
-      <PageHeader>
-        <h1 className="tracking-tight text-foreground">
-          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-          <span className="text-[19px] font-normal text-muted-foreground">
-            Achievements
-          </span>
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Track your AI coding milestones and compete with others.
-        </p>
-      </PageHeader>
+      <LeaderboardPageTitle
+        subtitle="Achievements"
+        description="Track your AI coding milestones and compete with others."
+      />
 
       {/* Main content */}
       <main className="flex-1 py-4 space-y-6">

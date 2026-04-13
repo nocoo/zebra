@@ -17,7 +17,7 @@ import { formatSeasonDate } from "@/lib/seasons";
 import { CheckRuling } from "@/components/leaderboard/check-ruling";
 import { StatusBadge } from "@/components/leaderboard/status-badge";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
-import { PageHeader } from "@/components/leaderboard/page-header";
+import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-title";
 
 // ---------------------------------------------------------------------------
 // Timeline dot — status indicator with optional pulse for active seasons
@@ -158,17 +158,10 @@ export default function SeasonsPage() {
   return (
     <>
       {/* Header */}
-      <PageHeader>
-        <h1 className="tracking-tight text-foreground">
-          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-          <span className="text-[19px] font-normal text-muted-foreground">
-            Seasons
-          </span>
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Compete as teams across time-boxed seasons.
-        </p>
-      </PageHeader>
+      <LeaderboardPageTitle
+        subtitle="Seasons"
+        description="Compete as teams across time-boxed seasons."
+      />
 
       {/* Main content */}
       <main className="flex-1 py-4 space-y-4">
