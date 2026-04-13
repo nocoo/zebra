@@ -94,8 +94,10 @@ export default function LeaderboardPage() {
         const teamsJson = await teamsRes.json();
         setTeams(teamsJson.teams ?? []);
       }
-      // Mark as loaded only on success
-      setOrgsLoaded(true);
+      // Mark as loaded only when BOTH fetches succeeded
+      if (orgsRes.ok && teamsRes.ok) {
+        setOrgsLoaded(true);
+      }
     } catch {
       // Silently fail — scope dropdown optional
       // Do NOT set orgsLoaded = true so validation effect won't run
