@@ -1,9 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { agentColor } from "@/lib/palette";
 import { sourceLabel } from "@/hooks/use-usage-data";
 import {
@@ -12,10 +10,15 @@ import {
 } from "@/hooks/use-leaderboard";
 import { useLeaderboardScope } from "@/hooks/use-leaderboard-scope";
 import { LeaderboardNav } from "@/components/leaderboard/leaderboard-nav";
-import { PageHeader } from "@/components/leaderboard/page-header";
+import { LeaderboardPageTitle } from "@/components/leaderboard/leaderboard-page-title";
 import { PeriodTabs } from "@/components/leaderboard/period-tabs";
 import { ScopeDropdown } from "@/components/leaderboard/scope-dropdown";
 import { LeaderboardPageShell } from "@/components/leaderboard/leaderboard-page-shell";
+import {
+  FilterDropdown,
+  type FilterDropdownItem,
+} from "@/components/leaderboard/filter-dropdown";
+import { PAGE_SIZE } from "@/lib/leaderboard-constants";
 
 // ---------------------------------------------------------------------------
 // Agent list (matches VALID_SOURCES in API route)
@@ -38,92 +41,11 @@ const AGENTS = [
 const AGENT_SET = new Set<string>(AGENTS);
 const DEFAULT_AGENT = "claude-code";
 
-// ---------------------------------------------------------------------------
-// AgentSelector dropdown
-// ---------------------------------------------------------------------------
-
-function AgentSelector({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (source: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const color = agentColor(value);
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex items-center gap-2 rounded-lg bg-secondary px-3 py-[10px] text-sm font-medium transition-colors",
-          "text-foreground hover:bg-accent",
-        )}
-      >
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: color.color }}
-        />
-        {sourceLabel(value)}
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
-          )}
-          strokeWidth={1.5}
-        />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-0.5 min-w-[200px] max-h-[320px] overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg space-y-1">
-          {AGENTS.map((agent) => {
-            const c = agentColor(agent);
-            return (
-              <button
-                key={agent}
-                onClick={() => {
-                  onChange(agent);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-                  value === agent
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: c.color }}
-                />
-                {sourceLabel(agent)}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 20;
+const AGENT_ITEMS: FilterDropdownItem[] = AGENTS.map((a) => ({
+  key: a,
+  label: sourceLabel(a),
+  color: agentColor(a).color,
+}));
 
 // ---------------------------------------------------------------------------
 // Page
@@ -194,17 +116,10 @@ function AgentsLeaderboardContent() {
   return (
     <>
       {/* Header */}
-      <PageHeader>
-        <h1 className="tracking-tight text-foreground">
-          <span className="text-[36px] font-bold font-handwriting leading-none mr-2">pew</span>
-          <span className="text-[19px] font-normal text-muted-foreground">
-            Leaderboard
-          </span>
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Top users by agent — who&apos;s burning the most tokens?
-        </p>
-      </PageHeader>
+      <LeaderboardPageTitle
+        subtitle="Leaderboard"
+        description="Top users by agent — who's burning the most tokens?"
+      />
 
       {/* Main content */}
       <main className="flex-1 py-4 space-y-4">
@@ -217,7 +132,11 @@ function AgentsLeaderboardContent() {
           style={{ animationDelay: "180ms" }}
         >
           {/* Agent selector */}
-          <AgentSelector value={selectedAgent} onChange={handleAgentChange} />
+          <FilterDropdown
+            value={selectedAgent}
+            items={AGENT_ITEMS}
+            onChange={handleAgentChange}
+          />
 
           {/* Period tabs */}
           <PeriodTabs value={period} onChange={setPeriod} />
