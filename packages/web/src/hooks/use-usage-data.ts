@@ -205,6 +205,9 @@ export function useUsageData(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Frozen per mount — acceptable; page refresh handles DST changes
+  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []);
+
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
@@ -228,7 +231,7 @@ export function useUsageData(
       if (source) params.set("source", source);
       if (deviceId) params.set("deviceId", deviceId);
       if (granularity === "day") {
-        params.set("tzOffset", String(new Date().getTimezoneOffset()));
+        params.set("tzOffset", String(tzOffset));
       }
 
       const res = await fetch(`/api/usage?${params.toString()}`, signal ? { signal } : undefined);
@@ -255,7 +258,7 @@ export function useUsageData(
         setLoading(false);
       }
     }
-  }, [days, fromDate, toDate, source, deviceId, granularity]);
+  }, [days, fromDate, toDate, source, deviceId, granularity, tzOffset]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -271,7 +274,6 @@ export function useUsageData(
   }, [fetchData]);
 
   // Memoize derived data to avoid recalculation on every render
-  const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []); // frozen per mount — acceptable; page refresh handles DST changes
   const { daily, sources, models } = useDerivedUsageData(data?.records ?? null, tzOffset);
 
   return { data, daily, sources, models, loading, error, refetch: () => fetchData() };
