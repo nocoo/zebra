@@ -63,7 +63,7 @@ export function useSessionData(
     { enabled, initialLoading: enabled },
   );
 
-  const records = data?.records ?? [];
+  const records = useMemo(() => data?.records ?? [], [data]);
 
   const tzOffset = useMemo(() => new Date().getTimezoneOffset(), []); // frozen per mount — acceptable; page refresh handles DST changes
   const overview = useMemo(() => toSessionOverview(records), [records]);
