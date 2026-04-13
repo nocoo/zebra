@@ -30,6 +30,7 @@ import { LeaderboardSkeleton } from "@/components/leaderboard/leaderboard-skelet
 import { PageHeader } from "@/components/leaderboard/page-header";
 import { TokenTierBadge } from "@/components/leaderboard/token-tier-badge";
 import { UserProfileDialog } from "@/components/user-profile-dialog";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Trophy } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -320,7 +321,7 @@ export default function SeasonLeaderboardPage() {
     : undefined;
 
   return (
-    <>
+    <TooltipProvider>
       {/* Header — context-aware: shows season name + status when loaded */}
       <PageHeader>
         {data ? (
@@ -428,6 +429,6 @@ export default function SeasonLeaderboardPage() {
           seasonEnd={seasonEndExclusive}
         />
       )}
-    </>
+    </TooltipProvider>
   );
 }
