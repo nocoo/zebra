@@ -93,9 +93,6 @@ export function useFetchData<T>(
 
     const controller = new AbortController();
 
-    // Clear stale data when URL changes
-    setData(null);
-
     fetchData(controller.signal);
 
     return () => {
