@@ -1,9 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { modelColor } from "@/lib/palette";
 import { shortModel } from "@/lib/model-helpers";
 import {
@@ -16,6 +14,10 @@ import { PageHeader } from "@/components/leaderboard/page-header";
 import { PeriodTabs } from "@/components/leaderboard/period-tabs";
 import { ScopeDropdown } from "@/components/leaderboard/scope-dropdown";
 import { LeaderboardPageShell } from "@/components/leaderboard/leaderboard-page-shell";
+import {
+  FilterDropdown,
+  type FilterDropdownItem,
+} from "@/components/leaderboard/filter-dropdown";
 
 // ---------------------------------------------------------------------------
 // Model list — Top 20 by token usage from D1 (2026-04-10 snapshot)
@@ -49,86 +51,11 @@ const MODEL_LIST = [
 ];
 const DEFAULT_MODEL = "claude-opus-4.6-1m";
 
-// ---------------------------------------------------------------------------
-// ModelSelector dropdown
-// ---------------------------------------------------------------------------
-
-function ModelSelector({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (model: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const color = modelColor(value);
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex items-center gap-2 rounded-lg bg-secondary px-3 py-[10px] text-sm font-medium transition-colors",
-          "text-foreground hover:bg-accent",
-        )}
-      >
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: color.color }}
-        />
-        {shortModel(value)}
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
-          )}
-          strokeWidth={1.5}
-        />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-0.5 min-w-[220px] max-h-[320px] overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg space-y-1">
-          {MODEL_LIST.map((model) => {
-            const c = modelColor(model);
-            return (
-              <button
-                key={model}
-                onClick={() => {
-                  onChange(model);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-                  value === model
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: c.color }}
-                />
-                {shortModel(model)}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+const MODEL_ITEMS: FilterDropdownItem[] = MODEL_LIST.map((m) => ({
+  key: m,
+  label: shortModel(m),
+  color: modelColor(m).color,
+}));
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -230,7 +157,12 @@ function ModelsLeaderboardContent() {
           style={{ animationDelay: "180ms" }}
         >
           {/* Model selector */}
-          <ModelSelector value={selectedModel} onChange={handleModelChange} />
+          <FilterDropdown
+            value={selectedModel}
+            items={MODEL_ITEMS}
+            onChange={handleModelChange}
+            panelMinWidth="220px"
+          />
 
           {/* Period tabs */}
           <PeriodTabs value={period} onChange={setPeriod} />
