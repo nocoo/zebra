@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CheckRuling } from "@/components/leaderboard/check-ruling";
 import { RankBadge } from "@/components/leaderboard/rank-badge";
 import { TokenTierBadge } from "@/components/leaderboard/token-tier-badge";
-import { TeamLogoBadge } from "@/components/leaderboard/scope-dropdown";
+import { TeamLogoBadge } from "@/components/leaderboard/logo-icons";
 import { ROW_CLASSES, COL_RANK, COL_SESSIONS, COL_DURATION, COL_TOKENS } from "@/components/leaderboard/leaderboard-layout";
 import type { LeaderboardEntry } from "@/hooks/use-leaderboard";
 
