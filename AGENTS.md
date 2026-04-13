@@ -6,4 +6,6 @@ This file records repository operations performed by agents.
 - Request: add chart legend filtering interaction.
 - Implementation: normal legend click isolates target; cmd/ctrl+click excludes target.
 - Git flow: create feature branch, commit changes, push branch, open PR to `nocoo/pew`.
-- PR: pending (to be updated after creation).
+- Branch: `feat/legend-click-command-filter`
+- Commit: `7c18697b`
+- PR: https://github.com/nocoo/pew/pull/91
