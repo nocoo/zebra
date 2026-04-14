@@ -4,15 +4,19 @@
  * Flow:
  * 1. CLI starts local HTTP server, opens browser to this URL with ?callback=...
  * 2. User is already signed in via Google OAuth (or redirected to /login first)
- * 3. This endpoint fetches/generates user's api_key
- * 4. Redirects back to CLI's local server with api_key + email in query params
+ * 3. This endpoint fetches/generates user's api_key (stored as SHA-256 hash)
+ * 4. Redirects back to CLI's local server with api_key in URL fragment (not query string)
  *
- * Security: callback URL must be localhost or 127.0.0.1.
+ * Security:
+ * - Callback URL must be localhost or 127.0.0.1
+ * - API key is passed via URL fragment to avoid CWE-598 (query string exposure)
+ * - API key is stored as SHA-256 hash — the raw key is only shown once at creation
  */
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import { generateApiKey, hashApiKey } from "@/lib/crypto-utils";
 
 /**
  * Resolve the public-facing origin from the request.
@@ -87,24 +91,48 @@ export async function GET(request: Request) {
   const email = authResult.email ?? "";
 
   try {
-    let apiKey = await dbRead.getUserApiKey(userId);
+    const existingKey = await dbRead.getUserApiKey(userId);
+    let rawApiKey: string;
 
-    if (!apiKey) {
-      // Generate a new api_key
-      apiKey = generateApiKey();
-      await dbWrite.execute(
-        "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
-        [apiKey, userId]
+    if (!existingKey) {
+      // Generate a new api_key and store as SHA-256 hash
+      const newKey = generateApiKey();
+      const hashedKey = hashApiKey(newKey);
+      // Use atomic conditional update to guard against race conditions
+      const updateResult = await dbWrite.execute(
+        "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ? AND api_key IS NULL",
+        [hashedKey, userId]
       );
+
+      if (updateResult.changes === 1) {
+        rawApiKey = newKey;
+      } else {
+        // Another request already set a key — cannot recover raw key from hash
+        return NextResponse.json(
+          { error: "API key already exists. Use your existing key or reset it." },
+          { status: 409 }
+        );
+      }
+    } else if (existingKey.startsWith("hash:")) {
+      // Already hashed — cannot recover raw key
+      return NextResponse.json(
+        { error: "API key already exists. Use your existing key or reset it." },
+        { status: 409 }
+      );
+    } else {
+      // Legacy plaintext key — return it
+      rawApiKey = existingKey;
     }
 
-    // 4. Redirect back to CLI with api_key + state
+    // 4. Redirect back to CLI with api_key in URL fragment (not query string).
+    // Fragments are NOT sent to servers, not logged in proxy/access logs,
+    // and not stored in most browser history implementations (CWE-598 mitigation).
     const redirectUrl = new URL(callbackUrl.toString());
-    redirectUrl.searchParams.set("api_key", apiKey);
-    redirectUrl.searchParams.set("email", email);
     if (state) {
       redirectUrl.searchParams.set("state", state);
     }
+    // Append credentials as fragment — CLI local server parses fragment via JS
+    redirectUrl.hash = `api_key=${encodeURIComponent(rawApiKey)}&email=${encodeURIComponent(email)}`;
 
     return NextResponse.redirect(redirectUrl.toString());
   } catch (err) {
@@ -114,14 +142,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
-
-/** Generate a random API key: pk_ prefix + 32 hex chars */
-function generateApiKey(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
-    ""
-  );
-  return `pk_${hex}`;
 }

@@ -166,8 +166,9 @@ describe("resolveUser", () => {
       auth.mockResolvedValue(null); // No session
     });
 
-    it("should resolve user from valid API key", async () => {
+    it("should resolve user from valid API key (hashed lookup)", async () => {
       const mockClient = createMockClient();
+      // First call with hashed key succeeds
       mockClient.getUserByApiKey.mockResolvedValueOnce({
         id: "u-api-1",
         email: "apiuser@example.com",
@@ -180,17 +181,52 @@ describe("resolveUser", () => {
         userId: "u-api-1",
         email: "apiuser@example.com",
       });
-      expect(mockClient.getUserByApiKey).toHaveBeenCalledWith("pk_test_key_123");
+      // Should be called with the hashed key (hash:sha256hex)
+      expect(mockClient.getUserByApiKey).toHaveBeenCalledWith(
+        expect.stringMatching(/^hash:[a-f0-9]{64}$/)
+      );
+    });
+
+    it("should resolve user from legacy plaintext API key", async () => {
+      const mockClient = createMockClient();
+      // First call with hashed key returns null (no match for hash)
+      mockClient.getUserByApiKey.mockResolvedValueOnce(null);
+      // Second call with plaintext key succeeds (legacy)
+      mockClient.getUserByApiKey.mockResolvedValueOnce({
+        id: "u-api-legacy",
+        email: "legacy@example.com",
+      });
+      getDbRead.mockResolvedValueOnce(mockClient);
+
+      const result = await resolveUser(makeRequest("pk_legacy_key"));
+
+      expect(result).toEqual({
+        userId: "u-api-legacy",
+        email: "legacy@example.com",
+      });
+      // First call: hashed key; second call: plaintext key
+      expect(mockClient.getUserByApiKey).toHaveBeenCalledTimes(2);
+      expect(mockClient.getUserByApiKey).toHaveBeenNthCalledWith(
+        1,
+        expect.stringMatching(/^hash:[a-f0-9]{64}$/)
+      );
+      expect(mockClient.getUserByApiKey).toHaveBeenNthCalledWith(
+        2,
+        "pk_legacy_key"
+      );
     });
 
     it("should return null for invalid API key (no DB match)", async () => {
       const mockClient = createMockClient();
-      mockClient.getUserByApiKey.mockResolvedValueOnce(null);
+      // Both hashed and plaintext lookups return null
+      mockClient.getUserByApiKey.mockResolvedValue(null);
       getDbRead.mockResolvedValueOnce(mockClient);
 
       const result = await resolveUser(makeRequest("pk_bad_key"));
 
       expect(result).toBeNull();
+      // Should have tried both hashed and plaintext lookups
+      expect(mockClient.getUserByApiKey).toHaveBeenCalledTimes(2);
     });
 
     it("should return null when no Authorization header", async () => {

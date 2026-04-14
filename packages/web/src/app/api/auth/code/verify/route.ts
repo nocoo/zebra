@@ -4,27 +4,22 @@
  * Called by CLI with `pew login --code XXXX-XXXX`.
  * Returns the user's api_key (generating one if needed) and email.
  *
- * Security: Any failed verification attempt on an existing code immediately
- * invalidates it (failed_attempts > 0). Error messages are intentionally
- * generic to avoid leaking information about code existence.
+ * Security:
+ * - Any failed verification attempt on an existing code immediately invalidates it
+ *   (failed_attempts > 0). Error messages are intentionally generic to avoid
+ *   leaking information about code existence.
+ * - API keys are stored as SHA-256 hashes — the raw key is returned only once
+ *   at creation time. Existing hashed keys cannot be retrieved.
  *
  * No session required — the code itself is the authentication.
  */
 
 import { NextResponse } from "next/server";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import { generateApiKey, hashApiKey } from "@/lib/crypto-utils";
 
 // Generic error message for all auth failures (avoids information leakage)
 const AUTH_ERROR = "Invalid or expired code";
-
-
-/** Generate a random API key: pk_ prefix + 32 hex chars */
-function generateApiKey(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `pk_${hex}`;
-}
 
 export async function POST(request: Request) {
   // 1. Parse and validate request body
@@ -88,31 +83,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 500 });
     }
 
-    let apiKey = await dbRead.getUserApiKey(user.id);
+    const existingKey = await dbRead.getUserApiKey(user.id);
 
     // 5. Generate api_key if not exists using atomic conditional update
     // Uses "WHERE api_key IS NULL" to ensure only one concurrent request succeeds in writing.
     // If another request already set a key, this UPDATE affects 0 rows and we re-read.
-    if (!apiKey) {
+    //
+    // The raw key is returned to the user ONLY here — we store the SHA-256 hash.
+    // For existing (legacy plaintext) keys, the user must re-login to rotate to a hashed key.
+    let rawApiKey: string | null = null;
+
+    if (!existingKey) {
       const newKey = generateApiKey();
+      const hashedKey = hashApiKey(newKey);
       const updateKeyResult = await dbWrite.execute(
         `UPDATE users SET api_key = ?, updated_at = datetime('now')
          WHERE id = ? AND api_key IS NULL`,
-        [newKey, user.id]
+        [hashedKey, user.id]
       );
 
       if (updateKeyResult.changes === 1) {
         // We won the race — use our generated key
-        apiKey = newKey;
+        rawApiKey = newKey;
       } else {
-        // Another request already set a key — re-read to get the actual value
-        apiKey = await dbRead.getUserApiKey(user.id);
-
-        if (!apiKey) {
-          // Shouldn't happen, but defensive
-          return NextResponse.json({ error: "Failed to generate API key" }, { status: 500 });
-        }
+        // Another request already set a key — the user must use that key.
+        // We cannot recover the raw key from the hash, so return an error
+        // asking the user to use their existing key or reset it.
+        return NextResponse.json(
+          { error: "API key already exists. Use your existing key or reset it." },
+          { status: 409 }
+        );
       }
+    } else {
+      // User already has a key — for legacy plaintext keys, return the raw value.
+      // For hashed keys, we cannot return the raw key.
+      if (existingKey.startsWith("hash:")) {
+        return NextResponse.json(
+          { error: "API key already exists. Use your existing key or reset it." },
+          { status: 409 }
+        );
+      }
+      // Legacy plaintext key — return it (user should rotate via key reset)
+      rawApiKey = existingKey;
     }
 
     // 6. Now that we have the credentials ready, consume the code (atomic)
@@ -130,8 +142,9 @@ export async function POST(request: Request) {
     }
 
     // 7. Return credentials (code is now consumed)
+    // This is the ONLY time the raw API key is visible to the user.
     return NextResponse.json({
-      api_key: apiKey,
+      api_key: rawApiKey,
       email: user.email,
     });
   } catch (err) {

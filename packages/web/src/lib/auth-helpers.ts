@@ -7,6 +7,7 @@
 
 import { auth } from "@/auth";
 import { getDbRead } from "@/lib/db";
+import { hashApiKey } from "@/lib/crypto-utils";
 
 /** The fixed user ID used when E2E auth is bypassed */
 export const E2E_TEST_USER_ID = "e2e-test-user-id";
@@ -42,13 +43,23 @@ export async function resolveUser(
   }
 
   // Bearer api_key auth
+  // Try hashed lookup first (new keys), then fall back to plaintext (legacy keys)
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const apiKey = authHeader.slice(7);
     const db = await getDbRead();
-    const row = await db.getUserByApiKey(apiKey);
+
+    // Try hashed key lookup (new keys stored as "hash:<sha256>")
+    const hashedKey = hashApiKey(apiKey);
+    const row = await db.getUserByApiKey(hashedKey);
     if (row) {
       return { userId: row.id, email: row.email };
+    }
+
+    // Fall back to plaintext lookup (legacy pre-migration keys)
+    const legacyRow = await db.getUserByApiKey(apiKey);
+    if (legacyRow) {
+      return { userId: legacyRow.id, email: legacyRow.email };
     }
   }
 

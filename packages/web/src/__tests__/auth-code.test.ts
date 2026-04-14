@@ -401,13 +401,14 @@ describe("POST /api/auth/code/verify", () => {
     expect(body.email).toBe("test@example.com");
 
     // Verify api_key update uses conditional WHERE api_key IS NULL
+    // The stored value should be a SHA-256 hash (hash:... prefix)
     expect(mockDbWrite.execute).toHaveBeenCalledWith(
       expect.stringContaining("WHERE id = ? AND api_key IS NULL"),
-      expect.arrayContaining([expect.stringMatching(/^pk_/), "user-123"])
+      expect.arrayContaining([expect.stringMatching(/^hash:[a-f0-9]{64}$/), "user-123"])
     );
   });
 
-  it("should re-read api_key if another request set it concurrently", async () => {
+  it("should return 409 if another request set the api_key concurrently", async () => {
     const mockDbRead = createMockDbRead();
     mockDbRead.getAuthCode.mockResolvedValue({
       code: "ABCD-1234",
@@ -423,16 +424,12 @@ describe("POST /api/auth/code/verify", () => {
       image: null,
       email_verified: null,
     });
-    mockDbRead.getUserApiKey
-      .mockResolvedValueOnce(null) // No existing key on first read
-      .mockResolvedValueOnce("pk_set_by_other_request"); // Another request already set it
+    mockDbRead.getUserApiKey.mockResolvedValueOnce(null); // No existing key on first read
     mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
 
-    // First UPDATE (api_key) returns 0 changes (lost race), second UPDATE (used_at) succeeds
+    // UPDATE (api_key) returns 0 changes (lost race)
     const mockDbWrite = createMockDbWrite();
-    mockDbWrite.execute
-      .mockResolvedValueOnce({ changes: 0 }) // Lost the race to set api_key
-      .mockResolvedValueOnce({ changes: 1 }); // Successfully consumed code
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 0 }); // Lost the race to set api_key
     mockGetDbWrite.mockResolvedValue(mockDbWrite as unknown as DbWrite);
 
     const request = new Request("http://localhost/api/auth/code/verify", {
@@ -442,11 +439,11 @@ describe("POST /api/auth/code/verify", () => {
     });
 
     const response = await verifyPOST(request);
-    expect(response.status).toBe(200);
+    // Since the raw key cannot be recovered from a hash, return 409
+    expect(response.status).toBe(409);
 
     const body = await response.json();
-    // Should return the key set by the other request, not our generated one
-    expect(body.api_key).toBe("pk_set_by_other_request");
+    expect(body.error).toContain("API key already exists");
   });
 
   it("should normalize code format (accept without hyphen)", async () => {
