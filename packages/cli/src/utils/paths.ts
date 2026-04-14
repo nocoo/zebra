@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { readdirSync, existsSync, statSync } from "node:fs";
+import { readdirSync, existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -22,8 +22,8 @@ function discoverMulticaCodexDirs(home: string): string[] {
   }
 
   try {
-    const st = statSync(multicaRoot);
-    if (!st.isDirectory()) {
+    const st = lstatSync(multicaRoot);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
       return [];
     }
   } catch {
@@ -38,19 +38,24 @@ function discoverMulticaCodexDirs(home: string): string[] {
     for (const workspace of workspaces) {
       const workspacePath = join(multicaRoot, workspace);
       try {
-        if (!statSync(workspacePath).isDirectory()) continue;
+        const wsStat = lstatSync(workspacePath);
+        if (wsStat.isSymbolicLink() || !wsStat.isDirectory()) continue;
 
         // ~/multica_workspaces/<workspace-id>/<task-id>/
         const tasks = readdirSync(workspacePath);
         for (const task of tasks) {
           const taskPath = join(workspacePath, task);
           try {
-            if (!statSync(taskPath).isDirectory()) continue;
+            const taskStat = lstatSync(taskPath);
+            if (taskStat.isSymbolicLink() || !taskStat.isDirectory()) continue;
 
             // ~/multica_workspaces/<workspace-id>/<task-id>/codex-home/sessions/
             const sessionsPath = join(taskPath, "codex-home", "sessions");
-            if (existsSync(sessionsPath) && statSync(sessionsPath).isDirectory()) {
-              results.push(sessionsPath);
+            if (existsSync(sessionsPath)) {
+              const sessStat = lstatSync(sessionsPath);
+              if (!sessStat.isSymbolicLink() && sessStat.isDirectory()) {
+                results.push(sessionsPath);
+              }
             }
           } catch {
             // Skip inaccessible task directories
@@ -83,8 +88,8 @@ function discoverHermesProfileDbs(hermesHome: string): Array<{ dbPath: string; d
   }
 
   try {
-    const st = statSync(profilesDir);
-    if (!st.isDirectory()) {
+    const st = lstatSync(profilesDir);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
       return [];
     }
   } catch {
@@ -97,8 +102,8 @@ function discoverHermesProfileDbs(hermesHome: string): Array<{ dbPath: string; d
     for (const name of entries) {
       const profileDir = join(profilesDir, name);
       try {
-        const profileStat = statSync(profileDir);
-        if (!profileStat.isDirectory()) continue;
+        const profileStat = lstatSync(profileDir);
+        if (profileStat.isSymbolicLink() || !profileStat.isDirectory()) continue;
 
         const dbPath = join(profileDir, "state.db");
         if (existsSync(dbPath)) {
