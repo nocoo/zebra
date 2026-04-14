@@ -57,8 +57,12 @@ export async function GET(
       // Gracefully degrade — season tables may not exist yet
     }
 
+    // Strip invite_code for non-owners
+    const { invite_code: _, ...teamWithoutCode } = team;
+    const sanitizedTeam = role === "owner" ? team : teamWithoutCode;
+
     return NextResponse.json({
-      ...team,
+      ...sanitizedTeam,
       logo_url: team.logo_url ?? null,
       auto_register_season: !!team.auto_register_season,
       role,

@@ -3,9 +3,26 @@
  * POST /api/teams — create a new team.
  */
 
+import { randomBytes } from "crypto";
+
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import type { TeamRow } from "@/lib/rpc-types";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Strip invite_code from team data unless the requesting user is the creator. */
+function sanitizeTeamForMember(
+  team: TeamRow,
+  userId: string,
+): Omit<TeamRow, "invite_code"> | TeamRow {
+  if (team.created_by === userId) return team;
+  const { invite_code: _, ...rest } = team;
+  return rest;
+}
 
 // ---------------------------------------------------------------------------
 // GET — list user's teams
@@ -23,7 +40,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       teams: teams.map((t) => ({
-        ...t,
+        ...sanitizeTeamForMember(t, authResult.userId),
         logo_url: t.logo_url ?? null,
       })),
     });
@@ -83,8 +100,8 @@ export async function POST(request: Request) {
       ? `${slug}-${crypto.randomUUID().slice(0, 6)}`
       : slug;
 
-    // Generate invite code (8 chars)
-    const inviteCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    // Generate invite code — 128 bits of entropy (32 hex chars)
+    const inviteCode = randomBytes(16).toString("hex");
 
     const teamId = crypto.randomUUID();
 

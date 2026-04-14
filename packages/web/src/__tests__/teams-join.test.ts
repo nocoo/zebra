@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDbRead, createMockDbWrite } from "./test-utils";
 import * as dbModule from "@/lib/db";
+import { inMemoryRateLimiter } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -44,6 +45,7 @@ describe("POST /api/teams/join", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    inMemoryRateLimiter.reset();
     mockDbRead = createMockDbRead();
     mockDbWrite = createMockDbWrite();
     vi.mocked(dbModule.getDbRead).mockResolvedValue(

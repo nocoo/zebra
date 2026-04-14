@@ -72,6 +72,57 @@ export async function checkShowcaseRateLimit(
 }
 
 // ---------------------------------------------------------------------------
+// In-Memory Sliding-Window Rate Limiter
+// ---------------------------------------------------------------------------
+
+/**
+ * Simple in-memory rate limiter using a sliding window of timestamps.
+ * Suitable for single-instance deployments (e.g. Cloudflare Workers, single Node process).
+ * State is lost on restart — this is acceptable for brute-force mitigation.
+ */
+class InMemoryRateLimiter {
+  private windows = new Map<string, number[]>();
+
+  /** Clear all tracked windows (useful for testing). */
+  reset(): void {
+    this.windows.clear();
+  }
+
+  /**
+   * Check (and record) a request.
+   * @param key   - Unique key (e.g. "team-join:<userId>")
+   * @param config - max requests + window size
+   */
+  check(key: string, config: RateLimitConfig): RateLimitResult {
+    const now = Date.now();
+    const windowMs = config.windowSeconds * 1000;
+    const cutoff = now - windowMs;
+
+    // Get existing timestamps and prune expired ones
+    const timestamps = (this.windows.get(key) ?? []).filter((t) => t > cutoff);
+
+    const allowed = timestamps.length < config.maxRequests;
+    if (allowed) {
+      timestamps.push(now);
+    }
+
+    this.windows.set(key, timestamps);
+
+    return {
+      allowed,
+      current: timestamps.length,
+      limit: config.maxRequests,
+      retryAfter: allowed
+        ? 0
+        : Math.ceil(((timestamps[0] ?? now) + windowMs - now) / 1000),
+    };
+  }
+}
+
+/** Singleton in-memory rate limiter */
+export const inMemoryRateLimiter = new InMemoryRateLimiter();
+
+// ---------------------------------------------------------------------------
 // Default Configurations
 // ---------------------------------------------------------------------------
 
@@ -79,4 +130,10 @@ export async function checkShowcaseRateLimit(
 export const SHOWCASE_CREATE_RATE_LIMIT: RateLimitConfig = {
   maxRequests: 20,
   windowSeconds: 3600, // 1 hour
+};
+
+/** Rate limit for team join attempts: 5 per minute per user */
+export const TEAM_JOIN_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 5,
+  windowSeconds: 60,
 };
