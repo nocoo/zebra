@@ -421,9 +421,18 @@ describe("GET /api/auth/cli", () => {
 // ===========================================================================
 
 async function cleanupShowcases(d1: D1Client): Promise<void> {
-  // Scope cleanup to rows owned by the per-run TEST_USER_ID so concurrent CI
-  // runs (each with a unique user ID) never interfere with each other.
-  // Delete upvotes first (FK constraint)
+  // 1. Remove stale rows left by crashed CI runs that used the same fixed
+  //    repo_key (UNIQUE constraint). This must run first so the current run
+  //    can INSERT the key without a 409 conflict.
+  await d1.execute(
+    "DELETE FROM showcase_upvotes WHERE showcase_id IN (SELECT id FROM showcases WHERE repo_key = ?)",
+    [SHOWCASE_REPO_KEY],
+  );
+  await d1.execute("DELETE FROM showcases WHERE repo_key = ?", [
+    SHOWCASE_REPO_KEY,
+  ]);
+
+  // 2. Clean up any other test data owned by this run's TEST_USER_ID.
   await d1.execute("DELETE FROM showcase_upvotes WHERE user_id = ?", [
     TEST_USER_ID,
   ]);
@@ -431,7 +440,6 @@ async function cleanupShowcases(d1: D1Client): Promise<void> {
     "DELETE FROM showcase_upvotes WHERE showcase_id IN (SELECT id FROM showcases WHERE user_id = ?)",
     [TEST_USER_ID],
   );
-  // Delete showcases owned by this test user
   await d1.execute("DELETE FROM showcases WHERE user_id = ?", [TEST_USER_ID]);
 }
 
