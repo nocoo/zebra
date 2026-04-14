@@ -1,9 +1,17 @@
-# Gitleaks configuration — allowlist false positives in test files
+# Gitleaks configuration — suppress specific false-positive patterns in test files
 # See: https://github.com/gitleaks/gitleaks#configuration
+#
+# IMPORTANT: Do NOT blanket-exclude test directories or file globs.
+# Only allowlist the exact dummy-token patterns that trigger generic-api-key.
 
 [allowlist]
-  paths = [
-    '''__tests__/''',
-    '''\.test\.ts$''',
-    '''\.test\.tsx$''',
+  description = "known fake tokens in test fixtures"
+  regexes = [
+    # Mock publishable API keys (pk_test123abc, pk_new_key, pk_test_token, etc.)
+    '''pk_[a-zA-Z0-9_]+''',
+    # Hardcoded dummy secrets (test-secret-abc123, test-api-token, test-read-secret)
+    '''test-(?:secret|api-token|read-secret)[a-zA-Z0-9\-]*''',
+    # Fake cloud tokens in D1 test guard (tok-prod-xxx, shared-secret)
+    '''tok-prod-\w+''',
+    '''shared-(?:read-)?secret''',
   ]
