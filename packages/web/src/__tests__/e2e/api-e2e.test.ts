@@ -36,6 +36,13 @@ const BASE_URL = `http://localhost:${E2E_PORT}`;
 const TEST_USER_ID = process.env.E2E_TEST_USER_ID || "e2e-test-user-id";
 const TEST_USER_EMAIL = process.env.E2E_TEST_USER_EMAIL || "e2e@test.local";
 
+// Unique repo key per test run — prevents concurrent CI jobs from colliding on
+// the shared D1 database.  The suffix comes from the per-run TEST_USER_ID
+// (e.g. "e2e-test-user-a1b2c3d4" → suffix "a1b2c3d4").
+const TEST_RUN_SUFFIX = TEST_USER_ID.slice(-8);
+const TEST_REPO_KEY = `nocoo/pew-${TEST_RUN_SUFFIX}`;
+const TEST_REPO_URL = `https://github.com/${TEST_REPO_KEY}`;
+
 /** Headers for ingest requests — includes version gate header */
 const INGEST_HEADERS = {
   "Content-Type": "application/json",
@@ -424,12 +431,12 @@ async function cleanupShowcases(d1: D1Client): Promise<void> {
   // crashed runs with a different TEST_USER_ID (global uniqueness on repo_key)
   await d1.execute(
     "DELETE FROM showcase_upvotes WHERE showcase_id IN (SELECT id FROM showcases WHERE repo_key = ?)",
-    ["nocoo/pew"],
+    [TEST_REPO_KEY],
   );
   // Delete showcases owned by this test user
   await d1.execute("DELETE FROM showcases WHERE user_id = ?", [TEST_USER_ID]);
   // Delete the specific test repo_key regardless of owner
-  await d1.execute("DELETE FROM showcases WHERE repo_key = ?", ["nocoo/pew"]);
+  await d1.execute("DELETE FROM showcases WHERE repo_key = ?", [TEST_REPO_KEY]);
 }
 
 /** Helper to create a showcase and return its ID */
@@ -472,7 +479,7 @@ describe("Showcase API", () => {
     // If rate limited, mark tests to skip
     try {
       sharedShowcaseId = await createTestShowcase(
-        "https://github.com/nocoo/pew",
+        TEST_REPO_URL,
         "E2E test showcase",
       );
     } catch (err) {
@@ -515,12 +522,12 @@ describe("Showcase API", () => {
   describe("POST /api/showcases", () => {
     it("should return 409 for duplicate repo (using shared showcase)", async () => {
       requireShowcase(sharedShowcaseId, skipShowcaseTests);
-      // The shared showcase already uses nocoo/pew, so this should 409
+      // The shared showcase already uses TEST_REPO_KEY, so this should 409
       const res = await fetch(`${BASE_URL}/api/showcases`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          github_url: "https://github.com/nocoo/pew",
+          github_url: TEST_REPO_URL,
         }),
       });
       expect(res.status).toBe(409);
@@ -603,7 +610,7 @@ describe("Showcase API", () => {
       const body = await res.json();
 
       expect(body.id).toBe(sharedShowcaseId);
-      expect(body.repo_key).toBe("nocoo/pew");
+      expect(body.repo_key).toBe(TEST_REPO_KEY);
       expect(body.user.id).toBe(TEST_USER_ID);
     });
 
