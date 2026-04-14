@@ -106,9 +106,13 @@ function discoverHermesProfileDbs(hermesHome: string): Array<{ dbPath: string; d
         if (profileStat.isSymbolicLink() || !profileStat.isDirectory()) continue;
 
         const dbPath = join(profileDir, "state.db");
-        if (existsSync(dbPath)) {
-          results.push({ dbPath, dbKey: `profiles/${name}` });
+        try {
+          const dbStat = lstatSync(dbPath);
+          if (dbStat.isSymbolicLink() || !dbStat.isFile()) continue;
+        } catch {
+          continue; // state.db does not exist or is inaccessible
         }
+        results.push({ dbPath, dbKey: `profiles/${name}` });
       } catch {
         // Skip inaccessible profile directories
       }
