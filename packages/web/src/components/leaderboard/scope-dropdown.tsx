@@ -190,11 +190,11 @@ export function ScopeDropdown({
         className="min-w-[180px] max-h-[320px] overflow-y-auto p-1"
         onOpenAutoFocus={handleOpenAutoFocus}
       >
+        {/* Roving focus: real DOM focus moves to options, no aria-activedescendant needed */}
         <div
           ref={listboxRef}
           id="scope-listbox"
           role="listbox"
-          aria-activedescendant={activeId}
           aria-label="Leaderboard scope"
           onKeyDown={handleListboxKeyDown}
         >
