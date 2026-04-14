@@ -3,8 +3,6 @@
 import { useState, useRef, useCallback } from "react";
 import {
   Globe,
-  Users,
-  Building2,
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,150 +11,12 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
+import { TeamLogoIcon, OrgLogoIcon } from "@/components/leaderboard/logo-icons";
+import type { ScopeSelection, Organization, Team } from "@/lib/leaderboard-scope";
 
-// ---------------------------------------------------------------------------
-// Types (re-exported for consumers)
-// ---------------------------------------------------------------------------
-
-export interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  logo_url: string | null;
-}
-
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  logoUrl: string | null;
-}
-
-/** Scope selection: global, or org/team with ID */
-export interface ScopeSelection {
-  type: "global" | "org" | "team";
-  id?: string;
-}
-
-// ---------------------------------------------------------------------------
-// localStorage persistence
-// ---------------------------------------------------------------------------
-
-export const SCOPE_STORAGE_KEY = "pew:leaderboard:scope";
-
-export function loadScopeFromStorage(): ScopeSelection | null {
-  try {
-    const stored = localStorage.getItem(SCOPE_STORAGE_KEY);
-    if (!stored) return null;
-    const parsed = JSON.parse(stored) as ScopeSelection;
-    if (parsed.type === "global" || ((parsed.type === "org" || parsed.type === "team") && parsed.id)) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveScopeToStorage(scope: ScopeSelection): void {
-  try {
-    localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
-  } catch {
-    // Silently fail
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Logo helpers
-// ---------------------------------------------------------------------------
-
-/** Internal img component that tracks its own error state */
-function LogoImg({
-  src,
-  alt,
-  className,
-  fallback,
-}: {
-  src: string;
-  alt: string;
-  className: string;
-  fallback: React.ReactNode;
-}) {
-  const [error, setError] = useState(false);
-
-  if (error) return <>{fallback}</>;
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- external logos, can't use next/image
-    <img src={src} alt={alt} className={className} onError={() => setError(true)} />
-  );
-}
-
-export function TeamLogoIcon({
-  logoUrl,
-  name,
-  className,
-}: {
-  logoUrl: string | null;
-  name: string;
-  className?: string;
-}) {
-  const fallback = <Users className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", className)} strokeWidth={1.5} />;
-
-  if (!logoUrl) return fallback;
-
-  // key={logoUrl} forces remount when URL changes, resetting error state
-  return (
-    <LogoImg
-      key={logoUrl}
-      src={logoUrl}
-      alt={name}
-      className={cn("h-3.5 w-3.5 shrink-0 rounded-sm object-cover", className)}
-      fallback={fallback}
-    />
-  );
-}
-
-/** Tiny inline logo for team badges in leaderboard rows */
-export function TeamLogoBadge({ logoUrl, name }: { logoUrl: string | null; name: string }) {
-  if (!logoUrl) return null;
-
-  // key={logoUrl} forces remount when URL changes, resetting error state
-  return (
-    <LogoImg
-      key={logoUrl}
-      src={logoUrl}
-      alt={name}
-      className="h-2.5 w-2.5 shrink-0 rounded-[2px] object-cover"
-      fallback={null}
-    />
-  );
-}
-
-export function OrgLogoIcon({
-  logoUrl,
-  name,
-  className,
-}: {
-  logoUrl: string | null;
-  name: string;
-  className?: string;
-}) {
-  const fallback = <Building2 className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", className)} strokeWidth={1.5} />;
-
-  if (!logoUrl) return fallback;
-
-  // key={logoUrl} forces remount when URL changes, resetting error state
-  return (
-    <LogoImg
-      key={logoUrl}
-      src={logoUrl}
-      alt={name}
-      className={cn("h-3.5 w-3.5 shrink-0 rounded-sm object-cover", className)}
-      fallback={fallback}
-    />
-  );
-}
+// Re-export for existing consumers
+export type { ScopeSelection, Organization, Team } from "@/lib/leaderboard-scope";
+export { loadScopeFromStorage, saveScopeToStorage, SCOPE_STORAGE_KEY } from "@/lib/leaderboard-scope";
 
 // ---------------------------------------------------------------------------
 // DropdownItem
@@ -288,7 +148,7 @@ export function ScopeDropdown({
     ) : selectedOrg ? (
       <OrgLogoIcon logoUrl={selectedOrg.logoUrl} name={selectedOrg.name} />
     ) : selectedTeam ? (
-      <TeamLogoIcon logoUrl={selectedTeam.logo_url} name={selectedTeam.name} />
+      <TeamLogoIcon logoUrl={selectedTeam.logoUrl} name={selectedTeam.name} />
     ) : (
       <Globe className={iconClass} strokeWidth={1.5} />
     );
@@ -387,7 +247,7 @@ export function ScopeDropdown({
                   active={value.type === "team" && value.id === team.id}
                   onClick={() => select({ type: "team", id: team.id })}
                 >
-                  <TeamLogoIcon logoUrl={team.logo_url} name={team.name} />
+                  <TeamLogoIcon logoUrl={team.logoUrl} name={team.name} />
                   {team.name}
                 </DropdownItem>
               ))}
