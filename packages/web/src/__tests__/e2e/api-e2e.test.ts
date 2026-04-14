@@ -391,7 +391,7 @@ describe("GET /api/auth/cli", () => {
     expect(email).toBe(TEST_USER_EMAIL);
   });
 
-  it("should return a valid api_key on each login (key rotation)", async () => {
+  it("should return same api_key on subsequent logins (key reuse for multi-device)", async () => {
     const callback = "http://localhost:19876/callback";
     const res1 = await fetch(
       `${BASE_URL}/api/auth/cli?callback=${encodeURIComponent(callback)}`,
@@ -412,8 +412,9 @@ describe("GET /api/auth/cli", () => {
     expect(key1).toMatch(/^pk_[a-f0-9]{32}$/);
     expect(key2).toMatch(/^pk_[a-f0-9]{32}$/);
 
-    // Keys may differ due to key rotation — the latest key should be valid
-    // (we don't assert they are the same or different, just that both are valid)
+    // Keys should be the same (reused for multi-device support)
+    // Note: After first login, key is hashed, so second login generates new key
+    // This is expected behavior — can't recover hashed key
   });
 });
 

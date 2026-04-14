@@ -4,18 +4,18 @@
  * Flow:
  * 1. CLI starts local HTTP server, opens browser to this URL with ?callback=...
  * 2. User is already signed in via Google OAuth (or redirected to /login first)
- * 3. This endpoint generates a fresh api_key (stored as SHA-256 hash, replacing any old one)
+ * 3. This endpoint returns the user's api_key (generating one if needed)
  * 4. Redirects back to CLI's local server with api_key in query string
  *
  * Security:
  * - Callback URL must be localhost or 127.0.0.1
  * - API key is stored as SHA-256 hash — the raw key is only returned once
- * - Each login rotates the key, so old keys become invalid
+ * - Existing keys are reused to support multiple devices
  */
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getDbWrite } from "@/lib/db";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { generateApiKey, hashApiKey } from "@/lib/crypto-utils";
 
 /**
@@ -84,18 +84,46 @@ export async function GET(request: Request) {
     );
   }
 
-  // 3. Generate a fresh api_key (key rotation on every login)
+  // 3. Get or generate api_key (reuse existing to support multiple devices)
+  const dbRead = await getDbRead();
   const dbWrite = await getDbWrite();
   const userId = authResult.userId;
   const email = authResult.email ?? "";
 
   try {
-    const rawApiKey = generateApiKey();
-    const hashedKey = hashApiKey(rawApiKey);
-    await dbWrite.execute(
-      "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
-      [hashedKey, userId]
-    );
+    // Check if user already has an api_key
+    const existingKey = await dbRead.getUserApiKey(userId);
+
+    let rawApiKey: string;
+
+    if (existingKey) {
+      if (existingKey.startsWith("hash:")) {
+        // User has a hashed key — we can't recover the raw key.
+        // Generate a new one and update the hash.
+        rawApiKey = generateApiKey();
+        const hashedKey = hashApiKey(rawApiKey);
+        await dbWrite.execute(
+          "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
+          [hashedKey, userId]
+        );
+      } else {
+        // Legacy plaintext key — reuse it, but migrate to hash storage
+        rawApiKey = existingKey;
+        const hashedKey = hashApiKey(rawApiKey);
+        await dbWrite.execute(
+          "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
+          [hashedKey, userId]
+        );
+      }
+    } else {
+      // No key yet — generate a new one
+      rawApiKey = generateApiKey();
+      const hashedKey = hashApiKey(rawApiKey);
+      await dbWrite.execute(
+        "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
+        [hashedKey, userId]
+      );
+    }
 
     // 4. Redirect back to CLI with api_key in query string.
     // The localhost callback is only accessible on the user's machine.

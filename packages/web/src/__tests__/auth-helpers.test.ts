@@ -16,8 +16,9 @@ vi.mock("@/lib/db", () => ({
 const { auth } = await import("@/auth") as unknown as {
   auth: ReturnType<typeof vi.fn>;
 };
-const { getDbRead } = await import("@/lib/db") as unknown as {
+const { getDbRead, getDbWrite } = await import("@/lib/db") as unknown as {
   getDbRead: ReturnType<typeof vi.fn>;
+  getDbWrite: ReturnType<typeof vi.fn>;
 };
 const {
   resolveUser,
@@ -25,7 +26,7 @@ const {
   E2E_TEST_USER_EMAIL,
 } = await import("@/lib/auth-helpers");
 
-import { createMockClient } from "./test-utils";
+import { createMockClient, createMockDbWrite } from "./test-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -187,7 +188,7 @@ describe("resolveUser", () => {
       );
     });
 
-    it("should resolve user from legacy plaintext API key", async () => {
+    it("should resolve user from legacy plaintext API key and migrate to hash", async () => {
       const mockClient = createMockClient();
       // First call with hashed key returns null (no match for hash)
       mockClient.getUserByApiKey.mockResolvedValueOnce(null);
@@ -197,6 +198,11 @@ describe("resolveUser", () => {
         email: "legacy@example.com",
       });
       getDbRead.mockResolvedValueOnce(mockClient);
+
+      // Mock write for migration
+      const mockDbWrite = createMockDbWrite();
+      mockDbWrite.execute.mockResolvedValue({ changes: 1 });
+      getDbWrite.mockResolvedValue(mockDbWrite);
 
       const result = await resolveUser(makeRequest("pk_legacy_key"));
 
@@ -213,6 +219,18 @@ describe("resolveUser", () => {
       expect(mockClient.getUserByApiKey).toHaveBeenNthCalledWith(
         2,
         "pk_legacy_key"
+      );
+
+      // Wait for async migration
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should have migrated the key to hash storage
+      expect(mockDbWrite.execute).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE users SET api_key"),
+        expect.arrayContaining([
+          expect.stringMatching(/^hash:[a-f0-9]{64}$/),
+          "u-api-legacy",
+        ])
       );
     });
 

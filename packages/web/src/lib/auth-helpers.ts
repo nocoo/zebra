@@ -9,7 +9,7 @@
  */
 
 import { auth } from "@/auth";
-import { getDbRead } from "@/lib/db";
+import { getDbRead, getDbWrite } from "@/lib/db";
 import { hashApiKey } from "@/lib/crypto-utils";
 
 /** The user ID used when E2E auth is bypassed (overridable via env) */
@@ -64,6 +64,15 @@ export async function resolveUser(
     // Fall back to plaintext lookup (legacy pre-migration keys)
     const legacyRow = await db.getUserByApiKey(apiKey);
     if (legacyRow) {
+      // Migrate legacy key to hash storage (fire-and-forget)
+      getDbWrite().then((dbWrite) => {
+        dbWrite.execute(
+          "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
+          [hashApiKey(apiKey), legacyRow.id]
+        );
+      }).catch(() => {
+        // Ignore migration errors — user is still authenticated
+      });
       return { userId: legacyRow.id, email: legacyRow.email };
     }
   }

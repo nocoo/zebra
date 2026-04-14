@@ -23,17 +23,3 @@ export function hashApiKey(key: string): string {
   return "hash:" + createHash("sha256").update(key).digest("hex");
 }
 
-/**
- * Verify a presented API key against a stored value.
- *
- * Supports both hashed ("hash:...") and legacy plaintext stored values.
- * Legacy plaintext comparison is kept for backward compatibility during
- * migration — a future migration script should hash all existing keys.
- */
-export function verifyApiKey(presented: string, stored: string): boolean {
-  if (stored.startsWith("hash:")) {
-    return stored === hashApiKey(presented);
-  }
-  // Legacy plaintext comparison (pre-migration keys)
-  return stored === presented;
-}

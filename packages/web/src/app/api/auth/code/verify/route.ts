@@ -2,14 +2,14 @@
  * POST /api/auth/code/verify — Verify a one-time code and return API key.
  *
  * Called by CLI with `pew login --code XXXX-XXXX`.
- * Returns the user's api_key (always generating a fresh one) and email.
+ * Returns the user's api_key (generating one if needed) and email.
  *
  * Security:
  * - Any failed verification attempt on an existing code immediately invalidates it
  *   (failed_attempts > 0). Error messages are intentionally generic to avoid
  *   leaking information about code existence.
  * - API keys are stored as SHA-256 hashes — the raw key is returned only once.
- * - Each successful verification rotates the key, replacing any old one.
+ * - Existing keys are reused to support multiple devices.
  *
  * No session required — the code itself is the authentication.
  */
@@ -96,15 +96,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 500 });
     }
 
-    // 6. Generate a fresh api_key (key rotation on every successful verification)
-    // Safe from races — only one request reaches this point per code.
-    const rawApiKey = generateApiKey();
-    const hashedKey = hashApiKey(rawApiKey);
-    await dbWrite.execute(
-      `UPDATE users SET api_key = ?, updated_at = datetime('now')
-       WHERE id = ?`,
-      [hashedKey, user.id]
-    );
+    // 6. Get or generate api_key (reuse existing to support multiple devices)
+    const existingKey = await dbRead.getUserApiKey(user.id);
+
+    let rawApiKey: string;
+
+    if (existingKey) {
+      if (existingKey.startsWith("hash:")) {
+        // User has a hashed key — we can't recover the raw key.
+        // Generate a new one and update the hash.
+        rawApiKey = generateApiKey();
+        const hashedKey = hashApiKey(rawApiKey);
+        await dbWrite.execute(
+          `UPDATE users SET api_key = ?, updated_at = datetime('now')
+           WHERE id = ?`,
+          [hashedKey, user.id]
+        );
+      } else {
+        // Legacy plaintext key — reuse it, but migrate to hash storage
+        rawApiKey = existingKey;
+        const hashedKey = hashApiKey(rawApiKey);
+        await dbWrite.execute(
+          `UPDATE users SET api_key = ?, updated_at = datetime('now')
+           WHERE id = ?`,
+          [hashedKey, user.id]
+        );
+      }
+    } else {
+      // No key yet — generate a new one
+      rawApiKey = generateApiKey();
+      const hashedKey = hashApiKey(rawApiKey);
+      await dbWrite.execute(
+        `UPDATE users SET api_key = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+        [hashedKey, user.id]
+      );
+    }
 
     // 7. Return credentials
     // This is the ONLY time the raw API key is visible to the user.
