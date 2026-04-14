@@ -243,7 +243,7 @@ describe("resolvePewBin", () => {
       await chmod(binPath, 0o755);
 
       process.env.PATH = `${tempDir}:${prevPath ?? ""}`;
-      process.argv = [prevArgv[0] ?? "node", "/tmp/pew"];
+      process.argv = [prevArgv[0] ?? "node", join(tempDir, "not-pew")];
 
       const resolved = await resolvePewBin();
       expect(resolved).toBe(binPath);
