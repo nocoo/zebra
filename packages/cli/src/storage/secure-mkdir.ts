@@ -8,10 +8,28 @@
  * ConfigManager. This module ensures directory permissions are also hardened.
  */
 import { mkdir } from "node:fs/promises";
-import { mkdirSync as mkdirSyncFs } from "node:fs";
+import { mkdirSync as mkdirSyncFs, chmodSync, statSync } from "node:fs";
 
 /** Restrictive mode for sensitive directories (owner rwx only) */
 export const SECURE_DIR_MODE = 0o700;
+
+/** Restrictive mode for sensitive files (owner rw only) */
+export const SECURE_FILE_MODE = 0o600;
+
+/**
+ * Ensure a directory exists with secure permissions, repairing if needed.
+ *
+ * Creates the directory with 0o700 if it doesn't exist. If it already
+ * exists with looser permissions, tightens them to 0o700.
+ */
+export function ensureSecureDir(dir: string): void {
+  mkdirSyncFs(dir, { recursive: true, mode: SECURE_DIR_MODE });
+  // Repair existing directory permissions if too loose
+  const stat = statSync(dir);
+  if ((stat.mode & 0o777) !== SECURE_DIR_MODE) {
+    chmodSync(dir, SECURE_DIR_MODE);
+  }
+}
 
 /**
  * Async mkdir with secure permissions for sensitive directories.

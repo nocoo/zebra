@@ -1,6 +1,6 @@
 import { readFile, writeFile, appendFile, rename, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { SECURE_DIR_MODE } from "./secure-mkdir.js";
+import { SECURE_DIR_MODE, SECURE_FILE_MODE } from "./secure-mkdir.js";
 
 /** Optional callback invoked when a corrupted JSONL line is skipped */
 export type OnCorruptLine = (line: string, error: unknown) => void;
@@ -58,7 +58,7 @@ export class BaseQueue<T> {
   /** Append a single record to the queue */
   async append(record: T): Promise<void> {
     await this.ensureDir();
-    await appendFile(this.queuePath, JSON.stringify(record) + "\n");
+    await appendFile(this.queuePath, JSON.stringify(record) + "\n", { mode: SECURE_FILE_MODE });
   }
 
   /** Append multiple records to the queue in a single write */
@@ -66,7 +66,7 @@ export class BaseQueue<T> {
     if (records.length === 0) return;
     await this.ensureDir();
     const data = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
-    await appendFile(this.queuePath, data);
+    await appendFile(this.queuePath, data, { mode: SECURE_FILE_MODE });
   }
 
   /**
@@ -83,7 +83,7 @@ export class BaseQueue<T> {
         ? records.map((r) => JSON.stringify(r)).join("\n") + "\n"
         : "";
     const tmpPath = this.queuePath + ".tmp";
-    await writeFile(tmpPath, data);
+    await writeFile(tmpPath, data, { mode: SECURE_FILE_MODE });
     await rename(tmpPath, this.queuePath);
   }
 
@@ -150,7 +150,7 @@ export class BaseQueue<T> {
   /** Atomically persist the full state object. */
   async saveState(state: QueueState): Promise<void> {
     await this.ensureDir();
-    await writeFile(this.statePath, JSON.stringify(state) + "\n");
+    await writeFile(this.statePath, JSON.stringify(state) + "\n", { mode: SECURE_FILE_MODE });
   }
 
   /** Save the upload byte offset (preserves dirtyKeys). */
