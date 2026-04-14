@@ -6,14 +6,34 @@ import type { NextRequest } from "next/server";
 const SKIP_AUTH = process.env.E2E_SKIP_AUTH === "true";
 
 /**
+ * Allowlist of trusted forwarded hosts derived from NEXTAUTH_URL.
+ * If the env var is not set the list is empty and *all* X-Forwarded-Host
+ * values are ignored (safe default).
+ */
+const ALLOWED_FORWARDED_HOSTS: string[] = (() => {
+  try {
+    const raw = process.env.NEXTAUTH_URL;
+    if (raw) return [new URL(raw).host];
+  } catch {
+    // Malformed NEXTAUTH_URL — treat as unset.
+  }
+  return [];
+})();
+
+/**
  * Build redirect URL respecting reverse proxy headers.
+ * Only trusts X-Forwarded-Host when it appears in the allowlist.
  * Exported for unit testing.
  */
 export function buildRedirectUrl(req: NextRequest, pathname: string): URL {
   const forwardedHost = req.headers.get("x-forwarded-host");
   const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
 
-  if (forwardedHost) {
+  if (
+    forwardedHost &&
+    ALLOWED_FORWARDED_HOSTS.length > 0 &&
+    ALLOWED_FORWARDED_HOSTS.includes(forwardedHost)
+  ) {
     return new URL(pathname, `${forwardedProto}://${forwardedHost}`);
   }
 
