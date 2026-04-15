@@ -38,15 +38,18 @@ export async function GET(request: Request) {
     const dbRead = await getDbRead();
     const teams = await dbRead.listTeamsForUser(authResult.userId);
 
-    return NextResponse.json({
-      teams: teams.map((t) => {
-        const { logo_url, ...sanitized } = sanitizeTeamForMember(t, authResult.userId);
-        return {
-          ...sanitized,
-          logoUrl: logo_url ?? null,
-        };
-      }),
-    });
+    return NextResponse.json(
+      {
+        teams: teams.map((t) => {
+          const { logo_url, ...sanitized } = sanitizeTeamForMember(t, authResult.userId);
+          return {
+            ...sanitized,
+            logoUrl: logo_url ?? null,
+          };
+        }),
+      },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (err) {
     // Gracefully degrade if teams table doesn't exist yet
     const msg = err instanceof Error ? err.message : String(err);

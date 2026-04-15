@@ -25,7 +25,10 @@ export async function GET(request: Request) {
       logoUrl: r.logo_url,
     }));
 
-    return NextResponse.json({ organizations });
+    return NextResponse.json(
+      { organizations },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg.includes("no such table")) {
