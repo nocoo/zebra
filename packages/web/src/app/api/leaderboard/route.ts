@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { getDbRead } from "@/lib/db";
 import { resolveUser } from "@/lib/auth-helpers";
+import { isAdminUser } from "@/lib/admin";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -135,15 +136,17 @@ export async function GET(request: Request) {
   const db = await getDbRead();
 
   // Check auth for scoped requests — anonymous users silently degrade to global.
-  // Authenticated users must be a member of the requested team/org.
+  // Authenticated users must be a member of the requested team/org (admins bypass).
   let teamId: string | undefined;
   let orgId: string | undefined;
 
   if (teamIdParam || orgIdParam) {
     const authResult = await resolveUser(request);
     if (authResult) {
+      const isAdmin = await isAdminUser(authResult);
+
       if (teamIdParam) {
-        const isMember = await db.checkTeamMembershipExists(teamIdParam, authResult.userId);
+        const isMember = isAdmin || await db.checkTeamMembershipExists(teamIdParam, authResult.userId);
         if (!isMember) {
           return NextResponse.json(
             { error: "Not a member of this team" },
@@ -153,7 +156,7 @@ export async function GET(request: Request) {
         teamId = teamIdParam;
       }
       if (orgIdParam) {
-        const isMember = await db.checkOrgMembership(orgIdParam, authResult.userId);
+        const isMember = isAdmin || await db.checkOrgMembership(orgIdParam, authResult.userId);
         if (!isMember) {
           return NextResponse.json(
             { error: "Not a member of this organization" },
