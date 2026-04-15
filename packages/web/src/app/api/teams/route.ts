@@ -3,9 +3,26 @@
  * POST /api/teams — create a new team.
  */
 
+import { randomBytes } from "crypto";
+
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import type { TeamRow } from "@/lib/rpc-types";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Strip invite_code from team data unless the requesting user is the creator. */
+function sanitizeTeamForMember(
+  team: TeamRow,
+  userId: string,
+): Omit<TeamRow, "invite_code"> | TeamRow {
+  if (team.created_by === userId) return team;
+  const { invite_code: _, ...rest } = team;
+  return rest;
+}
 
 // ---------------------------------------------------------------------------
 // GET — list user's teams
@@ -22,10 +39,13 @@ export async function GET(request: Request) {
     const teams = await dbRead.listTeamsForUser(authResult.userId);
 
     return NextResponse.json({
-      teams: teams.map(({ logo_url, ...rest }) => ({
-        ...rest,
-        logoUrl: logo_url ?? null,
-      })),
+      teams: teams.map((t) => {
+        const { logo_url, ...sanitized } = sanitizeTeamForMember(t, authResult.userId);
+        return {
+          ...sanitized,
+          logoUrl: logo_url ?? null,
+        };
+      }),
     });
   } catch (err) {
     // Gracefully degrade if teams table doesn't exist yet
@@ -83,8 +103,12 @@ export async function POST(request: Request) {
       ? `${slug}-${crypto.randomUUID().slice(0, 6)}`
       : slug;
 
-    // Generate invite code (8 chars)
-    const inviteCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    // Generate invite code — 128 bits of entropy (32 hex chars)
+    // TODO(migration): Teams created before this change still have weak 8-char
+    // hex invite codes. Use the regenerateInviteCode action via
+    // PATCH /api/teams/[teamId] to rotate individual codes, or run a bulk
+    // migration against D1 when deployment coordination is available.
+    const inviteCode = randomBytes(16).toString("hex");
 
     const teamId = crypto.randomUUID();
 

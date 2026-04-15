@@ -1,7 +1,10 @@
 /**
  * GET /api/teams/[teamId] — get team details.
+ * PATCH /api/teams/[teamId] — update team settings (owner only).
  * DELETE /api/teams/[teamId] — leave team (or delete if owner and only member).
  */
+
+import { randomBytes } from "crypto";
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
@@ -9,6 +12,15 @@ import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
 import { deleteTeamLogoByUrl } from "@/lib/r2";
 import { syncSeasonRosters } from "@/lib/season-roster";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Generate a strong invite code — 128 bits of entropy (32 hex chars). */
+function generateInviteCode(): string {
+  return randomBytes(16).toString("hex");
+}
 
 // ---------------------------------------------------------------------------
 // GET — team details with members
@@ -57,9 +69,14 @@ export async function GET(
       // Gracefully degrade — season tables may not exist yet
     }
 
-    const { logo_url, ...teamRest } = team;
+    // Strip invite_code for non-owners
+    const { invite_code, logo_url, ...teamWithoutSensitive } = team;
+    const sanitizedTeam = role === "owner"
+      ? { ...teamWithoutSensitive, invite_code }
+      : teamWithoutSensitive;
+
     return NextResponse.json({
-      ...teamRest,
+      ...sanitizedTeam,
       logoUrl: logo_url ?? null,
       auto_register_season: !!team.auto_register_season,
       role,
@@ -103,10 +120,12 @@ export async function PATCH(
 
   let name: string | undefined;
   let autoRegisterSeason: boolean | undefined;
+  let regenerateInviteCode: boolean;
   try {
     const body = await request.json();
     name = typeof body.name === "string" ? body.name.trim() : undefined;
     autoRegisterSeason = typeof body.auto_register_season === "boolean" ? body.auto_register_season : undefined;
+    regenerateInviteCode = body.regenerate_invite_code === true;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -118,7 +137,7 @@ export async function PATCH(
     );
   }
 
-  if (name === undefined && autoRegisterSeason === undefined) {
+  if (name === undefined && autoRegisterSeason === undefined && !regenerateInviteCode) {
     return NextResponse.json(
       { error: "No valid fields to update" },
       { status: 400 },
@@ -152,6 +171,13 @@ export async function PATCH(
       values.push(autoRegisterSeason ? 1 : 0);
     }
 
+    let newInviteCode: string | undefined;
+    if (regenerateInviteCode) {
+      newInviteCode = generateInviteCode();
+      updates.push("invite_code = ?");
+      values.push(newInviteCode);
+    }
+
     values.push(teamId);
     try {
       await dbWrite.execute(
@@ -174,6 +200,7 @@ export async function PATCH(
     const response: Record<string, unknown> = { ok: true };
     if (name !== undefined) response.name = name;
     if (autoRegisterSeason !== undefined) response.auto_register_season = autoRegisterSeason;
+    if (newInviteCode !== undefined) response.invite_code = newInviteCode;
     return NextResponse.json(response);
   } catch (err) {
     console.error("Failed to rename team:", err);

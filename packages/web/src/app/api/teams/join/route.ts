@@ -5,12 +5,25 @@
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import { inMemoryRateLimiter, TEAM_JOIN_RATE_LIMIT } from "@/lib/rate-limit";
 import { syncSeasonRosters } from "@/lib/season-roster";
 
 export async function POST(request: Request) {
   const authResult = await resolveUser(request);
   if (!authResult) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 5 join attempts per minute per user
+  const rl = inMemoryRateLimiter.check(
+    `team-join:${authResult.userId}`,
+    TEAM_JOIN_RATE_LIMIT,
+  );
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many join attempts. Please try again later." },
+      { status: 429 },
+    );
   }
 
   let body: Record<string, unknown>;
