@@ -113,7 +113,8 @@ export async function fetchGitHubMetadata(
 ): Promise<GitHubMetadata> {
   // In E2E test mode, return mock metadata to avoid real GitHub API calls
   // and allow arbitrary repo_key values for per-run isolation.
-  if (process.env.E2E_MOCK_GITHUB === "1") {
+  // Gate behind NODE_ENV check so the mock never activates in production.
+  if (process.env.E2E_MOCK_GITHUB === "1" && process.env.NODE_ENV !== "production") {
     return {
       owner,
       name: repo,
