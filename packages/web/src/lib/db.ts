@@ -389,6 +389,9 @@ export interface DbRead {
   /** List teams for a user */
   listTeamsForUser(userId: string): Promise<TeamRow[]>;
 
+  /** List all teams (admin only) */
+  listAllTeams(): Promise<TeamRow[]>;
+
   /** Check if team slug exists */
   checkTeamSlugExists(slug: string): Promise<boolean>;
 

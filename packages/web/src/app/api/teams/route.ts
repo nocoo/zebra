@@ -1,12 +1,15 @@
 /**
  * GET /api/teams — list teams the current user belongs to.
  * POST /api/teams — create a new team.
+ *
+ * Admins see all teams on GET.
  */
 
 import { randomBytes } from "crypto";
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
+import { isAdminUser } from "@/lib/admin";
 import { getDbRead, getDbWrite } from "@/lib/db";
 import type { TeamRow } from "@/lib/rpc-types";
 
@@ -14,12 +17,13 @@ import type { TeamRow } from "@/lib/rpc-types";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Strip invite_code from team data unless the requesting user is the creator. */
+/** Strip invite_code from team data unless the requesting user is the creator or admin. */
 function sanitizeTeamForMember(
   team: TeamRow,
   userId: string,
+  isAdmin: boolean,
 ): Omit<TeamRow, "invite_code"> | TeamRow {
-  if (team.created_by === userId) return team;
+  if (isAdmin || team.created_by === userId) return team;
   const { invite_code: _, ...rest } = team;
   return rest;
 }
@@ -36,12 +40,17 @@ export async function GET(request: Request) {
 
   try {
     const dbRead = await getDbRead();
-    const teams = await dbRead.listTeamsForUser(authResult.userId);
+    const isAdmin = await isAdminUser(authResult);
+
+    // Admins see all teams, regular users see only their memberships
+    const teams = isAdmin
+      ? await dbRead.listAllTeams()
+      : await dbRead.listTeamsForUser(authResult.userId);
 
     return NextResponse.json(
       {
         teams: teams.map((t) => {
-          const { logo_url, ...sanitized } = sanitizeTeamForMember(t, authResult.userId);
+          const { logo_url, ...sanitized } = sanitizeTeamForMember(t, authResult.userId, isAdmin);
           return {
             ...sanitized,
             logoUrl: logo_url ?? null,

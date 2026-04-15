@@ -684,6 +684,10 @@ export function createWorkerDbRead(): DbRead {
       return rpc<TeamRow[]>({ method: "teams.listForUser", userId });
     },
 
+    async listAllTeams(): Promise<TeamRow[]> {
+      return rpc<TeamRow[]>({ method: "teams.listAll" });
+    },
+
     async checkTeamSlugExists(slug: string): Promise<boolean> {
       const result = await rpc<{ exists: boolean }>({
         method: "teams.checkSlugExists",

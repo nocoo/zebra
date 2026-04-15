@@ -1,11 +1,12 @@
 /**
  * GET /api/organizations/mine — list organizations the current user belongs to.
  *
- * Requires authentication.
+ * Requires authentication. Admins see all organizations.
  */
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
+import { isAdminUser } from "@/lib/admin";
 import { getDbRead } from "@/lib/db";
 
 export async function GET(request: Request) {
@@ -16,7 +17,12 @@ export async function GET(request: Request) {
 
   try {
     const dbRead = await getDbRead();
-    const results = await dbRead.listUserOrganizations(authResult.userId);
+    const isAdmin = await isAdminUser(authResult);
+
+    // Admins see all organizations, regular users see only their memberships
+    const results = isAdmin
+      ? await dbRead.listOrganizations()
+      : await dbRead.listUserOrganizations(authResult.userId);
 
     const organizations = results.map((r) => ({
       id: r.id,

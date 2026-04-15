@@ -56,6 +56,10 @@ export interface ListUserTeamsRequest {
   userId: string;
 }
 
+export interface ListAllTeamsRequest {
+  method: "teams.listAll";
+}
+
 export interface CheckTeamSlugExistsRequest {
   method: "teams.checkSlugExists";
   slug: string;
@@ -121,6 +125,7 @@ export interface CheckUsersShareTeamRequest {
 export type TeamsRpcRequest =
   | GetTeamMembershipRequest
   | ListUserTeamsRequest
+  | ListAllTeamsRequest
   | CheckTeamSlugExistsRequest
   | GetTeamByIdRequest
   | GetTeamMembersRequest
@@ -175,6 +180,21 @@ async function handleListUserTeams(
        ORDER BY t.created_at DESC`
     )
     .bind(req.userId)
+    .all<TeamRow>();
+
+  return Response.json({ result: results.results });
+}
+
+async function handleListAllTeams(
+  db: D1Database
+): Promise<Response> {
+  const results = await db
+    .prepare(
+      `SELECT t.id, t.name, t.slug, t.invite_code, t.created_by, t.created_at, t.logo_url,
+              (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) AS member_count
+       FROM teams t
+       ORDER BY t.created_at DESC`
+    )
     .all<TeamRow>();
 
   return Response.json({ result: results.results });
@@ -454,6 +474,8 @@ export async function handleTeamsRpc(
       return handleGetTeamMembership(request, db);
     case "teams.listForUser":
       return handleListUserTeams(request, db);
+    case "teams.listAll":
+      return handleListAllTeams(db);
     case "teams.checkSlugExists":
       return handleCheckTeamSlugExists(request, db);
     case "teams.getById":
