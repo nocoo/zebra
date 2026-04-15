@@ -68,9 +68,7 @@ export async function GET() {
     status: isHealthy ? 200 : 503,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": isHealthy
-        ? "public, max-age=10"
-        : "no-store, no-cache, must-revalidate",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
   });
 }

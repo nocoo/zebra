@@ -81,7 +81,7 @@ describe("GET /api/live", () => {
     const res = await GET(makeGetRequest());
     expect(res.headers.get("Content-Type")).toBe("application/json");
     expect(res.headers.get("Cache-Control")).toBe(
-      "public, max-age=10"
+      "no-store, no-cache, must-revalidate"
     );
   });
 
