@@ -58,7 +58,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("state", state!);
 
         // Small delay to let server start
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -121,7 +121,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("email", "new@example.com");
         callbackUrl.searchParams.set("state", state);
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -166,7 +166,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("email", "test@example.com");
         callbackUrl.searchParams.set("state", state);
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -189,7 +189,7 @@ describe("executeLogin", () => {
         const callbackUrl = new URL(callbackParam);
         const port = callbackUrl.port;
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
 
         // Hit a non-callback path
         const res = await fetch(`http://localhost:${port}/some-random-path`);
@@ -239,7 +239,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("api_key", "pk_injected");
         // Deliberately omit state parameter
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -261,7 +261,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("api_key", "pk_injected");
         callbackUrl.searchParams.set("state", "wrong_nonce_from_attacker");
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -296,7 +296,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("api_key", "pk_test_bind");
         callbackUrl.searchParams.set("state", state);
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
@@ -324,7 +324,7 @@ describe("executeLogin", () => {
         callbackUrl.searchParams.set("api_key", "pk_state_test");
         callbackUrl.searchParams.set("state", state);
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         await fetch(callbackUrl.toString());
       },
     });
