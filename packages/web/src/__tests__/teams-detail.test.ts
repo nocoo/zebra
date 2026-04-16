@@ -531,6 +531,15 @@ describe("PATCH /api/teams/[teamId]", () => {
   });
 
   it("should reject unauthenticated with 401", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce(null);
+
+    const res = await PATCH(
+      makeRequest("PATCH", { auto_register_season: true }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(401);
+  });
 
   it("should reject non-owner with 403", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });

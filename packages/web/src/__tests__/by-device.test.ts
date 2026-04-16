@@ -186,7 +186,7 @@ describe("GET /api/usage/by-device", () => {
       expect(body.deviceDetails[0].source).toBe("claude-code");
       expect(body.deviceDetails[0].total_tokens).toBe(30000 + 15000 + 5000);
       // Empty sources/models should produce empty arrays
-      expect(body.devices[0].sources).toEqual([""]);
+      expect(body.devices[0].sources).toEqual([]);
     });
 
     it("should handle device with no cost rows (estimated_cost = 0)", async () => {
