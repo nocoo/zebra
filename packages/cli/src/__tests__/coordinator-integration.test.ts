@@ -58,7 +58,7 @@ describe("concurrent coordinatedSync serialization", () => {
     });
 
     // Give process 1 time to acquire lock and start sync
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 50));
 
     const promise2 = coordinatedSync(trigger, {
       stateDir,
@@ -67,7 +67,7 @@ describe("concurrent coordinatedSync serialization", () => {
     });
 
     // Let process 1 finish
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 100));
     resolveFirst?.();
 
     const [result1, result2] = await Promise.all([promise1, promise2]);
