@@ -133,4 +133,42 @@ describe("POST /api/admin/seasons/[seasonId]/sync-rosters", () => {
       "season-1",
     );
   });
+
+  it("should return 503 when season tables not migrated", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.getSeasonById.mockRejectedValueOnce(
+      new Error("no such table: seasons"),
+    );
+
+    const res = await POST(makeRequest(), { params: seasonParams });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toContain("not yet migrated");
+  });
+
+  it("should return 500 on unexpected error", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.getSeasonById.mockRejectedValueOnce(new Error("D1 connection lost"));
+
+    const res = await POST(makeRequest(), { params: seasonParams });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Failed to sync rosters");
+  });
+
+  it("should return 500 when syncAllRostersForSeason throws", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.getSeasonById.mockResolvedValueOnce({
+      id: "season-1",
+      start_date: "2020-01-01T00:00:00Z",
+      end_date: "2099-12-31T00:00:00Z",
+      allow_roster_changes: 1,
+    });
+    syncAllRostersForSeason.mockRejectedValueOnce(new Error("sync failed"));
+
+    const res = await POST(makeRequest(), { params: seasonParams });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Failed to sync rosters");
+  });
 });

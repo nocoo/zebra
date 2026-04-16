@@ -54,6 +54,171 @@ describe("GET /api/usage/by-device", () => {
     });
   });
 
+  describe("date and parameter validation", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+    });
+
+    it("should return 400 for invalid from date format", async () => {
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "not-a-date" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid date format");
+    });
+
+    it("should return 400 for invalid to date format", async () => {
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "bad" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid date format");
+    });
+
+    it("should return 400 for invalid tzOffset (NaN)", async () => {
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11", tzOffset: "abc" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid tzOffset value");
+    });
+
+    it("should return 400 for tzOffset > 840", async () => {
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11", tzOffset: "900" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid tzOffset value");
+    });
+
+    it("should use defaults when from/to not provided", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device"));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.devices).toEqual([]);
+    });
+
+    it("should pass half-hour granularity to DB", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11", granularity: "half-hour" }));
+      expect(res.status).toBe(200);
+      expect(mockDbRead.getDeviceTimeline).toHaveBeenCalledWith(
+        "u1",
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ granularity: "half-hour" }),
+      );
+    });
+
+    it("should handle bare date (YYYY-MM-DD) in to param by bumping +1 day", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-10" }));
+      expect(res.status).toBe(200);
+    });
+
+    it("should handle full ISO to param without bumping", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-10T23:59:59Z" }));
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("deviceDetails and empty sources", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+    });
+
+    it("should return deviceDetails in response", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([
+        {
+          device_id: "aaaa-1111",
+          alias: null,
+          first_seen: "2026-03-01T00:00:00Z",
+          last_seen: "2026-03-10T12:00:00Z",
+          total_tokens: 50000,
+          input_tokens: 30000,
+          output_tokens: 15000,
+          cached_input_tokens: 5000,
+          reasoning_output_tokens: 0,
+          sources: "",
+          models: "",
+        },
+      ]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([
+        {
+          device_id: "aaaa-1111",
+          source: "claude-code",
+          model: "claude-sonnet-4-20250514",
+          input_tokens: 30000,
+          output_tokens: 15000,
+          cached_input_tokens: 5000,
+        },
+      ]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      // deviceDetails should be present
+      expect(body.deviceDetails).toHaveLength(1);
+      expect(body.deviceDetails[0].device_id).toBe("aaaa-1111");
+      expect(body.deviceDetails[0].source).toBe("claude-code");
+      expect(body.deviceDetails[0].total_tokens).toBe(30000 + 15000 + 5000);
+      // Empty sources/models should produce empty arrays
+      expect(body.devices[0].sources).toEqual([""]);
+    });
+
+    it("should handle device with no cost rows (estimated_cost = 0)", async () => {
+      mockDbRead.getDeviceSummary.mockResolvedValueOnce([
+        {
+          device_id: "aaaa-1111",
+          alias: null,
+          first_seen: "2026-03-01T00:00:00Z",
+          last_seen: "2026-03-10T12:00:00Z",
+          total_tokens: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cached_input_tokens: 0,
+          reasoning_output_tokens: 0,
+          sources: null,
+          models: null,
+        },
+      ]);
+      mockDbRead.getDeviceCostDetails.mockResolvedValueOnce([]);
+      mockDbRead.getDeviceTimeline.mockResolvedValueOnce([]);
+      mockDbRead.listModelPricing.mockResolvedValueOnce([]);
+
+      const res = await GET(makeGetRequest("/api/usage/by-device", { from: "2026-03-01", to: "2026-03-11" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.devices[0].estimated_cost).toBe(0);
+      // null sources/models → empty array
+      expect(body.devices[0].sources).toEqual([]);
+    });
+  });
+
   describe("response format", () => {
     beforeEach(() => {
       vi.mocked(resolveUser).mockResolvedValue({

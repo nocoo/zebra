@@ -59,6 +59,26 @@ describe("GET /api/admin/invites", () => {
     expect(json.error).toBe("Forbidden");
   });
 
+  it("should return empty rows when table does not exist", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    mockDbRead.listInviteCodes.mockRejectedValueOnce(new Error("no such table: invite_codes"));
+
+    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.rows).toEqual([]);
+  });
+
+  it("should return 500 on unexpected error", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    mockDbRead.listInviteCodes.mockRejectedValueOnce(new Error("D1 connection failed"));
+
+    const res = await GET(makeJsonRequest("GET", "/api/admin/invites"));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to load invite codes");
+  });
+
   it("should return rows for admin", async () => {
     resolveAdmin.mockResolvedValueOnce({
       userId: "admin-1",
@@ -131,6 +151,73 @@ describe("POST /api/admin/invites", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("count must be at most 20");
+  });
+
+  it("should return 400 for invalid JSON body", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    const req = new Request("http://localhost:7020/api/admin/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("Invalid JSON");
+  });
+
+  it("should default count to 1 when not provided", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    mockDbRead.checkInviteCodeExists.mockResolvedValue(null);
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", {}));
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.codes).toHaveLength(1);
+  });
+
+  it("should reject non-integer count like 1.5", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 1.5 }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("count must be a positive integer");
+  });
+
+  it("should retry on code collision and succeed", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    // First call: collision (code exists), second call: no collision
+    mockDbRead.checkInviteCodeExists
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockResolvedValue({ changes: 1, duration: 0.01 });
+
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 1 }));
+    expect(res.status).toBe(201);
+    expect(mockDbRead.checkInviteCodeExists).toHaveBeenCalledTimes(2);
+  });
+
+  it("should return 500 after exceeding collision retry limit", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    // Always collision
+    mockDbRead.checkInviteCodeExists.mockResolvedValue({ id: 1 });
+
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 1 }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("unique code after retries");
+  });
+
+  it("should return 500 when dbWrite.execute fails", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    mockDbRead.checkInviteCodeExists.mockResolvedValue(null);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 write failed"));
+
+    const res = await POST(makeJsonRequest("POST", "/api/admin/invites", { count: 1 }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to generate invite codes");
   });
 
   it("should reject count < 1", async () => {
@@ -272,5 +359,23 @@ describe("DELETE /api/admin/invites", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toBe("Code not found");
+  });
+
+  it("should return 400 for id=0", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/admin/invites?id=0"));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("Invalid id");
+  });
+
+  it("should return 500 when dbWrite.execute throws", async () => {
+    resolveAdmin.mockResolvedValueOnce({ userId: "admin-1", email: "admin@test.com" });
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 write failed"));
+
+    const res = await DELETE(makeJsonRequest("DELETE", "/api/admin/invites?id=1"));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to delete invite code");
   });
 });

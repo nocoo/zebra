@@ -127,4 +127,41 @@ describe("POST /api/auth/verify-invite", () => {
     expect(json.valid).toBe(false);
     expect(json.error).toBe("Invalid invite code format");
   });
+
+  it("should return 500 when DB throws", async () => {
+    mockDbRead.checkInviteCodeExists.mockRejectedValueOnce(new Error("D1 connection failed"));
+
+    const res = await POST(makeRequest({ code: "A3K9X2M4" }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe("Failed to verify invite code");
+  });
+
+  it("should not set Secure flag when shouldUseSecureCookies returns false", async () => {
+    shouldUseSecureCookies.mockReturnValueOnce(false);
+    mockDbRead.checkInviteCodeExists.mockResolvedValueOnce({ id: 42, used_by: null });
+
+    const res = await POST(makeRequest({ code: "A3K9X2M4" }));
+    expect(res.status).toBe(200);
+
+    const setCookie = res.headers.get("set-cookie");
+    expect(setCookie).not.toContain("Secure");
+  });
+
+  it("should return 400 for missing code field", async () => {
+    const res = await POST(makeRequest({}));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe("Invalid invite code format");
+  });
+
+  it("should return 400 for non-string code", async () => {
+    const res = await POST(makeRequest({ code: 12345 }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe("Invalid invite code format");
+  });
 });

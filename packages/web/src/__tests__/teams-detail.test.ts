@@ -14,6 +14,14 @@ vi.mock("@/lib/auth-helpers", () => ({
   resolveUser: vi.fn(),
 }));
 
+vi.mock("@/lib/r2", () => ({
+  deleteTeamLogoByUrl: vi.fn(),
+}));
+
+vi.mock("@/lib/season-roster", () => ({
+  syncSeasonRosters: vi.fn(),
+}));
+
 import * as dbModule from "@/lib/db";
 
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
@@ -211,6 +219,101 @@ describe("GET /api/teams/[teamId]", () => {
     expect(res.status).toBe(503);
   });
 
+  it("should strip invite_code for non-owner member", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
+    mockDbRead.getTeamById.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team",
+      slug: "team",
+      invite_code: "secret-code",
+      created_at: "2026-01-01T00:00:00Z",
+      logo_url: "https://r2.example.com/logo.png",
+      auto_register_season: 1,
+    });
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([]);
+    mockDbRead.getTeamSeasonRegistrations.mockResolvedValueOnce(["s1"]);
+
+    const res = await GET(makeRequest("GET"), makeParams());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    // invite_code should NOT be present for non-owner
+    expect(body.invite_code).toBeUndefined();
+    // logoUrl should be mapped
+    expect(body.logoUrl).toBe("https://r2.example.com/logo.png");
+    // auto_register_season truthy → true
+    expect(body.auto_register_season).toBe(true);
+    expect(body.registered_season_ids).toEqual(["s1"]);
+  });
+
+  it("should include invite_code for owner", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamById.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team",
+      slug: "team",
+      invite_code: "secret-code",
+      created_at: "2026-01-01T00:00:00Z",
+      logo_url: null,
+      auto_register_season: null,
+    });
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([]);
+    mockDbRead.getTeamSeasonRegistrations.mockResolvedValueOnce([]);
+
+    const res = await GET(makeRequest("GET"), makeParams());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.invite_code).toBe("secret-code");
+  });
+
+  it("should gracefully handle season registration table missing (non-table error logged)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamById.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team",
+      slug: "team",
+      invite_code: "x",
+      created_at: "2026-01-01T00:00:00Z",
+      logo_url: null,
+      auto_register_season: null,
+    });
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([]);
+    // Non "no such table" error — should be logged but not crash
+    mockDbRead.getTeamSeasonRegistrations.mockRejectedValueOnce(new Error("D1 timeout"));
+
+    const res = await GET(makeRequest("GET"), makeParams());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.registered_season_ids).toEqual([]);
+  });
+
+  it("should gracefully handle season registration table not existing", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.getTeamById.mockResolvedValueOnce({
+      id: "t1",
+      name: "Team",
+      slug: "team",
+      invite_code: "x",
+      created_at: "2026-01-01T00:00:00Z",
+      logo_url: null,
+      auto_register_season: null,
+    });
+    mockDbRead.getTeamMembers.mockResolvedValueOnce([]);
+    mockDbRead.getTeamSeasonRegistrations.mockRejectedValueOnce(new Error("no such table: season_teams"));
+
+    const res = await GET(makeRequest("GET"), makeParams());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.registered_season_ids).toEqual([]);
+  });
+
   it("should return 500 on unexpected error in GET", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.getTeamMembership.mockResolvedValueOnce("member");
@@ -308,6 +411,41 @@ describe("DELETE /api/teams/[teamId]", () => {
     expect(batchCalls.some((s) => s.sql.includes("DELETE FROM season_roster_snapshots"))).toBe(false);
   });
 
+  it("should delete team logo when last member leaves and logo exists", async () => {
+    const { deleteTeamLogoByUrl } = (await import("@/lib/r2")) as unknown as {
+      deleteTeamLogoByUrl: ReturnType<typeof vi.fn>;
+    };
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.countTeamMembers.mockResolvedValueOnce(1);
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce("https://r2.example.com/logo.png");
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
+    mockDbWrite.batch.mockResolvedValue([]);
+    deleteTeamLogoByUrl.mockResolvedValueOnce(undefined);
+
+    const res = await DELETE(makeRequest("DELETE"), makeParams());
+
+    expect(res.status).toBe(200);
+    expect(deleteTeamLogoByUrl).toHaveBeenCalledWith("https://r2.example.com/logo.png");
+  });
+
+  it("should succeed even if logo deletion fails (best-effort)", async () => {
+    const { deleteTeamLogoByUrl } = (await import("@/lib/r2")) as unknown as {
+      deleteTeamLogoByUrl: ReturnType<typeof vi.fn>;
+    };
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce("owner");
+    mockDbRead.countTeamMembers.mockResolvedValueOnce(1);
+    mockDbRead.getTeamLogoUrl.mockResolvedValueOnce("https://r2.example.com/logo.png");
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
+    mockDbWrite.batch.mockResolvedValue([]);
+    deleteTeamLogoByUrl.mockRejectedValueOnce(new Error("R2 unavailable"));
+
+    const res = await DELETE(makeRequest("DELETE"), makeParams());
+
+    expect(res.status).toBe(200);
+  });
+
   it("should return 503 when teams table does not exist (DELETE)", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     mockDbRead.getTeamMembership.mockRejectedValueOnce(
@@ -348,16 +486,51 @@ describe("PATCH /api/teams/[teamId]", () => {
     PATCH = mod.PATCH;
   });
 
-  it("should reject unauthenticated with 401", async () => {
-    vi.mocked(resolveUser).mockResolvedValueOnce(null);
+  it("should return 400 for invalid JSON", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    const req = new Request("http://localhost:7020/api/teams/t1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    });
+    const res = await PATCH(req, makeParams());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Invalid JSON");
+  });
 
+  it("should return 400 for name exceeding 64 characters", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
     const res = await PATCH(
-      makeRequest("PATCH", { auto_register_season: true }),
+      makeRequest("PATCH", { name: "A".repeat(65) }),
       makeParams(),
     );
-
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("max 64 characters");
   });
+
+  it("should return 400 for empty name after trim", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    const res = await PATCH(
+      makeRequest("PATCH", { name: "   " }),
+      makeParams(),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("max 64 characters");
+  });
+
+  it("should return 403 when user is not a member (PATCH)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.getTeamMembership.mockResolvedValueOnce(null);
+
+    const res = await PATCH(
+      makeRequest("PATCH", { name: "Test" }),
+      makeParams(),
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toContain("Not a member");
+  });
+
+  it("should reject unauthenticated with 401", async () => {
 
   it("should reject non-owner with 403", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });

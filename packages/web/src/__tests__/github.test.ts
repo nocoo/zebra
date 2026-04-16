@@ -197,6 +197,11 @@ describe("gitHubErrorToStatus", () => {
     const err = new GitHubError("TIMEOUT", "test");
     expect(gitHubErrorToStatus(err)).toBe(422);
   });
+
+  it("maps unknown code to 500", () => {
+    const err = new GitHubError("UNKNOWN_CODE" as any, "test");
+    expect(gitHubErrorToStatus(err)).toBe(500);
+  });
 });
 
 describe("gitHubErrorMessage", () => {
@@ -213,6 +218,26 @@ describe("gitHubErrorMessage", () => {
   it("returns user-friendly message for TIMEOUT", () => {
     const err = new GitHubError("TIMEOUT", "test");
     expect(gitHubErrorMessage(err)).toContain("timed out");
+  });
+
+  it("returns user-friendly message for FORBIDDEN", () => {
+    const err = new GitHubError("FORBIDDEN", "test");
+    expect(gitHubErrorMessage(err)).toBe("Cannot access repository");
+  });
+
+  it("returns user-friendly message for UPSTREAM_ERROR", () => {
+    const err = new GitHubError("UPSTREAM_ERROR", "test");
+    expect(gitHubErrorMessage(err)).toContain("temporarily unavailable");
+  });
+
+  it("returns user-friendly message for NETWORK_ERROR", () => {
+    const err = new GitHubError("NETWORK_ERROR", "test");
+    expect(gitHubErrorMessage(err)).toContain("Failed to connect");
+  });
+
+  it("returns fallback for unknown code", () => {
+    const err = new GitHubError("UNKNOWN_CODE" as any, "test");
+    expect(gitHubErrorMessage(err)).toBe("Unknown error occurred");
   });
 });
 
@@ -426,6 +451,27 @@ describe("fetchGitHubMetadata", () => {
     expect(result.title).toBe("owner/repo"); // fallback
     expect(result.description).toBeNull();
     expect(result.fullName).toBe("owner/repo"); // fallback
+  });
+
+  it("returns mock metadata in E2E test mode", async () => {
+    const originalE2E = process.env.E2E_MOCK_GITHUB;
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.E2E_MOCK_GITHUB = "1";
+    process.env.NODE_ENV = "development";
+
+    try {
+      const result = await fetchGitHubMetadata("test-owner", "test-repo");
+
+      expect(result.owner).toBe("test-owner");
+      expect(result.name).toBe("test-repo");
+      expect(result.description).toBe("E2E test repository");
+      expect(result.stars).toBe(0);
+    } finally {
+      if (originalE2E === undefined) delete process.env.E2E_MOCK_GITHUB;
+      else process.env.E2E_MOCK_GITHUB = originalE2E;
+      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalNodeEnv;
+    }
   });
 
   it("sends correct headers", async () => {
