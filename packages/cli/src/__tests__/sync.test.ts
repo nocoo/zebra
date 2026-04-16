@@ -434,7 +434,7 @@ describe("executeSync", () => {
     expect(r1.totalDeltas).toBe(1);
 
     // Wait to ensure mtime differs, then add a NEW file (simulating a new message)
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 1));
     await writeFile(join(ocDir, "msg_002.json"), opencodeMsg(1771120799059, 200, 100));
 
     const r2 = await executeSync({
@@ -1352,7 +1352,7 @@ describe("executeSync", () => {
     });
 
     // Add a new file to the session dir to change dir mtime (but keep msg_001 unchanged)
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 1));
     await writeFile(join(sesDir, "msg_002.json"), opencodeMsg(1741320300000, 150, 75));
 
     // Second sync with onProgress — dir mtime changed, so dir is scanned.
@@ -1638,7 +1638,7 @@ describe("executeSync", () => {
     // (On most filesystems, rm + create = new inode)
     const { rm: rmFile } = await import("node:fs/promises");
     await rmFile(filePath);
-    await new Promise((r) => setTimeout(r, 50)); // ensure different mtime
+    await new Promise((r) => setTimeout(r, 1)); // ensure different mtime
     await writeFile(filePath, content);
 
     // Second sync — inode changed, driver will replay from offset 0
@@ -1683,7 +1683,7 @@ describe("executeSync", () => {
     // Simulate Claude file inode change
     const { rm: rmFile } = await import("node:fs/promises");
     await rmFile(claudePath);
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 1));
     await writeFile(claudePath, claudeContent);
 
     // Second sync
@@ -2731,7 +2731,7 @@ describe("executeSync", () => {
     // Simulate inode change
     const { rm: rmFile } = await import("node:fs/promises");
     await rmFile(filePath);
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 1));
     await writeFile(filePath, content);
 
     // Second sync with onProgress
