@@ -141,7 +141,7 @@ describe("executeLogin", () => {
     const result = await executeLogin({
       configDir: tempDir,
       apiUrl: "http://localhost:7020",
-      timeoutMs: 500,
+      timeoutMs: 50, // Reduced from 500ms for faster tests
       openBrowser: async () => {
         // Do nothing — simulate user not completing login
       },
@@ -213,7 +213,7 @@ describe("executeLogin", () => {
     const result = await executeLogin({
       configDir: tempDir,
       apiUrl: "http://localhost:7020",
-      timeoutMs: 500, // Short timeout
+      timeoutMs: 50, // Reduced from 500ms for faster tests
       openBrowser: async () => {
         throw new Error("xdg-open not found");
       },
@@ -572,7 +572,7 @@ describe("executeLogin", () => {
       const loginPromise = executeLogin({
         configDir: tempDir,
         apiUrl: "http://localhost:7020",
-        timeoutMs: 300,
+        timeoutMs: 50, // Reduced from 300ms for faster tests
         generateNonce: () => FIXED_NONCE,
         log: (msg) => logMessages.push(msg),
         openBrowser: async (_url) => {
