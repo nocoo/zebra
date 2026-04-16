@@ -10,6 +10,13 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        isolate: true,
+      },
+    },
     exclude: [
       "**/node_modules/**",
       "**/dist/**",
