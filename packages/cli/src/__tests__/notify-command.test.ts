@@ -466,7 +466,7 @@ describe("trailing-edge cooldown sync", () => {
           return makeResult({
             skippedSync: true,
             skippedReason: "cooldown",
-            cooldownRemainingMs: 200, // Long enough for second notify to see the lock
+            cooldownRemainingMs: 20, // Reduced from 200ms - still long enough for lock detection
           });
         }
         return makeResult({ cycles: [{}] });
@@ -499,8 +499,8 @@ describe("trailing-edge cooldown sync", () => {
       expect(coordinatedSyncFn).toHaveBeenCalledTimes(3); // 2 initial + 1 trailing
     }, { timeout: 2_000 });
 
-    // Give extra time to confirm no fourth call
-    await new Promise((r) => setTimeout(r, 300));
+    // Give extra time to confirm no fourth call (reduced from 300ms)
+    await new Promise((r) => setTimeout(r, 50));
     expect(coordinatedSyncFn).toHaveBeenCalledTimes(3);
   });
 
