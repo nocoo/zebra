@@ -469,7 +469,7 @@ describe("executeUpload", () => {
     await queue.appendBatch([makeRecord()]);
 
     const { fetchFn, calls } = createMockFetch([
-      { status: 429, body: { error: "Too Many Requests" }, headers: { "Retry-After": "1" } },
+      { status: 429, body: { error: "Too Many Requests" }, headers: { "Retry-After": "0" } },
       { status: 200, body: { ingested: 1 } },
     ]);
 
