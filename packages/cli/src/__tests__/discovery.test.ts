@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir, symlink, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
   discoverVscodeCopilotFiles,
   discoverCopilotCliFiles,
   discoverCodexFiles,
+  discoverPiFiles,
 } from "../discovery/sources.js";
 
 describe("discoverClaudeFiles", () => {
@@ -117,6 +118,35 @@ describe("discoverOpenCodeFiles", () => {
     const r2 = await discoverOpenCodeFiles(messageDir, r1.dirMtimes);
     expect(r2.files).toHaveLength(0);
     expect(r2.skippedDirs).toBe(1);
+  });
+
+  it("should skip subdirectories that cannot be stat'd", async () => {
+    const messageDir = join(tempDir, "storage", "message");
+    await mkdir(messageDir, { recursive: true });
+    // Create a dangling symlink that looks like a directory entry but fails stat
+    await symlink(join(tempDir, "nonexistent-target"), join(messageDir, "broken-link"));
+
+    const result = await discoverOpenCodeFiles(messageDir);
+    // Should not crash, just skip the broken entry
+    expect(result.files).toEqual([]);
+  });
+
+  it("should skip subdirectories that cannot be read", async () => {
+    const messageDir = join(tempDir, "storage", "message");
+    const sesDir = join(messageDir, "ses_unreadable");
+    await mkdir(sesDir, { recursive: true });
+    await writeFile(join(sesDir, "msg.json"), "{}");
+    // Make the directory unreadable
+    await chmod(sesDir, 0o000);
+
+    try {
+      const result = await discoverOpenCodeFiles(messageDir);
+      // Should not crash, just skip the unreadable directory
+      expect(result.files).toEqual([]);
+    } finally {
+      // Restore permissions for cleanup
+      await chmod(sesDir, 0o755);
+    }
   });
 });
 
@@ -375,5 +405,34 @@ describe("discoverCodexFiles", () => {
     // Only primary dir files found
     expect(files).toHaveLength(1);
     expect(files[0]).toContain("rollout-primary.jsonl");
+  });
+});
+
+describe("discoverPiFiles", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "pew-discover-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should find JSONL files in sessions directory", async () => {
+    const sessionsDir = join(tempDir, "agent", "sessions", "encoded-cwd");
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(join(sessionsDir, "session1.jsonl"), "{}");
+    await writeFile(join(sessionsDir, "session2.jsonl"), "{}");
+    await writeFile(join(sessionsDir, "notes.txt"), "not a jsonl");
+
+    const files = await discoverPiFiles(join(tempDir, "agent", "sessions"));
+    expect(files).toHaveLength(2);
+    expect(files.every((f) => f.endsWith(".jsonl"))).toBe(true);
+  });
+
+  it("should return empty array if directory does not exist", async () => {
+    const files = await discoverPiFiles(join(tempDir, "nonexistent"));
+    expect(files).toEqual([]);
   });
 });

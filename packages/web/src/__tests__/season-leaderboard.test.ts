@@ -601,4 +601,132 @@ describe("GET /api/seasons/[seasonId]/leaderboard", () => {
       expect(data.entries[0].members[0].total_duration_seconds).toBe(1800);
     });
   });
+
+  describe("snapshot session stats enrichment", () => {
+    it("should enrich snapshot entries with team session stats", async () => {
+      mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON);
+      mockDbRead.getSeasonSnapshots.mockResolvedValueOnce([
+        {
+          team_id: "team-a",
+          team_name: "Team Alpha",
+          team_slug: "team-alpha",
+          team_logo_url: null,
+          rank: 1,
+          total_tokens: 20000,
+          input_tokens: 12000,
+          output_tokens: 8000,
+          cached_input_tokens: 5000,
+        },
+      ]);
+      mockDbRead.getSeasonTeamSessionStats.mockResolvedValueOnce([
+        {
+          team_id: "team-a",
+          session_count: 10,
+          total_duration_seconds: 600,
+        },
+      ]);
+
+      const res = await GET(makeRequest(), { params: routeParams });
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.entries[0].session_count).toBe(10);
+      expect(data.entries[0].total_duration_seconds).toBe(600);
+    });
+
+    it("should enrich snapshot member entries with session stats", async () => {
+      mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON);
+      mockDbRead.getSeasonSnapshots.mockResolvedValueOnce([
+        {
+          team_id: "team-a",
+          team_name: "Team Alpha",
+          team_slug: "team-alpha",
+          team_logo_url: null,
+          rank: 1,
+          total_tokens: 20000,
+          input_tokens: 12000,
+          output_tokens: 8000,
+          cached_input_tokens: 5000,
+        },
+      ]);
+      mockDbRead.getSeasonMemberSnapshots.mockResolvedValueOnce([
+        {
+          team_id: "team-a",
+          user_id: "user-1",
+          slug: "alice",
+          name: "Alice",
+          nickname: null,
+          image: null,
+          total_tokens: 20000,
+          input_tokens: 12000,
+          output_tokens: 8000,
+          cached_input_tokens: 5000,
+        },
+      ]);
+      mockDbRead.getSeasonTeamSessionStats.mockResolvedValueOnce([
+        { team_id: "team-a", session_count: 10, total_duration_seconds: 600 },
+      ]);
+      mockDbRead.getSeasonMemberSessionStats.mockResolvedValueOnce([
+        { team_id: "team-a", user_id: "user-1", session_count: 5, total_duration_seconds: 300 },
+      ]);
+
+      const url = "http://localhost:7020/api/seasons/season-1/leaderboard?expand=members";
+      const res = await GET(makeRequest(url), { params: routeParams });
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.entries[0].session_count).toBe(10);
+      expect(data.entries[0].members[0].session_count).toBe(5);
+      expect(data.entries[0].members[0].total_duration_seconds).toBe(300);
+    });
+
+    it("should silently skip session stats when session_records table missing", async () => {
+      mockDbRead.getSeasonBySlug.mockResolvedValueOnce(ENDED_SEASON);
+      mockDbRead.getSeasonSnapshots.mockResolvedValueOnce([
+        {
+          team_id: "team-a",
+          team_name: "Team Alpha",
+          team_slug: "team-alpha",
+          team_logo_url: null,
+          rank: 1,
+          total_tokens: 20000,
+          input_tokens: 12000,
+          output_tokens: 8000,
+          cached_input_tokens: 5000,
+        },
+      ]);
+      mockDbRead.getSeasonTeamSessionStats.mockRejectedValueOnce(
+        new Error("no such table: session_records"),
+      );
+
+      const res = await GET(makeRequest(), { params: routeParams });
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      // Session stats default to 0
+      expect(data.entries[0].session_count).toBe(0);
+    });
+  });
+
+  describe("error handling", () => {
+    it("should return 503 when season tables not migrated", async () => {
+      mockDbRead.getSeasonBySlug.mockRejectedValueOnce(
+        new Error("no such table: seasons"),
+      );
+
+      const res = await GET(makeRequest(), { params: routeParams });
+      expect(res.status).toBe(503);
+      const data = await res.json();
+      expect(data.error).toContain("not yet migrated");
+    });
+
+    it("should return 500 on unexpected error", async () => {
+      mockDbRead.getSeasonBySlug.mockRejectedValueOnce(new Error("D1 down"));
+
+      const res = await GET(makeRequest(), { params: routeParams });
+      expect(res.status).toBe(500);
+      const data = await res.json();
+      expect(data.error).toContain("Failed to load");
+    });
+  });
 });

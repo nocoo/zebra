@@ -207,4 +207,31 @@ describe("PUT /api/admin/settings", () => {
     const res = await PUT(makePut({ key: "some_future_setting", value: "anything" }));
     expect(res.status).toBe(200);
   });
+
+  // -------------------------------------------------------------------------
+  // Per-key semantic validation — require_invite_code must be "true"/"false"
+  // -------------------------------------------------------------------------
+
+  it.each(["yes", "no", "1", "0", "", "TRUE", "FALSE"])(
+    "should reject invalid require_invite_code value: %j",
+    async (badValue) => {
+      resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
+      const res = await PUT(makePut({ key: "require_invite_code", value: badValue }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("require_invite_code");
+    },
+  );
+
+  it.each(["true", "false"])(
+    "should accept valid require_invite_code value: %j",
+    async (goodValue) => {
+      resolveAdmin.mockResolvedValueOnce({ userId: "admin1", email: "a@b.com" });
+      mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
+      const res = await PUT(makePut({ key: "require_invite_code", value: goodValue }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.value).toBe(goodValue);
+    },
+  );
 });

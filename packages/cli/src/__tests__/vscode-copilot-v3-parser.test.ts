@@ -208,6 +208,22 @@ describe("parseVscodeCopilotV3File", () => {
     expect(result.deltas).toHaveLength(0);
   });
 
+  it("should handle JSON array at top level", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, JSON.stringify([1, 2, 3]));
+
+    const result = await parseVscodeCopilotV3File({ filePath });
+    expect(result.deltas).toHaveLength(0);
+  });
+
+  it("should handle v3 session with non-array requests field", async () => {
+    const filePath = join(tempDir, "session.json");
+    await writeFile(filePath, JSON.stringify({ version: 3, requests: "not-an-array" }));
+
+    const result = await parseVscodeCopilotV3File({ filePath });
+    expect(result.deltas).toHaveLength(0);
+  });
+
   it("should not skip result with only tool args tokens", async () => {
     const filePath = join(tempDir, "session.json");
     const toolCallRounds = [

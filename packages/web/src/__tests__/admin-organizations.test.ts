@@ -234,6 +234,22 @@ describe("POST /api/admin/organizations", () => {
     expect(json.error).toContain("already exists");
   });
 
+  it("should return 500 on unexpected POST error", async () => {
+    resolveAdmin.mockResolvedValueOnce(ADMIN);
+    mockDbRead.getOrganizationBySlug.mockResolvedValueOnce(null);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 down"));
+
+    const res = await POST(
+      makeJsonRequest("POST", "/api/admin/organizations", {
+        name: "Test",
+        slug: "test",
+      })
+    );
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Failed to create organization");
+  });
+
   it("should handle no-such-table on create", async () => {
     resolveAdmin.mockResolvedValueOnce(ADMIN);
     mockDbRead.getOrganizationBySlug.mockRejectedValueOnce(new Error("no such table: organizations"));

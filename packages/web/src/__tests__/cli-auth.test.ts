@@ -179,6 +179,14 @@ describe("GET /api/auth/cli", () => {
       expect(body.error).toContain("callback");
     });
 
+    it("should reject unparseable callback URLs", async () => {
+      const res = await GET(makeRequest("not-a-valid-url"));
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid callback URL");
+    });
+
     it("should reject non-localhost callback URLs", async () => {
       const res = await GET(makeRequest("https://evil.com/steal"));
 

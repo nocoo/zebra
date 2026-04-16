@@ -247,4 +247,36 @@ describe("POST /api/teams/join", () => {
     expect(res.status).toBe(403);
     expect((await res.json()).error).toContain("Team is full");
   });
+
+  it("should return 429 when rate limited", async () => {
+    vi.mocked(resolveUser).mockResolvedValue({ userId: "rate-user" });
+
+    // Exhaust rate limit (5 requests per minute)
+    for (let i = 0; i < 5; i++) {
+      mockDbRead.findTeamByInviteCode.mockResolvedValueOnce(null);
+      await POST(makeJson({ invite_code: "code" }));
+    }
+
+    const res = await POST(makeJson({ invite_code: "code" }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toContain("Too many join attempts");
+  });
+
+  it("should succeed even when syncSeasonRosters fails", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.findTeamByInviteCode.mockResolvedValueOnce({ id: "t1", name: "Team", slug: "team" });
+    mockDbRead.checkTeamMembershipExists.mockResolvedValueOnce(false);
+    mockDbRead.getAppSetting.mockResolvedValueOnce("5");
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
+
+    const { syncSeasonRosters } = (await import("@/lib/season-roster")) as unknown as {
+      syncSeasonRosters: ReturnType<typeof vi.fn>;
+    };
+    syncSeasonRosters.mockRejectedValueOnce(new Error("roster sync failed"));
+
+    const res = await POST(makeJson({ invite_code: "valid-code" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.team_id).toBe("t1");
+  });
 });

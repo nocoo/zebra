@@ -469,6 +469,55 @@ describe("admin organization member management", () => {
       expect(res.status).toBe(500);
       expect(deleteOrgLogoByUrl).toHaveBeenCalledWith("https://cdn.example.com/new.jpg");
     });
+
+    it("should return 400 when sharp fails to process the image", async () => {
+      vi.mocked(resolveAdmin).mockResolvedValue(ADMIN);
+      mockDbRead.firstOrNull.mockResolvedValueOnce({ id: "org-1" });
+
+      // Make sharp throw an error
+      const sharp = (await import("sharp")) as unknown as { default: ReturnType<typeof vi.fn> };
+      sharp.default.mockImplementationOnce(() => ({
+        resize: vi.fn().mockReturnThis(),
+        jpeg: vi.fn().mockReturnThis(),
+        toBuffer: vi.fn().mockRejectedValue(new Error("Invalid image data")),
+      }));
+
+      const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
+      const res = await UPLOAD_LOGO(makeFormRequest(file), makeParams("org-1"));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Invalid image file");
+    });
+
+    it("should handle compensating R2 delete also failing (double-fault)", async () => {
+      vi.mocked(resolveAdmin).mockResolvedValue(ADMIN);
+      mockDbRead.firstOrNull
+        .mockResolvedValueOnce({ id: "org-1" })
+        .mockRejectedValueOnce(new Error("DB failed"));
+      vi.mocked(putOrgLogo).mockResolvedValueOnce("https://cdn.example.com/new.jpg");
+      vi.mocked(deleteOrgLogoByUrl).mockRejectedValueOnce(new Error("R2 also down"));
+
+      const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
+      const res = await UPLOAD_LOGO(makeFormRequest(file), makeParams("org-1"));
+      expect(res.status).toBe(500);
+    });
+
+    it("should handle old logo deletion failure gracefully", async () => {
+      vi.mocked(resolveAdmin).mockResolvedValue(ADMIN);
+      mockDbRead.firstOrNull
+        .mockResolvedValueOnce({ id: "org-1" })
+        .mockResolvedValueOnce({ logo_url: "https://cdn.example.com/old.jpg" });
+      vi.mocked(putOrgLogo).mockResolvedValueOnce("https://cdn.example.com/new.jpg");
+      mockDbWrite.execute.mockResolvedValueOnce({});
+      // Old logo deletion fails — should not affect response
+      vi.mocked(deleteOrgLogoByUrl).mockRejectedValueOnce(new Error("R2 cleanup failed"));
+
+      const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
+      const res = await UPLOAD_LOGO(makeFormRequest(file), makeParams("org-1"));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.logoUrl).toBe("https://cdn.example.com/new.jpg");
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -541,6 +590,22 @@ describe("admin organization member management", () => {
       });
       const res = await DELETE_LOGO(req, makeParams("org-1"));
       expect(res.status).toBe(500);
+    });
+
+    it("should succeed even when R2 delete fails after DB update", async () => {
+      vi.mocked(resolveAdmin).mockResolvedValue(ADMIN);
+      mockDbRead.firstOrNull.mockResolvedValueOnce({
+        id: "org-1",
+        logo_url: "https://cdn.example.com/logo.jpg",
+      });
+      mockDbWrite.execute.mockResolvedValueOnce({});
+      vi.mocked(deleteOrgLogoByUrl).mockRejectedValueOnce(new Error("R2 error"));
+
+      const req = new Request("http://localhost/api/admin/organizations/org-1/logo", {
+        method: "DELETE",
+      });
+      const res = await DELETE_LOGO(req, makeParams("org-1"));
+      expect(res.status).toBe(200);
     });
   });
 });

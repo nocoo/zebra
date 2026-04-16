@@ -236,6 +236,32 @@ describe("listAllCacheKeys", () => {
     expect(listMock).toHaveBeenCalledTimes(10);
   });
 
+  it("should hit inner break when limit crossed mid-page", async () => {
+    // 999 keys per page means limit (10000) is crossed mid-page on page 11
+    const keysPerPage = 999;
+    const totalPages = 12;
+    const listMock = vi.fn();
+    for (let i = 0; i < totalPages; i++) {
+      const keys = Array.from({ length: keysPerPage }, (_, j) => ({
+        name: `key${i * keysPerPage + j}`,
+      }));
+      listMock.mockResolvedValueOnce({
+        keys,
+        list_complete: i === totalPages - 1,
+        cursor: i < totalPages - 1 ? `cursor${i}` : undefined,
+      });
+    }
+
+    const kv = createMockKV({ list: listMock });
+
+    const result = await listAllCacheKeys(kv);
+
+    expect(result.keys.length).toBe(10000);
+    expect(result.truncated).toBe(true);
+    // Pages 1-11: 999*11=10989, but inner break fires at 10000 on page 11
+    expect(listMock).toHaveBeenCalledTimes(11);
+  });
+
   it("should set truncated=true when exact 10000 keys but more pages exist", async () => {
     // 10 pages of 1000 keys each, but list_complete = false on last page
     const keysPerPage = 1000;
@@ -357,6 +383,30 @@ describe("clearAllCache", () => {
 
     expect(result.deleted).toBe(10000);
     expect(result.truncated).toBe(true);
+  });
+
+  it("should hit inner break when limit crossed mid-page during clear", async () => {
+    const keysPerPage = 999;
+    const totalPages = 12;
+    const listMock = vi.fn();
+    for (let i = 0; i < totalPages; i++) {
+      const keys = Array.from({ length: keysPerPage }, (_, j) => ({
+        name: `key${i * keysPerPage + j}`,
+      }));
+      listMock.mockResolvedValueOnce({
+        keys,
+        list_complete: i === totalPages - 1,
+        cursor: i < totalPages - 1 ? `cursor${i}` : undefined,
+      });
+    }
+
+    const kv = createMockKV({ list: listMock });
+
+    const result = await clearAllCache(kv);
+
+    expect(result.deleted).toBe(10000);
+    expect(result.truncated).toBe(true);
+    expect(listMock).toHaveBeenCalledTimes(11);
   });
 });
 

@@ -15,8 +15,16 @@ vi.mock("@/lib/auth-helpers", () => ({
   resolveUser: vi.fn(),
 }));
 
+vi.mock("@/lib/admin", () => ({
+  isAdminUser: vi.fn(),
+}));
+
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
   resolveUser: ReturnType<typeof vi.fn>;
+};
+
+const { isAdminUser } = (await import("@/lib/admin")) as unknown as {
+  isAdminUser: ReturnType<typeof vi.fn>;
 };
 
 function makeJson(method: string, body?: unknown): Request {
@@ -95,6 +103,56 @@ describe("GET /api/teams", () => {
     const res = await GET(makeJson("GET"));
 
     expect(res.status).toBe(500);
+  });
+
+  it("should list all teams for admin users", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "admin-1" });
+    vi.mocked(isAdminUser).mockResolvedValueOnce(true);
+    (mockDbRead as unknown as { listAllTeams: ReturnType<typeof vi.fn> }).listAllTeams =
+      vi.fn().mockResolvedValueOnce([
+        {
+          id: "t1",
+          name: "Team Alpha",
+          slug: "team-alpha",
+          invite_code: "secret",
+          created_by: "other-user",
+          created_at: "2026-01-01T00:00:00Z",
+          member_count: 3,
+          logo_url: "https://example.com/logo.png",
+        },
+      ]);
+
+    const res = await GET(makeJson("GET"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.teams).toHaveLength(1);
+    // Admin can see invite_code
+    expect(body.teams[0].invite_code).toBe("secret");
+    expect(body.teams[0].logoUrl).toBe("https://example.com/logo.png");
+  });
+
+  it("should strip invite_code for non-creator non-admin members", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u2" });
+    vi.mocked(isAdminUser).mockResolvedValueOnce(false);
+    mockDbRead.listTeamsForUser.mockResolvedValueOnce([
+      {
+        id: "t1",
+        name: "Team Alpha",
+        slug: "team-alpha",
+        invite_code: "secret",
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        member_count: 3,
+        logo_url: null,
+      },
+    ]);
+
+    const res = await GET(makeJson("GET"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.teams[0].invite_code).toBeUndefined();
   });
 });
 
@@ -219,5 +277,15 @@ describe("POST /api/teams", () => {
     const res = await POST(makeJson("POST", { name: "Test" }));
 
     expect(res.status).toBe(503);
+  });
+
+  it("should return 500 on unexpected POST error", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1" });
+    mockDbRead.checkTeamSlugExists.mockResolvedValueOnce(false);
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 down"));
+
+    const res = await POST(makeJson("POST", { name: "Test" }));
+
+    expect(res.status).toBe(500);
   });
 });

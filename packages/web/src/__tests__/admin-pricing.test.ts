@@ -266,11 +266,21 @@ describe("POST /api/admin/pricing", () => {
 
     expect(res.status).toBe(409);
   });
-});
 
-// ---------------------------------------------------------------------------
-// PUT /api/admin/pricing
-// ---------------------------------------------------------------------------
+  it("should return 500 on unexpected POST error", async () => {
+    vi.mocked(resolveAdmin).mockResolvedValueOnce({
+      userId: "u1",
+      email: "a@test.com",
+    });
+    mockDbWrite.execute.mockRejectedValueOnce(new Error("D1 down"));
+
+    const res = await POST(
+      makeJson("POST", { model: "gpt-4o", input: 1, output: 1 }),
+    );
+
+    expect(res.status).toBe(500);
+  });
+});
 
 describe("PUT /api/admin/pricing", () => {
   let PUT: (req: Request) => Promise<Response>;
@@ -305,6 +315,42 @@ describe("PUT /api/admin/pricing", () => {
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("id is required");
+  });
+
+  it("should reject invalid JSON in PUT", async () => {
+    vi.mocked(resolveAdmin).mockResolvedValueOnce({
+      userId: "u1",
+      email: "a@test.com",
+    });
+
+    const res = await PUT(
+      new Request("http://localhost:7020/api/admin/pricing", {
+        method: "PUT",
+        body: "bad",
+      }),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("should update output field", async () => {
+    vi.mocked(resolveAdmin).mockResolvedValueOnce({
+      userId: "u1",
+      email: "a@test.com",
+    });
+    mockDbWrite.execute.mockResolvedValueOnce({ changes: 1 });
+    mockDbRead.getModelPricingById.mockResolvedValueOnce({
+      id: 1,
+      model: "gpt-4o",
+      input: 2.5,
+      output: 15,
+    });
+
+    const res = await PUT(makeJson("PUT", { id: 1, output: 15 }));
+
+    expect(res.status).toBe(200);
+    const [sql] = mockDbWrite.execute.mock.calls[0]!;
+    expect(sql).toContain("output = ?");
   });
 
   it("should reject empty model string", async () => {
