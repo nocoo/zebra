@@ -357,12 +357,12 @@ describe("Worker /api/live endpoint", () => {
     const body = await json(res);
     expect(body.status).toBe("ok");
     expect(body.version).toBe(WORKER_VERSION);
+    expect(body.component).toBe("pew-ingest");
     expect(typeof body.uptime).toBe("number");
     expect(typeof body.timestamp).toBe("string");
 
-    const db = body.db as Record<string, unknown>;
-    expect(db.connected).toBe(true);
-    expect(typeof db.latencyMs).toBe("number");
+    const database = body.database as Record<string, unknown>;
+    expect(database.connected).toBe(true);
   });
 
   it("should include correct response headers (no-cache)", async () => {
@@ -373,13 +373,11 @@ describe("Worker /api/live endpoint", () => {
     });
 
     const res = await worker.fetch(makeLiveRequest(), env);
-    expect(res.headers.get("Content-Type")).toBe("application/json");
-    expect(res.headers.get("Cache-Control")).toBe(
-      "no-store, no-cache, must-revalidate"
-    );
+    expect(res.headers.get("Content-Type")).toContain("application/json");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  it("should call D1 with SELECT 1 for lightweight check", async () => {
+  it("should call D1 with SELECT 1 AS probe for lightweight check", async () => {
     const firstMock = vi.fn().mockResolvedValue({ 1: 1 });
     (env.DB.prepare as ReturnType<typeof vi.fn>).mockReturnValue({
       bind: vi.fn().mockReturnValue({}),
@@ -387,7 +385,7 @@ describe("Worker /api/live endpoint", () => {
     });
 
     await worker.fetch(makeLiveRequest(), env);
-    expect(env.DB.prepare).toHaveBeenCalledWith("SELECT 1");
+    expect(env.DB.prepare).toHaveBeenCalledWith("SELECT 1 AS probe");
   });
 
   // -----------------------------------------------------------------------
@@ -407,9 +405,9 @@ describe("Worker /api/live endpoint", () => {
     expect(body.status).toBe("error");
     expect(body.version).toBe(WORKER_VERSION);
 
-    const db = body.db as Record<string, unknown>;
-    expect(db.connected).toBe(false);
-    expect(typeof db.error).toBe("string");
+    const database = body.database as Record<string, unknown>;
+    expect(database.connected).toBe(false);
+    expect(typeof database.error).toBe("string");
   });
 
   it("should not contain 'ok' in error response values", async () => {
@@ -422,8 +420,8 @@ describe("Worker /api/live endpoint", () => {
     const body = await json(res);
     expect(body.status).toBe("error");
 
-    const db = body.db as Record<string, unknown>;
-    expect(db.error).not.toMatch(/\bok\b/i);
+    const database = body.database as Record<string, unknown>;
+    expect(database.error).not.toMatch(/\bok\b/i);
   });
 
   it("should sanitize ok from D1 error messages", async () => {
@@ -434,8 +432,8 @@ describe("Worker /api/live endpoint", () => {
 
     const res = await worker.fetch(makeLiveRequest(), env);
     const body = await json(res);
-    const db = body.db as Record<string, unknown>;
-    expect(db.error).toBe("*** something failed");
+    const database = body.database as Record<string, unknown>;
+    expect(database.error).toBe("*** something failed");
   });
 
   it("should handle non-Error throw from D1", async () => {
@@ -448,9 +446,9 @@ describe("Worker /api/live endpoint", () => {
     expect(res.status).toBe(503);
 
     const body = await json(res);
-    const db = body.db as Record<string, unknown>;
-    expect(db.connected).toBe(false);
-    expect(db.error).toBe("string error");
+    const database = body.database as Record<string, unknown>;
+    expect(database.connected).toBe(false);
+    expect(database.error).toBe("string error");
   });
 
   // -----------------------------------------------------------------------
@@ -495,7 +493,7 @@ describe("Worker /api/live endpoint", () => {
     const res = await worker.fetch(makeLiveRequest(), env);
     const body = await json(res);
     const keys = Object.keys(body).sort();
-    expect(keys).toEqual(["db", "status", "timestamp", "uptime", "version"]);
+    expect(keys).toEqual(["component", "database", "status", "timestamp", "uptime", "version"]);
   });
 
   it("should return all required fields in error response", async () => {
@@ -507,7 +505,7 @@ describe("Worker /api/live endpoint", () => {
     const res = await worker.fetch(makeLiveRequest(), env);
     const body = await json(res);
     const keys = Object.keys(body).sort();
-    expect(keys).toEqual(["db", "status", "timestamp", "uptime", "version"]);
+    expect(keys).toEqual(["component", "database", "status", "timestamp", "uptime", "version"]);
   });
 
   it("should return valid ISO 8601 timestamp", async () => {

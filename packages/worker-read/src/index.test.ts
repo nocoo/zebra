@@ -98,7 +98,8 @@ describe("pew read Worker", () => {
       const body = await res.json() as Record<string, unknown>;
       expect(body.status).toBe("ok");
       expect(body.version).toBe(WORKER_VERSION);
-      expect(body.db).toEqual(
+      expect(body.component).toBe("worker-read");
+      expect(body.database).toEqual(
         expect.objectContaining({ connected: true }),
       );
       expect(body.timestamp).toBeDefined();
@@ -118,8 +119,8 @@ describe("pew read Worker", () => {
 
       const body = await res.json() as Record<string, unknown>;
       expect(body.status).toBe("error");
-      expect((body.db as Record<string, unknown>).connected).toBe(false);
-      expect((body.db as Record<string, unknown>).error).toBe("DB unavailable");
+      expect((body.database as Record<string, unknown>).connected).toBe(false);
+      expect((body.database as Record<string, unknown>).error).toBe("DB unavailable");
     });
 
     it("should sanitize 'ok' from error messages to prevent false-positive monitoring", async () => {
@@ -135,10 +136,9 @@ describe("pew read Worker", () => {
 
       const body = await res.json() as Record<string, unknown>;
       expect(body.status).toBe("error");
-      const db = body.db as Record<string, unknown>;
-      expect(db.error).toBe("*** something failed");
-      // Ensure no standalone "ok" appears in any db error value
-      expect(db.error).not.toMatch(/\bok\b/i);
+      const database = body.database as Record<string, unknown>;
+      expect(database.error).toBe("*** something failed");
+      expect(database.error).not.toMatch(/\bok\b/i);
     });
 
     it("should skip auth for /api/live", async () => {

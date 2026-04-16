@@ -147,38 +147,24 @@ function validateRequest<T>(
  * Error responses MUST NOT contain the word "ok" to prevent monitor false-positives.
  */
 async function handleLive(env: Env): Promise<Response> {
-  const start = performance.now();
-  let dbConnected = true;
-  let dbLatencyMs: number | undefined;
-  let dbError: string | undefined;
+  const timestamp = new Date().toISOString();
+  const uptime = Math.round((Date.now() - bootTime) / 1000);
+  let database: { connected: boolean; error?: string };
 
   try {
-    await env.DB.prepare("SELECT 1").first();
-    dbLatencyMs = Math.round(performance.now() - start);
+    await env.DB.prepare("SELECT 1 AS probe").first();
+    database = { connected: true };
   } catch (err) {
-    dbConnected = false;
-    const message = err instanceof Error ? err.message : String(err);
-    // Strip any accidental "ok" from error messages
-    dbError = message.replace(/\bok\b/gi, "***");
+    const msg = err instanceof Error ? err.message : String(err);
+    database = { connected: false, error: msg.replace(/\bok\b/gi, "***") };
   }
 
-  const body = {
-    status: dbConnected ? "ok" : "error",
-    version: WORKER_VERSION,
-    uptime: Math.round((Date.now() - bootTime) / 1000),
-    db: dbConnected
-      ? { connected: true, latencyMs: dbLatencyMs }
-      : { connected: false, error: dbError },
-    timestamp: new Date().toISOString(),
-  };
+  const healthy = database.connected;
 
-  return new Response(JSON.stringify(body), {
-    status: dbConnected ? 200 : 503,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store, no-cache, must-revalidate",
-    },
-  });
+  return Response.json(
+    { status: healthy ? "ok" : "error", version: WORKER_VERSION, component: "pew-ingest", timestamp, uptime, database },
+    { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 async function handleTokenIngest(body: unknown, env: Env): Promise<Response> {

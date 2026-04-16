@@ -209,39 +209,24 @@ export function validateReadOnlySQL(sql: string): string | null {
 // ---------------------------------------------------------------------------
 
 async function handleLive(env: Env): Promise<Response> {
-  let dbStatus: { connected: boolean; latencyMs?: number; error?: string };
+  const timestamp = new Date().toISOString();
+  const uptime = Math.round((Date.now() - bootTime) / 1000);
+  let database: { connected: boolean; error?: string };
 
   try {
-    const start = performance.now();
-    await env.DB.prepare("SELECT 1").first();
-    dbStatus = {
-      connected: true,
-      latencyMs: Math.round(performance.now() - start),
-    };
+    await env.DB.prepare("SELECT 1 AS probe").first();
+    database = { connected: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Strip any accidental "ok" from error messages to prevent
-    // keyword-based monitors from false-positive matching
-    dbStatus = {
-      connected: false,
-      error: message.replace(/\bok\b/gi, "***"),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    database = { connected: false, error: msg.replace(/\bok\b/gi, "***") };
   }
 
-  const isHealthy = dbStatus.connected;
+  const healthy = database.connected;
 
-  const body = {
-    status: isHealthy ? "ok" : "error",
-    version: WORKER_VERSION,
-    uptime: Math.round((Date.now() - bootTime) / 1000),
-    db: dbStatus,
-    timestamp: new Date().toISOString(),
-  };
-
-  return Response.json(body, {
-    status: isHealthy ? 200 : 503,
-    headers: { "Cache-Control": "no-store" },
-  });
+  return Response.json(
+    { status: healthy ? "ok" : "error", version: WORKER_VERSION, component: "worker-read", timestamp, uptime, database },
+    { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 // ---------------------------------------------------------------------------

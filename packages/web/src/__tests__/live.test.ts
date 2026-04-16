@@ -66,10 +66,11 @@ describe("GET /api/live", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.status).toBe("ok");
     expect(body.version).toBe("1.2.3");
+    expect(body.component).toBe("dashboard");
     expect(typeof body.uptime).toBe("number");
     expect(typeof body.timestamp).toBe("string");
-    expect(body.db).toEqual(
-      expect.objectContaining({ connected: true, latencyMs: expect.any(Number) })
+    expect(body.database).toEqual(
+      expect.objectContaining({ connected: true })
     );
   });
 
@@ -79,10 +80,8 @@ describe("GET /api/live", () => {
     getDbRead.mockResolvedValue(mockDbRead);
 
     const res = await GET(makeGetRequest());
-    expect(res.headers.get("Content-Type")).toBe("application/json");
-    expect(res.headers.get("Cache-Control")).toBe(
-      "no-store, no-cache, must-revalidate"
-    );
+    expect(res.headers.get("Content-Type")).toContain("application/json");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("should call db.ping() for connectivity check", async () => {
@@ -109,12 +108,13 @@ describe("GET /api/live", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.status).toBe("error");
     expect(body.version).toBe("1.2.3");
+    expect(body.component).toBe("dashboard");
     expect(typeof body.uptime).toBe("number");
     expect(typeof body.timestamp).toBe("string");
 
-    const db = body.db as Record<string, unknown>;
-    expect(db.connected).toBe(false);
-    expect(typeof db.error).toBe("string");
+    const database = body.database as Record<string, unknown>;
+    expect(database.connected).toBe(false);
+    expect(typeof database.error).toBe("string");
   });
 
   it("should not contain 'ok' anywhere in error response body", async () => {
@@ -126,25 +126,22 @@ describe("GET /api/live", () => {
 
     const res = await GET(makeGetRequest());
     const text = await res.text();
-    // "ok" should only appear as a key name, never in any value for error state
-    // Parse the response and check status is "error", and error message sanitized
     const body = JSON.parse(text) as Record<string, unknown>;
     expect(body.status).toBe("error");
 
-    const db = body.db as Record<string, unknown>;
-    expect(db.error).not.toMatch(/\bok\b/i);
+    const database = body.database as Record<string, unknown>;
+    expect(database.error).not.toMatch(/\bok\b/i);
   });
 
-  it("should sanitize error details from D1 error messages", async () => {
+  it("should sanitize error messages containing ok", async () => {
     const mockDbRead = createMockDbRead();
     mockDbRead.ping.mockRejectedValue(new Error("ok something failed"));
     getDbRead.mockResolvedValue(mockDbRead);
 
     const res = await GET(makeGetRequest());
     const body = (await res.json()) as Record<string, unknown>;
-    const db = body.db as Record<string, unknown>;
-    // Internal error details are redacted for security
-    expect(db.error).toBe("Service unavailable");
+    const database = body.database as Record<string, unknown>;
+    expect(database.error).toBe("*** something failed");
   });
 
   it("should handle non-Error throw from D1", async () => {
@@ -157,10 +154,9 @@ describe("GET /api/live", () => {
 
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.status).toBe("error");
-    const db = body.db as Record<string, unknown>;
-    expect(db.connected).toBe(false);
-    // Internal error details are redacted for security
-    expect(db.error).toBe("Service unavailable");
+    const database = body.database as Record<string, unknown>;
+    expect(database.connected).toBe(false);
+    expect(typeof database.error).toBe("string");
   });
 
   // -------------------------------------------------------------------------
@@ -172,7 +168,6 @@ describe("GET /api/live", () => {
     mockDbRead.ping.mockResolvedValue(undefined);
     getDbRead.mockResolvedValue(mockDbRead);
 
-    // No auth headers at all
     const req = new Request("http://localhost:7020/api/live", {
       method: "GET",
     });
@@ -193,7 +188,7 @@ describe("GET /api/live", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     const keys = Object.keys(body).sort();
-    expect(keys).toEqual(["db", "status", "timestamp", "uptime", "version"]);
+    expect(keys).toEqual(["component", "database", "status", "timestamp", "uptime", "version"]);
   });
 
   it("should return all required fields in error response", async () => {
@@ -205,7 +200,7 @@ describe("GET /api/live", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     const keys = Object.keys(body).sort();
-    expect(keys).toEqual(["db", "status", "timestamp", "uptime", "version"]);
+    expect(keys).toEqual(["component", "database", "status", "timestamp", "uptime", "version"]);
   });
 
   it("should return valid ISO 8601 timestamp", async () => {
