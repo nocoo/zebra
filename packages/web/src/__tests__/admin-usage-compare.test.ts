@@ -178,8 +178,9 @@ describe("GET /api/admin/usage/compare", () => {
     expect(res.status).toBe(200);
     // Verify source/model were passed as query params
     const usageCall = mockDbRead.query.mock.calls[1];
-    expect(usageCall[1]).toContain("claude-code");
-    expect(usageCall[1]).toContain("opus");
+    expect(usageCall).toBeDefined();
+    expect(usageCall![1]).toContain("claude-code");
+    expect(usageCall![1]).toContain("opus");
   });
 
   it("applies tzOffset to date expression", async () => {
@@ -198,7 +199,8 @@ describe("GET /api/admin/usage/compare", () => {
     expect(res.status).toBe(200);
     // Check that the usage query includes the offset param
     const usageCall = mockDbRead.query.mock.calls[1];
-    expect(usageCall[1]).toContain("-480");
+    expect(usageCall).toBeDefined();
+    expect(usageCall![1]).toContain("-480");
   });
 
   it("aggregates multiple rows for same user/date", async () => {

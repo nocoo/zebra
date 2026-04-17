@@ -457,7 +457,7 @@ describe("fetchGitHubMetadata", () => {
     const originalE2E = process.env.E2E_MOCK_GITHUB;
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.E2E_MOCK_GITHUB = "1";
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
 
     try {
       const result = await fetchGitHubMetadata("test-owner", "test-repo");
@@ -469,8 +469,11 @@ describe("fetchGitHubMetadata", () => {
     } finally {
       if (originalE2E === undefined) delete process.env.E2E_MOCK_GITHUB;
       else process.env.E2E_MOCK_GITHUB = originalE2E;
-      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = originalNodeEnv;
+      if (originalNodeEnv === undefined) {
+        delete (process.env as Record<string, string | undefined>).NODE_ENV;
+      } else {
+        (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
+      }
     }
   });
 
