@@ -61,9 +61,9 @@ export interface GetUserByEmailRequest {
   email: string;
 }
 
-export interface GetUserByApiKeyRequest {
-  method: "users.getByApiKey";
-  apiKey: string;
+export interface GetUserByApiKeyHashRequest {
+  method: "users.getByApiKeyHash";
+  apiKeyHash: string;
 }
 
 export interface GetUserByOAuthAccountRequest {
@@ -83,8 +83,8 @@ export interface GetUserSettingsRequest {
   userId: string;
 }
 
-export interface GetUserApiKeyRequest {
-  method: "users.getApiKey";
+export interface GetUserApiKeyPrefixRequest {
+  method: "users.getApiKeyPrefix";
   userId: string;
 }
 
@@ -143,11 +143,11 @@ export type UsersRpcRequest =
   | GetUserByIdRequest
   | GetUserBySlugRequest
   | GetUserByEmailRequest
-  | GetUserByApiKeyRequest
+  | GetUserByApiKeyHashRequest
   | GetUserByOAuthAccountRequest
   | CheckSlugExistsRequest
   | GetUserSettingsRequest
-  | GetUserApiKeyRequest
+  | GetUserApiKeyPrefixRequest
   | GetUserEmailRequest
   | SearchUsersRequest
   | GetUserSlugOnlyRequest
@@ -172,16 +172,16 @@ export async function handleUsersRpc(
       return handleGetUserBySlug(request, db);
     case "users.getByEmail":
       return handleGetUserByEmail(request, db);
-    case "users.getByApiKey":
-      return handleGetUserByApiKey(request, db);
+    case "users.getByApiKeyHash":
+      return handleGetUserByApiKeyHash(request, db);
     case "users.getByOAuthAccount":
       return handleGetUserByOAuthAccount(request, db);
     case "users.checkSlugExists":
       return handleCheckSlugExists(request, db);
     case "users.getSettings":
       return handleGetUserSettings(request, db);
-    case "users.getApiKey":
-      return handleGetUserApiKey(request, db);
+    case "users.getApiKeyPrefix":
+      return handleGetUserApiKeyPrefix(request, db);
     case "users.getEmail":
       return handleGetUserEmail(request, db);
     case "users.search":
@@ -264,17 +264,17 @@ async function handleGetUserByEmail(
   return Response.json({ result: row ?? null });
 }
 
-async function handleGetUserByApiKey(
-  req: GetUserByApiKeyRequest,
+async function handleGetUserByApiKeyHash(
+  req: GetUserByApiKeyHashRequest,
   db: D1Database,
 ): Promise<Response> {
-  if (!req.apiKey) {
-    return Response.json({ error: "Missing apiKey" }, { status: 400 });
+  if (!req.apiKeyHash) {
+    return Response.json({ error: "Missing apiKeyHash" }, { status: 400 });
   }
 
   const row = await db
-    .prepare("SELECT id, email FROM users WHERE api_key = ?")
-    .bind(req.apiKey)
+    .prepare("SELECT id, email FROM users WHERE api_key_hash = ?")
+    .bind(req.apiKeyHash)
     .first<UserApiKeyAuth>();
 
   return Response.json({ result: row ?? null });
@@ -344,8 +344,8 @@ async function handleGetUserSettings(
   return Response.json({ result: row ?? null });
 }
 
-async function handleGetUserApiKey(
-  req: GetUserApiKeyRequest,
+async function handleGetUserApiKeyPrefix(
+  req: GetUserApiKeyPrefixRequest,
   db: D1Database,
 ): Promise<Response> {
   if (!req.userId) {
@@ -353,9 +353,9 @@ async function handleGetUserApiKey(
   }
 
   const row = await db
-    .prepare("SELECT api_key FROM users WHERE id = ?")
+    .prepare("SELECT api_key_prefix FROM users WHERE id = ?")
     .bind(req.userId)
-    .first<{ api_key: string | null }>();
+    .first<{ api_key_prefix: string | null }>();
 
   return Response.json({ result: row ?? null });
 }

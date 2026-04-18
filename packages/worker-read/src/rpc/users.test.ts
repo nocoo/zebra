@@ -4,11 +4,11 @@ import {
   type GetUserByIdRequest,
   type GetUserBySlugRequest,
   type GetUserByEmailRequest,
-  type GetUserByApiKeyRequest,
+  type GetUserByApiKeyHashRequest,
   type GetUserByOAuthAccountRequest,
   type CheckSlugExistsRequest,
   type GetUserSettingsRequest,
-  type GetUserApiKeyRequest,
+  type GetUserApiKeyPrefixRequest,
   type GetUserEmailRequest,
   type SearchUsersRequest,
 } from "./users";
@@ -170,17 +170,17 @@ describe("Users RPC handlers", () => {
   });
 
   // -------------------------------------------------------------------------
-  // users.getByApiKey
+  // users.getByApiKeyHash
   // -------------------------------------------------------------------------
 
-  describe("users.getByApiKey", () => {
-    it("should return user id and email when found by API key", async () => {
+  describe("users.getByApiKeyHash", () => {
+    it("should return user id and email when found by API key hash", async () => {
       const mockUser = { id: "usr_123", email: "test@example.com" };
       db.bind.mockReturnValue({ first: vi.fn().mockResolvedValue(mockUser) });
 
-      const request: GetUserByApiKeyRequest = {
-        method: "users.getByApiKey",
-        apiKey: "pk_test_123",
+      const request: GetUserByApiKeyHashRequest = {
+        method: "users.getByApiKeyHash",
+        apiKeyHash: "a".repeat(64),
       };
       const response = await handleUsersRpc(request, db);
 
@@ -188,16 +188,16 @@ describe("Users RPC handlers", () => {
       const body = await response.json();
       expect(body).toEqual({ result: mockUser });
       expect(db.prepare).toHaveBeenCalledWith(
-        "SELECT id, email FROM users WHERE api_key = ?",
+        "SELECT id, email FROM users WHERE api_key_hash = ?",
       );
     });
 
-    it("should return null when API key not found", async () => {
+    it("should return null when API key hash not found", async () => {
       db.bind.mockReturnValue({ first: vi.fn().mockResolvedValue(null) });
 
-      const request: GetUserByApiKeyRequest = {
-        method: "users.getByApiKey",
-        apiKey: "invalid_key",
+      const request: GetUserByApiKeyHashRequest = {
+        method: "users.getByApiKeyHash",
+        apiKeyHash: "deadbeef".repeat(8),
       };
       const response = await handleUsersRpc(request, db);
 
@@ -206,8 +206,8 @@ describe("Users RPC handlers", () => {
       expect(body).toEqual({ result: null });
     });
 
-    it("should return 400 when apiKey is missing", async () => {
-      const request = { method: "users.getByApiKey", apiKey: "" } as GetUserByApiKeyRequest;
+    it("should return 400 when apiKeyHash is missing", async () => {
+      const request = { method: "users.getByApiKeyHash", apiKeyHash: "" } as GetUserByApiKeyHashRequest;
       const response = await handleUsersRpc(request, db);
 
       expect(response.status).toBe(400);
@@ -380,40 +380,47 @@ describe("Users RPC handlers", () => {
   });
 
   // -------------------------------------------------------------------------
-  // users.getApiKey
+  // users.getApiKeyPrefix
   // -------------------------------------------------------------------------
 
-  describe("users.getApiKey", () => {
-    it("should return api_key when exists", async () => {
-      db.bind.mockReturnValue({ first: vi.fn().mockResolvedValue({ api_key: "pk_test_123" }) });
+  describe("users.getApiKeyPrefix", () => {
+    it("should return api_key_prefix when exists", async () => {
+      db.bind.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ api_key_prefix: "pk_test1" }),
+      });
 
-      const request: GetUserApiKeyRequest = {
-        method: "users.getApiKey",
+      const request: GetUserApiKeyPrefixRequest = {
+        method: "users.getApiKeyPrefix",
         userId: "usr_123",
       };
       const response = await handleUsersRpc(request, db);
 
       expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body).toEqual({ result: { api_key: "pk_test_123" } });
+      expect(body).toEqual({ result: { api_key_prefix: "pk_test1" } });
     });
 
-    it("should return api_key: null when user has no key", async () => {
-      db.bind.mockReturnValue({ first: vi.fn().mockResolvedValue({ api_key: null }) });
+    it("should return api_key_prefix: null when user has no key", async () => {
+      db.bind.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ api_key_prefix: null }),
+      });
 
-      const request: GetUserApiKeyRequest = {
-        method: "users.getApiKey",
+      const request: GetUserApiKeyPrefixRequest = {
+        method: "users.getApiKeyPrefix",
         userId: "usr_123",
       };
       const response = await handleUsersRpc(request, db);
 
       expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body).toEqual({ result: { api_key: null } });
+      expect(body).toEqual({ result: { api_key_prefix: null } });
     });
 
     it("should return 400 when userId is missing", async () => {
-      const request = { method: "users.getApiKey", userId: "" } as GetUserApiKeyRequest;
+      const request = {
+        method: "users.getApiKeyPrefix",
+        userId: "",
+      } as GetUserApiKeyPrefixRequest;
       const response = await handleUsersRpc(request, db);
 
       expect(response.status).toBe(400);

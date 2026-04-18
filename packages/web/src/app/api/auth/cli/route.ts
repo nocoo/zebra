@@ -4,15 +4,21 @@
  * Flow:
  * 1. CLI starts local HTTP server, opens browser to this URL with ?callback=...
  * 2. User is already signed in via Google OAuth (or redirected to /login first)
- * 3. This endpoint fetches/generates user's api_key
+ * 3. This endpoint mints a new api_key for the user
  * 4. Redirects back to CLI's local server with api_key + email in query params
+ *
+ * Storage: only the SHA-256 hash and a short display prefix of the key are
+ * persisted. The plain key is returned to the CLI exactly once via the
+ * redirect query string and never stored — so each browser-based login
+ * issues a fresh key, transparently rotating any previous one.
  *
  * Security: callback URL must be localhost or 127.0.0.1.
  */
 
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
-import { getDbRead, getDbWrite } from "@/lib/db";
+import { getDbWrite } from "@/lib/db";
+import { generateApiKey, hashApiKey, apiKeyPrefix } from "@/lib/api-key";
 
 /**
  * Resolve the public-facing origin.
@@ -76,23 +82,23 @@ export async function GET(request: Request) {
     );
   }
 
-  // 3. Get or generate api_key
-  const dbRead = await getDbRead();
+  // 3. Mint a fresh api_key. Plain keys are never persisted, so we cannot
+  // return a previously-issued key — each browser login rotates it.
   const dbWrite = await getDbWrite();
   const userId = authResult.userId;
   const email = authResult.email ?? "";
 
   try {
-    let apiKey = await dbRead.getUserApiKey(userId);
+    const apiKey = generateApiKey();
+    const apiKeyHash = await hashApiKey(apiKey);
+    const apiKeyPrefixValue = apiKeyPrefix(apiKey);
 
-    if (!apiKey) {
-      // Generate a new api_key
-      apiKey = generateApiKey();
-      await dbWrite.execute(
-        "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?",
-        [apiKey, userId]
-      );
-    }
+    await dbWrite.execute(
+      `UPDATE users
+       SET api_key_hash = ?, api_key_prefix = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [apiKeyHash, apiKeyPrefixValue, userId]
+    );
 
     // 4. Redirect back to CLI with api_key + state
     const redirectUrl = new URL(callbackUrl.toString());
@@ -110,14 +116,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
-
-/** Generate a random API key: pk_ prefix + 32 hex chars */
-function generateApiKey(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
-    ""
-  );
-  return `pk_${hex}`;
 }

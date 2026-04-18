@@ -31,6 +31,14 @@ import { createMockClient } from "./test-utils";
 // Helpers
 // ---------------------------------------------------------------------------
 
+async function sha256Hex(input: string): Promise<string> {
+  const encoded = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function makeRequest(token?: string): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) {
@@ -144,7 +152,7 @@ describe("resolveUser", () => {
       auth.mockResolvedValueOnce(null);
 
       const mockClient = createMockClient();
-      mockClient.getUserByApiKey.mockResolvedValueOnce({
+      mockClient.getUserByApiKeyHash.mockResolvedValueOnce({
         id: "u-api-key-1",
         email: "api@example.com",
       });
@@ -168,7 +176,7 @@ describe("resolveUser", () => {
 
     it("should resolve user from valid API key", async () => {
       const mockClient = createMockClient();
-      mockClient.getUserByApiKey.mockResolvedValueOnce({
+      mockClient.getUserByApiKeyHash.mockResolvedValueOnce({
         id: "u-api-1",
         email: "apiuser@example.com",
       });
@@ -180,12 +188,14 @@ describe("resolveUser", () => {
         userId: "u-api-1",
         email: "apiuser@example.com",
       });
-      expect(mockClient.getUserByApiKey).toHaveBeenCalledWith("pk_test_key_123");
+      // The plain key is hashed before lookup; the DB never sees it.
+      const expectedHash = await sha256Hex("pk_test_key_123");
+      expect(mockClient.getUserByApiKeyHash).toHaveBeenCalledWith(expectedHash);
     });
 
     it("should return null for invalid API key (no DB match)", async () => {
       const mockClient = createMockClient();
-      mockClient.getUserByApiKey.mockResolvedValueOnce(null);
+      mockClient.getUserByApiKeyHash.mockResolvedValueOnce(null);
       getDbRead.mockResolvedValueOnce(mockClient);
 
       const result = await resolveUser(makeRequest("pk_bad_key"));

@@ -321,7 +321,7 @@ describe("POST /api/auth/code/verify", () => {
     expect(body.error).toBe(AUTH_ERROR);
   });
 
-  it("should return api_key and email for valid code", async () => {
+  it("should issue a fresh hashed api_key for valid code", async () => {
     const mockDbRead = createMockDbRead();
     mockDbRead.getAuthCode.mockResolvedValue({
       code: "ABCD-1234",
@@ -337,7 +337,6 @@ describe("POST /api/auth/code/verify", () => {
       image: null,
       email_verified: null,
     });
-    mockDbRead.getUserApiKey.mockResolvedValue("pk_existing_key");
     mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
 
     const mockDbWrite = createMockDbWrite();
@@ -354,60 +353,33 @@ describe("POST /api/auth/code/verify", () => {
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.api_key).toBe("pk_existing_key");
-    expect(body.email).toBe("test@example.com");
-
-    // Verify code was marked as used AFTER user lookup succeeded
-    expect(mockDbWrite.execute).toHaveBeenCalledWith(
-      expect.stringContaining("SET used_at"),
-      expect.arrayContaining(["ABCD-1234"])
-    );
-  });
-
-  it("should generate api_key if user has none (atomic conditional update)", async () => {
-    const mockDbRead = createMockDbRead();
-    mockDbRead.getAuthCode.mockResolvedValue({
-      code: "ABCD-1234",
-      user_id: "user-123",
-      expires_at: new Date(Date.now() + 300_000).toISOString(),
-      used_at: null,
-      failed_attempts: 0,
-    });
-    mockDbRead.getUserById.mockResolvedValue({
-      id: "user-123",
-      email: "test@example.com",
-      name: null,
-      image: null,
-      email_verified: null,
-    });
-    mockDbRead.getUserApiKey.mockResolvedValue(null); // No existing key
-    mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
-
-    const mockDbWrite = createMockDbWrite();
-    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
-    mockGetDbWrite.mockResolvedValue(mockDbWrite as unknown as DbWrite);
-
-    const request = new Request("http://localhost/api/auth/code/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "ABCD-1234" }),
-    });
-
-    const response = await verifyPOST(request);
-    expect(response.status).toBe(200);
-
-    const body = await response.json();
+    // Plain key returned exactly once.
     expect(body.api_key).toMatch(/^pk_[a-f0-9]{32}$/);
     expect(body.email).toBe("test@example.com");
 
-    // Verify api_key update uses conditional WHERE api_key IS NULL
+    // The DB only ever sees the SHA-256 hash + first-8-char prefix.
+    const writes = mockDbWrite.execute.mock.calls;
+    const userUpdate = writes.find((c) =>
+      String(c[0]).includes("api_key_hash"),
+    );
+    expect(userUpdate).toBeDefined();
+    const [, params] = userUpdate as [string, unknown[]];
+    const [hashParam, prefixParam, idParam] = params as [string, string, string];
+    // Hash is 64-hex SHA-256 of the plain key returned to the caller.
+    expect(hashParam).toHaveLength(64);
+    expect(hashParam).toMatch(/^[a-f0-9]{64}$/);
+    expect(hashParam).not.toBe(body.api_key);
+    expect(prefixParam).toBe((body.api_key as string).slice(0, 8));
+    expect(idParam).toBe("user-123");
+
+    // Code marked used after credential update.
     expect(mockDbWrite.execute).toHaveBeenCalledWith(
-      expect.stringContaining("WHERE id = ? AND api_key IS NULL"),
-      expect.arrayContaining([expect.stringMatching(/^pk_/), "user-123"])
+      expect.stringContaining("SET used_at"),
+      expect.arrayContaining(["ABCD-1234"]),
     );
   });
 
-  it("should re-read api_key if another request set it concurrently", async () => {
+  it("should rotate the key on every successful verify", async () => {
     const mockDbRead = createMockDbRead();
     mockDbRead.getAuthCode.mockResolvedValue({
       code: "ABCD-1234",
@@ -423,30 +395,28 @@ describe("POST /api/auth/code/verify", () => {
       image: null,
       email_verified: null,
     });
-    mockDbRead.getUserApiKey
-      .mockResolvedValueOnce(null) // No existing key on first read
-      .mockResolvedValueOnce("pk_set_by_other_request"); // Another request already set it
     mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
 
-    // First UPDATE (api_key) returns 0 changes (lost race), second UPDATE (used_at) succeeds
     const mockDbWrite = createMockDbWrite();
-    mockDbWrite.execute
-      .mockResolvedValueOnce({ changes: 0 }) // Lost the race to set api_key
-      .mockResolvedValueOnce({ changes: 1 }); // Successfully consumed code
+    mockDbWrite.execute.mockResolvedValue({ changes: 1 });
     mockGetDbWrite.mockResolvedValue(mockDbWrite as unknown as DbWrite);
 
-    const request = new Request("http://localhost/api/auth/code/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "ABCD-1234" }),
-    });
+    const makeReq = () =>
+      new Request("http://localhost/api/auth/code/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "ABCD-1234" }),
+      });
 
-    const response = await verifyPOST(request);
-    expect(response.status).toBe(200);
+    const r1 = await verifyPOST(makeReq());
+    const r2 = await verifyPOST(makeReq());
+    const b1 = await r1.json();
+    const b2 = await r2.json();
 
-    const body = await response.json();
-    // Should return the key set by the other request, not our generated one
-    expect(body.api_key).toBe("pk_set_by_other_request");
+    // Each call mints an independent random key — they MUST differ.
+    expect(b1.api_key).not.toBe(b2.api_key);
+    expect(b1.api_key).toMatch(/^pk_[a-f0-9]{32}$/);
+    expect(b2.api_key).toMatch(/^pk_[a-f0-9]{32}$/);
   });
 
   it("should normalize code format (accept without hyphen)", async () => {
@@ -465,7 +435,6 @@ describe("POST /api/auth/code/verify", () => {
       image: null,
       email_verified: null,
     });
-    mockDbRead.getUserApiKey.mockResolvedValue("pk_test");
     mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
 
     const mockDbWrite = createMockDbWrite();
@@ -501,7 +470,6 @@ describe("POST /api/auth/code/verify", () => {
       image: null,
       email_verified: null,
     });
-    mockDbRead.getUserApiKey.mockResolvedValue("pk_existing");
     mockGetDbRead.mockResolvedValue(mockDbRead as unknown as DbRead);
 
     // Simulate race: SET used_at returns 0 rows (someone else used it first)

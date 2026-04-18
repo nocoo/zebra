@@ -399,7 +399,9 @@ describe("GET /api/auth/cli", () => {
     expect(email).toBe(TEST_USER_EMAIL);
   });
 
-  it("should return same api_key on subsequent calls", async () => {
+  it("should mint a fresh api_key on every call (rotation by design)", async () => {
+    // Plain keys are never persisted, so the route cannot reuse a previous
+    // value — each browser login rotates to a brand-new key.
     const callback = "http://localhost:19876/callback";
     const res1 = await fetch(
       `${BASE_URL}/api/auth/cli?callback=${encodeURIComponent(callback)}`,
@@ -413,9 +415,11 @@ describe("GET /api/auth/cli", () => {
     const url1 = new URL(res1.headers.get("Location")!);
     const url2 = new URL(res2.headers.get("Location")!);
 
-    expect(url1.searchParams.get("api_key")).toBe(
-      url2.searchParams.get("api_key"),
-    );
+    const k1 = url1.searchParams.get("api_key");
+    const k2 = url2.searchParams.get("api_key");
+    expect(k1).toMatch(/^pk_[a-f0-9]{32}$/);
+    expect(k2).toMatch(/^pk_[a-f0-9]{32}$/);
+    expect(k1).not.toBe(k2);
   });
 });
 

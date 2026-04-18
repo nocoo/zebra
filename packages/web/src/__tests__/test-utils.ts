@@ -26,11 +26,11 @@ export function createMockDbRead() {
     getUserById: vi.fn(),
     getUserBySlug: vi.fn(),
     getUserByEmail: vi.fn(),
-    getUserByApiKey: vi.fn(),
+    getUserByApiKeyHash: vi.fn(),
     getUserByOAuthAccount: vi.fn(),
     checkSlugExists: vi.fn(),
     getUserSettings: vi.fn(),
-    getUserApiKey: vi.fn(),
+    getUserApiKeyPrefix: vi.fn(),
     getUserEmail: vi.fn(),
     searchUsers: vi.fn(),
     getUserSlugOnly: vi.fn(),
@@ -155,11 +155,11 @@ export function createMockDbRead() {
     getUserById: ReturnType<typeof vi.fn>;
     getUserBySlug: ReturnType<typeof vi.fn>;
     getUserByEmail: ReturnType<typeof vi.fn>;
-    getUserByApiKey: ReturnType<typeof vi.fn>;
+    getUserByApiKeyHash: ReturnType<typeof vi.fn>;
     getUserByOAuthAccount: ReturnType<typeof vi.fn>;
     checkSlugExists: ReturnType<typeof vi.fn>;
     getUserSettings: ReturnType<typeof vi.fn>;
-    getUserApiKey: ReturnType<typeof vi.fn>;
+    getUserApiKeyPrefix: ReturnType<typeof vi.fn>;
     getUserEmail: ReturnType<typeof vi.fn>;
     searchUsers: ReturnType<typeof vi.fn>;
     getUserSlugOnly: ReturnType<typeof vi.fn>;
@@ -291,11 +291,11 @@ export function createMockClient() {
     getUserById: vi.fn(),
     getUserBySlug: vi.fn(),
     getUserByEmail: vi.fn(),
-    getUserByApiKey: vi.fn(),
+    getUserByApiKeyHash: vi.fn(),
     getUserByOAuthAccount: vi.fn(),
     checkSlugExists: vi.fn(),
     getUserSettings: vi.fn(),
-    getUserApiKey: vi.fn(),
+    getUserApiKeyPrefix: vi.fn(),
     getUserEmail: vi.fn(),
     searchUsers: vi.fn(),
     getUserSlugOnly: vi.fn(),

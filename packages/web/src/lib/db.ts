@@ -108,8 +108,8 @@ export interface DbRead {
   /** Get user by email (for auth) */
   getUserByEmail(email: string): Promise<UserAuth | null>;
 
-  /** Authenticate user by API key */
-  getUserByApiKey(apiKey: string): Promise<UserApiKeyAuth | null>;
+  /** Authenticate user by SHA-256 hash of their API key */
+  getUserByApiKeyHash(apiKeyHash: string): Promise<UserApiKeyAuth | null>;
 
   /** Get user by OAuth provider account */
   getUserByOAuthAccount(
@@ -123,8 +123,8 @@ export interface DbRead {
   /** Get user settings */
   getUserSettings(userId: string): Promise<UserSettings | null>;
 
-  /** Get user's API key */
-  getUserApiKey(userId: string): Promise<string | null>;
+  /** Get user's API key prefix (display only — plain key is never stored) */
+  getUserApiKeyPrefix(userId: string): Promise<string | null>;
 
   /** Get user email (admin) */
   getUserEmail(userId: string): Promise<string | null>;

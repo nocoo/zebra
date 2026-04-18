@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   slug            TEXT UNIQUE,
   nickname        TEXT,
   is_public       INTEGER NOT NULL DEFAULT 0,
-  api_key         TEXT UNIQUE,
+  api_key_hash    TEXT UNIQUE,
+  api_key_prefix  TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );

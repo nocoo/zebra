@@ -10,6 +10,7 @@
 
 import { auth } from "@/auth";
 import { getDbRead } from "@/lib/db";
+import { hashApiKey } from "@/lib/api-key";
 
 /** The user ID used when E2E auth is bypassed (overridable via env) */
 export const E2E_TEST_USER_ID =
@@ -46,14 +47,20 @@ export async function resolveUser(
     return { userId: session.user.id, email: session.user.email ?? undefined };
   }
 
-  // Bearer api_key auth
+  // Bearer api_key auth.
+  //
+  // We hash the presented key with SHA-256 and look it up by hash; the
+  // database never stores the plain key.
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const apiKey = authHeader.slice(7);
-    const db = await getDbRead();
-    const row = await db.getUserByApiKey(apiKey);
-    if (row) {
-      return { userId: row.id, email: row.email };
+    if (apiKey) {
+      const apiKeyHash = await hashApiKey(apiKey);
+      const db = await getDbRead();
+      const row = await db.getUserByApiKeyHash(apiKeyHash);
+      if (row) {
+        return { userId: row.id, email: row.email };
+      }
     }
   }
 

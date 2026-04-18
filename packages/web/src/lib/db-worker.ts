@@ -149,8 +149,11 @@ export function createWorkerDbRead(): DbRead {
       return rpc<UserAuth | null>({ method: "users.getByEmail", email });
     },
 
-    async getUserByApiKey(apiKey: string): Promise<UserApiKeyAuth | null> {
-      return rpc<UserApiKeyAuth | null>({ method: "users.getByApiKey", apiKey });
+    async getUserByApiKeyHash(apiKeyHash: string): Promise<UserApiKeyAuth | null> {
+      return rpc<UserApiKeyAuth | null>({
+        method: "users.getByApiKeyHash",
+        apiKeyHash,
+      });
     },
 
     async getUserByOAuthAccount(
@@ -180,12 +183,12 @@ export function createWorkerDbRead(): DbRead {
       return rpc<UserSettings | null>({ method: "users.getSettings", userId });
     },
 
-    async getUserApiKey(userId: string): Promise<string | null> {
-      const result = await rpc<{ api_key: string | null } | null>({
-        method: "users.getApiKey",
+    async getUserApiKeyPrefix(userId: string): Promise<string | null> {
+      const result = await rpc<{ api_key_prefix: string | null } | null>({
+        method: "users.getApiKeyPrefix",
         userId,
       });
-      return result?.api_key ?? null;
+      return result?.api_key_prefix ?? null;
     },
 
     async getUserEmail(userId: string): Promise<string | null> {

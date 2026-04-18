@@ -8,23 +8,19 @@
  * invalidates it (failed_attempts > 0). Error messages are intentionally
  * generic to avoid leaking information about code existence.
  *
+ * Storage: only the SHA-256 hash and a short prefix of the key are persisted
+ * (`api_key_hash`, `api_key_prefix`). The plain key is returned to the user
+ * exactly once at this point and never stored.
+ *
  * No session required — the code itself is the authentication.
  */
 
 import { NextResponse } from "next/server";
 import { getDbRead, getDbWrite } from "@/lib/db";
+import { generateApiKey, hashApiKey, apiKeyPrefix } from "@/lib/api-key";
 
 // Generic error message for all auth failures (avoids information leakage)
 const AUTH_ERROR = "Invalid or expired code";
-
-
-/** Generate a random API key: pk_ prefix + 32 hex chars */
-function generateApiKey(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `pk_${hex}`;
-}
 
 export async function POST(request: Request) {
   // 1. Parse and validate request body
@@ -78,8 +74,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: AUTH_ERROR }, { status: 401 });
     }
 
-    // 4. Get user info and api_key BEFORE consuming the code
-    // This ensures that if user lookup or api_key generation fails, the code remains usable
+    // 4. Get user info BEFORE consuming the code
+    // This ensures that if user lookup fails, the code remains usable.
     const user = await dbRead.getUserById(authCode.user_id);
 
     if (!user) {
@@ -88,34 +84,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 500 });
     }
 
-    let apiKey = await dbRead.getUserApiKey(user.id);
-
-    // 5. Generate api_key if not exists using atomic conditional update
-    // Uses "WHERE api_key IS NULL" to ensure only one concurrent request succeeds in writing.
-    // If another request already set a key, this UPDATE affects 0 rows and we re-read.
-    if (!apiKey) {
-      const newKey = generateApiKey();
-      const updateKeyResult = await dbWrite.execute(
-        `UPDATE users SET api_key = ?, updated_at = datetime('now')
-         WHERE id = ? AND api_key IS NULL`,
-        [newKey, user.id]
-      );
-
-      if (updateKeyResult.changes === 1) {
-        // We won the race — use our generated key
-        apiKey = newKey;
-      } else {
-        // Another request already set a key — re-read to get the actual value
-        apiKey = await dbRead.getUserApiKey(user.id);
-
-        if (!apiKey) {
-          // Shouldn't happen, but defensive
-          return NextResponse.json({ error: "Failed to generate API key" }, { status: 500 });
-        }
-      }
-    }
-
-    // 6. Now that we have the credentials ready, consume the code (atomic)
+    // 5. Consume the code atomically BEFORE rotating credentials.
     // Conditions: not used, no failed attempts (re-check in SQL for atomicity)
     const updateResult = await dbWrite.execute(
       `UPDATE auth_codes
@@ -129,7 +98,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: AUTH_ERROR }, { status: 401 });
     }
 
-    // 7. Return credentials (code is now consumed)
+    // 6. Mint a fresh API key now that the code is consumed.
+    //
+    // We never store the plain key — only its SHA-256 hash plus a short
+    // display prefix — so we cannot return a previously-issued key. Each
+    // successful code redemption issues a new key, transparently rotating
+    // any prior one. The plain value below is the only place the caller
+    // ever sees it.
+    const apiKey = generateApiKey();
+    const apiKeyHash = await hashApiKey(apiKey);
+    const apiKeyPrefixValue = apiKeyPrefix(apiKey);
+
+    await dbWrite.execute(
+      `UPDATE users
+       SET api_key_hash = ?, api_key_prefix = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [apiKeyHash, apiKeyPrefixValue, user.id]
+    );
+
+    // 7. Return credentials (code is now consumed). The plain key is visible
+    // to the caller exactly once here — it is never persisted.
     return NextResponse.json({
       api_key: apiKey,
       email: user.email,
