@@ -12,7 +12,7 @@
     "dev": "bun run --cwd packages/web dev",
     "build": "rm -f packages/*/tsconfig.tsbuildinfo && bun run --filter @pew/core build && bun run --filter @pew/web build",
     "lint": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/worker/tsconfig.json && tsc --noEmit -p packages/worker-read/tsconfig.json && eslint . --max-warnings=0",
-    "lint:typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/worker/tsconfig.json && tsc --noEmit -p packages/worker-read/tsconfig.json",
+    "lint:typecheck": "bash scripts/parallel-typecheck.sh",
     "test:e2e": "bun run scripts/run-e2e.ts",
     "test:e2e:cli": "vitest run --config vitest.e2e-cli.config.ts",
     "test:e2e:ui": "bun run scripts/run-e2e-ui.ts",
