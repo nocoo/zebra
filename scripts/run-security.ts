@@ -11,11 +11,54 @@
  * Set PEW_G2_SOFT=1 for soft-degrade mode (warn and skip).
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const softMode = process.env.PEW_G2_SOFT === "1";
+const noCache = process.env.PEW_G2_NO_CACHE === "1";
+
+// Cache successful osv-scanner runs keyed by bun.lock hash + tool version.
+// Stored under .git/info (gitignored by default). Skips network on no-op pushes.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const CACHE_DIR = resolve(REPO_ROOT, ".git/info");
+const CACHE_FILE = resolve(CACHE_DIR, "g2-cache.json");
+
+interface G2Cache {
+  osvLockHash?: string;
+  osvToolVersion?: string;
+}
+
+function readCache(): G2Cache {
+  try {
+    return JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeCache(c: G2Cache): void {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify(c));
+  } catch {
+    // Best-effort; cache failures should never break the scan.
+  }
+}
+
+function hashFile(p: string): string | null {
+  try {
+    return createHash("sha256").update(readFileSync(p)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+function toolVersion(tool: string): string {
+  const r = spawnSync(tool, ["--version"], { encoding: "utf-8" });
+  return (r.stdout || r.stderr || "").trim();
+}
 
 interface ToolSpec {
   name: string;
@@ -99,18 +142,36 @@ function runJob(job: ScanJob): Promise<{ output: string; status: number }> {
 
 const jobs: { job: ScanJob; promise: Promise<{ output: string; status: number }> }[] = [];
 
+const cache = readCache();
+const lockPath = resolve(REPO_ROOT, "bun.lock");
+const lockHash = hashFile(lockPath);
+
 // osv-scanner
 const hasOsv = requireTool("osv-scanner");
 if (hasOsv) {
-  const job: ScanJob = {
-    label: "osv-scanner",
-    cmd: "osv-scanner",
-    args: ["--lockfile=bun.lock"],
-    successMsg: "✅ osv-scanner: clean",
-    failMsg: "❌ osv-scanner found vulnerabilities.",
-  };
-  console.log("🔍 osv-scanner: scanning bun.lock...");
-  jobs.push({ job, promise: runJob(job) });
+  const osvVer = toolVersion("osv-scanner");
+  const cacheHit =
+    !noCache &&
+    lockHash !== null &&
+    cache.osvLockHash === lockHash &&
+    cache.osvToolVersion === osvVer;
+
+  if (cacheHit) {
+const lockHashShort = lockHash ? lockHash.slice(0, 12) : "unknown";
+    console.log(
+      `⚡ osv-scanner: cached clean for bun.lock ${lockHashShort} (set PEW_G2_NO_CACHE=1 to force)`,
+    );
+  } else {
+    const job: ScanJob = {
+      label: "osv-scanner",
+      cmd: "osv-scanner",
+      args: ["--lockfile=bun.lock"],
+      successMsg: "✅ osv-scanner: clean",
+      failMsg: "❌ osv-scanner found vulnerabilities.",
+    };
+    console.log("🔍 osv-scanner: scanning bun.lock...");
+    jobs.push({ job, promise: runJob(job) });
+  }
 } else if (!softMode) {
   hardMissing = true;
 }
@@ -153,6 +214,14 @@ for (let i = 0; i < jobs.length; i++) {
     failed = true;
   } else {
     console.log(job.successMsg);
+    // Persist cache for osv-scanner success (only path that benefits from caching).
+    if (job.label === "osv-scanner" && lockHash !== null) {
+      writeCache({
+        ...cache,
+        osvLockHash: lockHash,
+        osvToolVersion: toolVersion("osv-scanner"),
+      });
+    }
   }
 }
 
