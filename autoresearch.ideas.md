@@ -24,16 +24,21 @@
 
 ### Low Effort
 - [ ] Use `vitest --reporter=basic` for CI output (less verbose)
+- [ ] Move heavy test setup into shared fixtures to amortize "prepare" time across tests
 
 ### Medium Effort  
 - [ ] Module mocking optimization — some tests import heavy modules
 - [ ] Shared test fixtures — reduce per-test setup overhead for similar tests
 - [ ] Pre-compute test data instead of generating inline
+- [ ] Adopt tsgo (@typescript/native-preview) for typecheck once GA — ~10x faster but currently dev-preview only
+- [ ] Switch coverage provider to istanbul if v8 v8 ESM remap continues to add transform overhead
 
 ### High Effort / Risky
 - [ ] Test sharding across CI workers (for CI, not local dev)
 - [ ] Lazy module imports in test files  
 - [ ] Pre-compile test files to reduce transform time
+- [ ] Disable vitest isolation per-file via opt-in tag (need to enumerate safe files)
+- [ ] Replace vitest with bun:test for non-mocking-heavy unit tests
 
 ## Measurements Summary
 | State | Duration |
