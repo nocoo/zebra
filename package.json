@@ -27,7 +27,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --max-warnings=0"
+      "eslint --max-warnings=0 --cache --cache-location node_modules/.cache/eslint/.eslintcache"
     ]
   },
   "devDependencies": {
