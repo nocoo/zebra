@@ -67,7 +67,7 @@ export function createIngestHandler<T>(
 
     const { userId } = authResult;
 
-    // 1c. Rate limit: 60 requests/minute per authenticated user
+    // 1c. Rate limit: 300 per minute per user
     // (falls back to client IP if userId is somehow empty)
     const rateKey = userId || `ip:${getClientIp(request)}`;
     const rl = inMemoryRateLimiter.check(
