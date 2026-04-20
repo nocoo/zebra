@@ -2,6 +2,7 @@ import { resolve } from "path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  cacheDir: "node_modules/.cache/vitest",
   resolve: {
     alias: {
       "@": resolve(__dirname, "packages/web/src"),
@@ -15,9 +16,6 @@ export default defineConfig({
       "packages/*/src/**/*.test.{ts,tsx}",
       "scripts/**/*.test.{ts,tsx}",
     ],
-    cache: {
-      dir: "node_modules/.cache/vitest",
-    },
     poolOptions: {
       threads: {
         singleThread: false,
