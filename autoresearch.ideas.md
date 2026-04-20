@@ -6,6 +6,14 @@
 - [x] **Restrict `test.include` glob** to `packages/*/src/**/*.test.{ts,tsx}` + `scripts/**/*.test.{ts,tsx}` — vitest no longer scans `dist/`, `.next/`, `node_modules/` at startup. 4.30s → 4.14s (-3.7%).
 - [x] **`coverage.include` = `.ts` only** (drop `.tsx` since all tsx files are in coverage.exclude anyway) — reduces v8 instrumentation discovery. 4.14s → 4.02s (-2.9%) AND stddev 0.10 → 0.04 (-58%) — dual win on speed and stability.
 - [x] **Drop `json` coverage reporter** — no consumers in repo (grep verified). 4.02s → 3.92s (-2.5%).
+- [x] **Exclude `**/__tests__/**` from coverage** — test helpers (`test-utils.ts`) no longer dilute coverage stats. Pure meaningfulness fix; speed unchanged.
+
+### Net session result
+- Cold UT (low load): **4.30s → 3.92s (-8.8%)**
+- Stddev: **0.10s → 0.04s (-58% — major stability win)**
+- Coverage: maintained at 98.05/92.20/98.31/98.97 (stmts/branches/funcs/lines)
+  - 3 of 4 floors well above 95; **branches 92.20 < 95** is a structural gap, not a regression.
+
 
 ### Confirmed dead ends (this session)
 - [x] `pool: "vmThreads"` — crashes (incompatible with mocking patterns).
@@ -19,11 +27,13 @@
 - [x] `coverage.processingConcurrency: 16` — within noise.
 
 ### Still worth trying (not done — load was too noisy)
-- [ ] Identify the file(s) leaking module state under `isolate: false` and fix (potentially huge speedup if isolation can be disabled).
+- [ ] Identify the file(s) leaking module state under `isolate: false` and fix (potentially huge speedup if isolation can be disabled). Confirmed pollution surface: `achievements-privacy.test.ts` failures point at vi.mock('@/lib/db') collisions across 66 files.
 - [ ] Strengthen weak assertions (`toBeDefined()`, `toBeTruthy()` without value checks) — top offenders: sync.test.ts (19), user-achievements-api.test.ts (12), achievements-api.test.ts (11). Pure meaningfulness improvement, no speed effect.
-- [ ] Investigate the 5 `it.skipIf(!!process.env.CI)` tests in sync.test.ts/hermes-sqlite.test.ts/notify-command.test.ts — all rely on real-FS inode behavior. Refactor with mocked `fs.stat` to remove CI skip and increase meaningful test count.
-- [ ] esbuild target tuning (`esbuild.target: "esnext"`) for faster transform.
+- [ ] Investigate the 5 `it.skipIf(!!process.env.CI)` tests in sync.test.ts/hermes-sqlite.test.ts/notify-command.test.ts — all rely on real-FS inode behavior. Refactor with mocked `fs.stat` to remove CI skip and increase meaningful test count from 3659 → 3664.
+- [ ] Push branch coverage above 95 (currently 92.20). Top low-branch files: cli/commands/session-sync.ts (71), api/admin/check (60), api/achievements (73). Add tests for error/edge paths.
+- [ ] esbuild target tuning (`esbuild.target: "esnext"`) — tested under load, no clear effect; retry under quiet system.
 - [ ] Pre-bundle heavy deps via `server.deps.optimizer` / `optimizeDeps`.
+- [ ] Switch primary metric to `min` of N runs (not median) — more robust against background load on dev machines.
 
 ## Pre-commit Performance Optimization (prior session)
 
