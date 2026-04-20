@@ -3,10 +3,33 @@
  *
  * Admin status is determined by the ADMIN_EMAILS environment variable,
  * a comma-separated list of email addresses.
+ *
+ * In E2E mode with admin bypass (E2E_SKIP_AUTH=true + E2E_ADMIN_BYPASS=true
+ * in development), all users are treated as admins so Playwright tests
+ * can exercise admin pages. This is separate from E2E_SKIP_AUTH alone,
+ * which only bypasses authentication but preserves admin role checks.
  */
 
-import { resolveUser, type AuthResult } from "./auth-helpers";
+import { resolveUser, type AuthResult, E2E_TEST_USER_ID, E2E_TEST_USER_EMAIL } from "./auth-helpers";
 import { getDbRead } from "./db";
+
+// ---------------------------------------------------------------------------
+// E2E mode checks
+// ---------------------------------------------------------------------------
+
+/** Check if we're running in E2E skip-auth mode */
+function isE2EMode(): boolean {
+  return (
+    process.env.E2E_SKIP_AUTH === "true" &&
+    process.env.NODE_ENV === "development" &&
+    !process.env.RAILWAY_ENVIRONMENT
+  );
+}
+
+/** Check if admin bypass is enabled (for L3 Playwright tests) */
+function isAdminBypass(): boolean {
+  return isE2EMode() && process.env.E2E_ADMIN_BYPASS === "true";
+}
 
 // ---------------------------------------------------------------------------
 // Admin check
@@ -30,6 +53,8 @@ function getAdminEmails(): Set<string> {
  */
 export function isAdmin(email: string | undefined | null): boolean {
   if (!email) return false;
+  // In E2E mode with admin bypass, all users are admins
+  if (isAdminBypass()) return true;
   return getAdminEmails().has(email.toLowerCase());
 }
 
@@ -44,10 +69,17 @@ export interface AdminResult extends AuthResult {
 /**
  * Resolve the authenticated user AND verify admin status.
  * Returns null if not authenticated or not an admin.
+ *
+ * In E2E mode with admin bypass, returns a synthetic admin user for testing.
  */
 export async function resolveAdmin(
   request: Request
 ): Promise<AdminResult | null> {
+  // In E2E mode with admin bypass, return synthetic admin user
+  if (isAdminBypass()) {
+    return { userId: E2E_TEST_USER_ID, email: E2E_TEST_USER_EMAIL };
+  }
+
   const authResult = await resolveUser(request);
   if (!authResult) return null;
 
@@ -71,6 +103,9 @@ export async function resolveAdmin(
 export async function isAdminUser(
   authResult: AuthResult
 ): Promise<boolean> {
+  // In E2E mode with admin bypass, all users are admins
+  if (isAdminBypass()) return true;
+
   let email = authResult.email;
   if (!email) {
     const db = await getDbRead();

@@ -56,6 +56,7 @@ async function main() {
       ...mergedEnv,
       NEXT_DIST_DIR: ".next-e2e-ui",
       E2E_SKIP_AUTH: "true",
+      E2E_ADMIN_BYPASS: "true", // Enable admin bypass for Playwright tests
     },
     stdout: "pipe",
     stderr: "pipe",
