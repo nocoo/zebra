@@ -1,7 +1,33 @@
-# Autoresearch Ideas: Pre-commit Performance Optimization
+# Autoresearch Ideas Backlog
 
-## Completed ✅
-- [x] Run L1 tests, G1a typecheck, and G1b lint-staged in parallel — overlaps all three processes
+## UT speed/stability/meaningfulness session (2026-04-21)
+
+### Wins (committed)
+- [x] **Restrict `test.include` glob** to `packages/*/src/**/*.test.{ts,tsx}` + `scripts/**/*.test.{ts,tsx}` — vitest no longer scans `dist/`, `.next/`, `node_modules/` at startup. 4.30s → 4.14s (-3.7%).
+- [x] **`coverage.include` = `.ts` only** (drop `.tsx` since all tsx files are in coverage.exclude anyway) — reduces v8 instrumentation discovery. 4.14s → 4.02s (-2.9%) AND stddev 0.10 → 0.04 (-58%) — dual win on speed and stability.
+- [x] **Drop `json` coverage reporter** — no consumers in repo (grep verified). 4.02s → 3.92s (-2.5%).
+
+### Confirmed dead ends (this session)
+- [x] `pool: "vmThreads"` — crashes (incompatible with mocking patterns).
+- [x] `pool: "forks"` — 2x slower (process startup overhead).
+- [x] `poolOptions.threads.useAtomics: true` — 2x slower in vitest 3.x.
+- [x] `poolOptions.threads.minThreads/maxThreads: 8/12` — slower than default 15.
+- [x] `coverage.experimentalAstAwareRemapping: false` — faster but artificially inflates coverage (98.05→99.04, 92.2→94.13). **Rejected as cheating** — less accurate source mapping should not be used to chase the 95% floor.
+- [x] `isolate: false` — fails (achievements-privacy.test.ts state leakage); 66 files use vi.mock, refactor too invasive.
+- [x] Drop html reporter — within noise.
+- [x] `coverage.cleanOnRerun: false` — within noise.
+- [x] `coverage.processingConcurrency: 16` — within noise.
+
+### Still worth trying (not done — load was too noisy)
+- [ ] Identify the file(s) leaking module state under `isolate: false` and fix (potentially huge speedup if isolation can be disabled).
+- [ ] Strengthen weak assertions (`toBeDefined()`, `toBeTruthy()` without value checks) — top offenders: sync.test.ts (19), user-achievements-api.test.ts (12), achievements-api.test.ts (11). Pure meaningfulness improvement, no speed effect.
+- [ ] Investigate the 5 `it.skipIf(!!process.env.CI)` tests in sync.test.ts/hermes-sqlite.test.ts/notify-command.test.ts — all rely on real-FS inode behavior. Refactor with mocked `fs.stat` to remove CI skip and increase meaningful test count.
+- [ ] esbuild target tuning (`esbuild.target: "esnext"`) for faster transform.
+- [ ] Pre-bundle heavy deps via `server.deps.optimizer` / `optimizeDeps`.
+
+## Pre-commit Performance Optimization (prior session)
+
+### Completed ✅ — overlaps all three processes
 - [x] Skip bun install --frozen-lockfile when no package.json/bun.lock changes staged — saves ~0.2s on most commits
 - [x] Enable vitest caching in node_modules/.cache/vitest — reduces variance
 - [x] Parallel tsc via bash script with proper exit code handling — typecheck dropped from ~4s to ~1.3s
