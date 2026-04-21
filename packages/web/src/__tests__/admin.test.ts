@@ -13,6 +13,8 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/auth-helpers", () => ({
   resolveUser: vi.fn(),
+  E2E_TEST_USER_ID: "e2e-test-user-id",
+  E2E_TEST_USER_EMAIL: "e2e@test.local",
 }));
 
 const { resolveUser } = (await import("@/lib/auth-helpers")) as unknown as {
@@ -155,6 +157,78 @@ describe("resolveAdmin", () => {
 
     const result = await resolveAdmin(new Request("http://localhost"));
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveAdmin — E2E admin bypass", () => {
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = {
+      ...ORIGINAL_ENV,
+      E2E_SKIP_AUTH: "true",
+      NODE_ENV: "development",
+      E2E_ADMIN_BYPASS: "true",
+    };
+    delete process.env.RAILWAY_ENVIRONMENT;
+  });
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it("should return synthetic admin user in E2E bypass mode", async () => {
+    const result = await resolveAdmin(new Request("http://localhost"));
+    expect(result).toEqual({
+      userId: "e2e-test-user-id",
+      email: "e2e@test.local",
+    });
+    expect(resolveUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("isAdmin — E2E admin bypass", () => {
+  const ORIGINAL_ENV = process.env;
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it("should return true for any email when E2E admin bypass is active", () => {
+    process.env = {
+      ...ORIGINAL_ENV,
+      E2E_SKIP_AUTH: "true",
+      NODE_ENV: "development",
+      E2E_ADMIN_BYPASS: "true",
+      ADMIN_EMAILS: "",
+    };
+    delete process.env.RAILWAY_ENVIRONMENT;
+    expect(isAdmin("random@nobody.com")).toBe(true);
+  });
+});
+
+describe("isAdminUser — E2E admin bypass", () => {
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = {
+      ...ORIGINAL_ENV,
+      E2E_SKIP_AUTH: "true",
+      NODE_ENV: "development",
+      E2E_ADMIN_BYPASS: "true",
+    };
+    delete process.env.RAILWAY_ENVIRONMENT;
+  });
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it("should return true for any user when E2E admin bypass is active", async () => {
+    const result = await isAdminUser({ userId: "u1", email: "nobody@test.com" });
+    expect(result).toBe(true);
   });
 });
 
