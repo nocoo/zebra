@@ -1,5 +1,83 @@
 # Changelog
 
+## v2.20.8
+
+### Added
+- Add security response headers
+
+### Changed
+- Cover batch params fallback and singleton env undefined branches
+- Cover E2E admin bypass branches in resolveAdmin/isAdmin/isAdminUser
+- Add getClientIp + inMemoryRateLimiter branch coverage
+- Update jsonl with latest experiment runs
+- Raise stmts/funcs/lines thresholds to 95 (lock in current 98%+ floor)
+- Migrate test.cache.dir to top-level cacheDir (silence deprecation)
+- Finalize UT session ideas backlog
+- Exclude **/__tests__/** so test helpers don't dilute coverage stats
+- Record UT speed/stability session findings
+- Coverage.include=.ts only: median 4.14→4.02s (-2.9%), stddev 0.10→0.04 (-58%)
+- Restrict include to packages/*/src/**/*.test.{ts,tsx} + scripts: 4.30→4.14s (-3.7%)
+- Add UT autoresearch benchmark script
+- Enhance L3 tests with meaningful assertions
+- Add L3 tests for remaining dynamic pages
+- Add L3 Playwright tests for public pages
+- Add L3 Playwright tests for settings and projects pages
+- Add L3 Playwright tests for admin pages
+- Add L3 Playwright tests for teams
+- Add L3 Playwright tests for device management
+- Add L3 Playwright tests for data pages
+- Add L3 Playwright tests for leaderboard pages
+- Lock Bun version and enable osv-scanner config
+- Migrate to base-ci with parallel execution
+- Update autoresearch journal
+- 0.28s — final converged state
+- Re-validation: 4.85s cold, consistent with 4.80s previous
+- Final validation: cold 4.80s (-47%) + warm 0.29s (-97%, 31x). Session complete.
+- Final warm: 0.39s — sustained 25-30x speedup on cached path
+- Enable ESLint --cache in lint-staged (small win on multi-file commits)
+- Enable vitest experimentalAstAwareRemapping (lower variance)
+- Validation cold: 4.77s — median-of-5 was 4.96s, all under 5.5s baseline
+- Cold (subsequent runs, G1a/G2 cached): 5.43s — best stable cold figure
+- Warm benchmark: 0.30s — 30x faster than 9.13s baseline (97% reduction)
+- 5.12s stable cold (G1a cache reused across consecutive benchmarks)
+- Update autoresearch ideas with caching results
+- Skip lint-staged when no .ts/.tsx staged (saves ~0.15s)
+- Cache G1a typecheck by source-file hash: 1.3s→0.04s when cached
+- Cache L1 vitest result by source-file hash
+- Cache osv-scanner result by bun.lock hash
+- Pre-commit fast-path: skip L1/G1a/G1b for docs-only commits (5.5s→0.3s)
+- Parallel pre-push: E2E + G2 security run concurrently (~4s saved per push)
+- Parallel osv-scanner + gitleaks in run-security.ts (small win, ~0.3s)
+- Combined baseline: pre-commit (5.4s) + G2 security (3.7s) = 9.1s sequential
+- Re-baseline: 5.50s — bottleneck is L1 tests (5.4s)
+- Skip inode-dependent sync tests in CI
+- Update autoresearch ideas with pre-commit optimization results
+- Parallel tsc via bash script with proper exit code handling
+- Enable vitest caching — reduces variance
+- Skip G0 lockfile check when no package changes staged
+- Add lint-staged to parallel block (L1+G1a+G1b all concurrent)
+- Add typecheck script + lint-staged
+
+### Fixed
+- Simplify tests for CI stability
+- Optimize Playwright config to fit CI timeout
+- Increase timeouts and add retries for CI stability
+- Remove top-level concurrency to avoid deadlock with base-ci
+- Stabilize L3 Playwright tests for CI
+- Align worker tests with sanitized errors and Vitest runtime
+- Correct step numbering in ingest handler
+- Correct ingest rate limit documentation
+- Remove accidentally committed coverage output
+- Add rate limiting to auth and ingest routes
+- Remove user input reflection in error messages
+- Strengthen E2E auth bypass guard
+- Use timingSafeEqual for worker secret comparison
+- Sanitize D1 error messages in worker responses
+- Align bg-card usage to B05 luminance spec
+
+### Removed
+- Drop json coverage reporter (no consumers): 4.02→3.92s (-2.5%)
+
 ## v2.20.7
 
 ### Added
