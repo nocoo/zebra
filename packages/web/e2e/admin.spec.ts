@@ -11,6 +11,11 @@ test.describe("admin pages", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Compare");
   });
 
+  test("compare result page loads", async ({ page }) => {
+    await page.goto("/admin/compare/result");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Compare");
+  });
+
   test("invites page loads", async ({ page }) => {
     await page.goto("/admin/invites");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Invite");
