@@ -42,7 +42,7 @@ describe("parseOpenClawFile", () => {
     expect(result.deltas).toHaveLength(1);
     expect(result.deltas[0].source).toBe("openclaw");
     expect(result.deltas[0].model).toBe("claude-sonnet-4");
-    expect(result.deltas[0].tokens.inputTokens).toBe(6200); // input + cacheRead + cacheWrite
+    expect(result.deltas[0].tokens.inputTokens).toBe(5200); // input + cacheWrite (cacheRead lives in cachedInputTokens)
     expect(result.deltas[0].tokens.cachedInputTokens).toBe(1000); // cacheRead only
     expect(result.deltas[0].tokens.outputTokens).toBe(800);
     expect(result.deltas[0].tokens.reasoningOutputTokens).toBe(0);

@@ -17,15 +17,17 @@ export interface OpenClawFileResult {
  * OpenClaw writes one JSONL line per event. We look for `type: "message"`
  * lines with `message.usage` containing absolute token counts (no diffing needed).
  *
- * OpenClaw normalization:
- *   input + cacheRead + cacheWrite → inputTokens  (full input cost incl. cache)
- *   cacheRead                      → cachedInputTokens
- *   output                         → outputTokens
- *   (hardcoded 0)                  → reasoningOutputTokens
+ * OpenClaw normalization (aligned with Claude/Pi parsers to avoid double-counting
+ * cacheRead in the downstream `total = inputTokens + cachedInputTokens + ...` formula):
+ *   input + cacheWrite → inputTokens       (non-cached input + cache fills)
+ *   cacheRead          → cachedInputTokens (cache hits only)
+ *   output             → outputTokens
+ *   (hardcoded 0)      → reasoningOutputTokens
  *
- * NOTE: `usage.input` is only the uncached token delta (typically 1–3 per turn).
- * The bulk of input cost lives in cacheRead (cache hits) and cacheWrite (cache fills).
- * All three must be summed to produce the true inputTokens count.
+ * NOTE: `usage.input` is only the uncached token delta (typically 1–3 per turn);
+ * cacheWrite is the cache-fill cost. Together they form the non-cached input.
+ * cacheRead must NOT appear in inputTokens — it is reported separately via
+ * cachedInputTokens, and the sync layer adds the two for the final total.
  */
 export async function parseOpenClawFile(opts: {
   filePath: string;
@@ -76,9 +78,7 @@ export async function parseOpenClawFile(opts: {
 
       const tokens: TokenDelta = {
         inputTokens:
-          toNonNegInt(usage.input) +
-          toNonNegInt(usage.cacheRead) +
-          toNonNegInt(usage.cacheWrite),
+          toNonNegInt(usage.input) + toNonNegInt(usage.cacheWrite),
         cachedInputTokens: toNonNegInt(usage.cacheRead),
         outputTokens: toNonNegInt(usage.output),
         reasoningOutputTokens: 0,
