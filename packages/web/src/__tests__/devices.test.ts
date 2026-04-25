@@ -104,6 +104,31 @@ describe("GET /api/devices", () => {
     expect(body.devices[1].alias).toBeNull();
   });
 
+  it("defaults nullable columns when row fields are null", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1", email: "x" });
+    mockDbRead.listDevices.mockResolvedValueOnce([
+      {
+        device_id: "empty-1",
+        alias: null,
+        first_seen: null,
+        last_seen: null,
+        total_tokens: null as unknown as number,
+        sources: null as unknown as string,
+        model_count: null as unknown as number,
+      },
+    ]);
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { devices: Array<{ first_seen: unknown; last_seen: unknown; total_tokens: number; sources: string[]; model_count: number }> };
+    expect(body.devices[0]).toMatchObject({
+      first_seen: null,
+      last_seen: null,
+      total_tokens: 0,
+      sources: [],
+      model_count: 0,
+    });
+  });
+
   it("should include 'default' device", async () => {
     vi.mocked(resolveUser).mockResolvedValueOnce({
       userId: "u1",
@@ -337,6 +362,15 @@ describe("PUT /api/devices", () => {
     );
 
     expect(res.status).toBe(500);
+  });
+
+  it("should reject non-string alias values (covers `typeof alias === 'string' ? trim : ''` branch)", async () => {
+    vi.mocked(resolveUser).mockResolvedValueOnce({ userId: "u1", email: "x" });
+    const res = await PUT(
+      makePutRequest({ device_id: "aaaa-1111", alias: 42 as unknown as string }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("alias");
   });
 });
 
