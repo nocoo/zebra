@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   handleOrganizationsRpc,
   type ListOrganizationsRequest,
+  type ListOrganizationsWithCountRequest,
   type ListUserOrganizationsRequest,
   type GetOrganizationByIdRequest,
   type GetOrganizationBySlugRequest,
   type CheckOrgMembershipRequest,
   type ListOrgMembersRequest,
+  type ListOrgMembersAdminRequest,
+  type CountOrgMembersRequest,
 } from "./organizations";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -265,6 +268,189 @@ describe("organizations RPC handlers", () => {
       const response = await handleOrganizationsRpc(request, db);
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.listWithCount
+  // -------------------------------------------------------------------------
+
+  describe("organizations.listWithCount", () => {
+    it("should return orgs with member_count", async () => {
+      const rows = [
+        { id: "o1", name: "A", slug: "a", logo_url: null, created_by: "u1", created_at: "", updated_at: "", member_count: 4 },
+        { id: "o2", name: "B", slug: "b", logo_url: null, created_by: "u2", created_at: "", updated_at: "", member_count: 0 },
+      ];
+      db.all.mockResolvedValue({ results: rows });
+      const req: ListOrganizationsWithCountRequest = { method: "organizations.listWithCount" };
+      const res = await handleOrganizationsRpc(req, db);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: rows });
+      const sql = (db.prepare as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(sql).toContain("COUNT(om.id)");
+      expect(sql).toContain("LEFT JOIN organization_members");
+    });
+
+    it("should return [] when no orgs", async () => {
+      db.all.mockResolvedValue({ results: [] });
+      const req: ListOrganizationsWithCountRequest = { method: "organizations.listWithCount" };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: [] });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.getById
+  // -------------------------------------------------------------------------
+
+  describe("organizations.getById", () => {
+    it("should return org row", async () => {
+      const row = { id: "o1", name: "A", slug: "a", logo_url: null, created_by: "u1", created_at: "", updated_at: "" };
+      db.first.mockResolvedValue(row);
+      const req: GetOrganizationByIdRequest = { method: "organizations.getById", orgId: "o1" };
+      const res = await handleOrganizationsRpc(req, db);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: row });
+      expect(db.bind).toHaveBeenCalledWith("o1");
+    });
+
+    it("should return null when not found", async () => {
+      db.first.mockResolvedValue(null);
+      const req: GetOrganizationByIdRequest = { method: "organizations.getById", orgId: "x" };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: null });
+    });
+
+    it("should return 400 when orgId missing", async () => {
+      const req = { method: "organizations.getById", orgId: "" } as GetOrganizationByIdRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.getBySlug
+  // -------------------------------------------------------------------------
+
+  describe("organizations.getBySlug", () => {
+    it("should return org row by slug", async () => {
+      const row = { id: "o1", name: "A", slug: "a", logo_url: null, created_by: "u1", created_at: "", updated_at: "" };
+      db.first.mockResolvedValue(row);
+      const req: GetOrganizationBySlugRequest = { method: "organizations.getBySlug", slug: "a" };
+      const res = await handleOrganizationsRpc(req, db);
+      expect(await res.json()).toEqual({ result: row });
+      expect(db.bind).toHaveBeenCalledWith("a");
+    });
+
+    it("should return null when slug not found", async () => {
+      db.first.mockResolvedValue(null);
+      const req: GetOrganizationBySlugRequest = { method: "organizations.getBySlug", slug: "x" };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: null });
+    });
+
+    it("should return 400 when slug missing", async () => {
+      const req = { method: "organizations.getBySlug", slug: "" } as GetOrganizationBySlugRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.checkMembership
+  // -------------------------------------------------------------------------
+
+  describe("organizations.checkMembership", () => {
+    it("exists:true when row found", async () => {
+      db.first.mockResolvedValue({ id: "m1" });
+      const req: CheckOrgMembershipRequest = {
+        method: "organizations.checkMembership",
+        orgId: "o1",
+        userId: "u1",
+      };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: { exists: true } });
+      expect(db.bind).toHaveBeenCalledWith("o1", "u1");
+    });
+
+    it("exists:false when no row", async () => {
+      db.first.mockResolvedValue(null);
+      const req: CheckOrgMembershipRequest = {
+        method: "organizations.checkMembership",
+        orgId: "o1",
+        userId: "u1",
+      };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: { exists: false } });
+    });
+
+    it("400 when orgId missing", async () => {
+      const req = { method: "organizations.checkMembership", orgId: "", userId: "u" } as CheckOrgMembershipRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+
+    it("400 when userId missing", async () => {
+      const req = { method: "organizations.checkMembership", orgId: "o", userId: "" } as CheckOrgMembershipRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.listMembersAdmin
+  // -------------------------------------------------------------------------
+
+  describe("organizations.listMembersAdmin", () => {
+    it("should return admin member rows incl email", async () => {
+      const rows = [
+        { user_id: "u1", name: "A", email: "a@x", image: null, slug: "a", joined_at: "" },
+      ];
+      db.all.mockResolvedValue({ results: rows });
+      const req: ListOrgMembersAdminRequest = {
+        method: "organizations.listMembersAdmin",
+        orgId: "o1",
+      };
+      const res = await handleOrganizationsRpc(req, db);
+      expect(await res.json()).toEqual({ result: rows });
+      const sql = (db.prepare as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(sql).toContain("u.email");
+    });
+
+    it("400 when orgId missing", async () => {
+      const req = { method: "organizations.listMembersAdmin", orgId: "" } as ListOrgMembersAdminRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.countMembers
+  // -------------------------------------------------------------------------
+
+  describe("organizations.countMembers", () => {
+    it("should return numeric count", async () => {
+      db.first.mockResolvedValue({ count: 7 });
+      const req: CountOrgMembersRequest = {
+        method: "organizations.countMembers",
+        orgId: "o1",
+      };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: 7 });
+    });
+
+    it("should return 0 when row null", async () => {
+      db.first.mockResolvedValue(null);
+      const req: CountOrgMembersRequest = {
+        method: "organizations.countMembers",
+        orgId: "o1",
+      };
+      expect(await (await handleOrganizationsRpc(req, db)).json()).toEqual({ result: 0 });
+    });
+
+    it("400 when orgId missing", async () => {
+      const req = { method: "organizations.countMembers", orgId: "" } as CountOrgMembersRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // organizations.listForUser — 400 path
+  // -------------------------------------------------------------------------
+
+  describe("organizations.listForUser 400", () => {
+    it("400 when userId missing", async () => {
+      const req = { method: "organizations.listForUser", userId: "" } as ListUserOrganizationsRequest;
+      expect((await handleOrganizationsRpc(req, db)).status).toBe(400);
     });
   });
 
