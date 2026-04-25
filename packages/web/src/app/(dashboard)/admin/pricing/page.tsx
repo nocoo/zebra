@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, X, Check, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,9 +47,22 @@ export default function AdminPricingPage() {
   const router = useRouter();
   const { isAdmin, loading: adminLoading } = useAdmin();
 
-  const [rows, setRows] = useState<DbPricingRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: rowsData,
+    error: swrError,
+    isLoading: rowsLoading,
+    mutate: mutateRows,
+  } = useSWR<{ rows: DbPricingRow[] }>(
+    isAdmin ? "/api/admin/pricing" : null,
+    fetcher,
+  );
+  const rows = rowsData?.rows ?? [];
+  const loading = isAdmin ? rowsLoading : false;
+  const error = swrError
+    ? swrError instanceof Error
+      ? swrError.message
+      : "Failed to load."
+    : null;
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Inline editing
@@ -71,31 +86,12 @@ export default function AdminPricingPage() {
   }, [adminLoading, isAdmin, router]);
 
   // ---------------------------------------------------------------------------
-  // Fetch rows
+  // Fetch helper (refetch after mutations)
   // ---------------------------------------------------------------------------
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/admin/pricing");
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const json = (await res.json()) as { rows: DbPricingRow[] };
-      setRows(json.rows);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetching effect: setState before/after fetch is the standard React pattern
-    if (isAdmin) fetchRows();
-  }, [isAdmin, fetchRows]);
+  const fetchRows = useCallback(() => {
+    void mutateRows();
+  }, [mutateRows]);
 
   // ---------------------------------------------------------------------------
   // Create
