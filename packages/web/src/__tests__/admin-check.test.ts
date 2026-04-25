@@ -106,4 +106,83 @@ describe("GET /api/admin/check", () => {
 
     expect(body.isAdmin).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // E2E admin bypass guard (E2E_SKIP_AUTH + E2E_ADMIN_BYPASS + dev + !railway)
+  // -------------------------------------------------------------------------
+
+  describe("E2E admin bypass", () => {
+    async function callWithEnv(env: Record<string, string | undefined>) {
+      vi.resetModules();
+      const prev = { ...process.env };
+      process.env = { ...prev, ADMIN_EMAILS: "admin@example.com", ...env };
+      try {
+        vi.doMock("@/lib/db", () => ({
+          getDbRead: vi.fn().mockResolvedValue(mockDbRead),
+          getDbWrite: vi.fn(),
+          resetDb: vi.fn(),
+        }));
+        vi.doMock("@/lib/auth-helpers", () => ({
+          resolveUser: vi.fn().mockResolvedValue(null),
+        }));
+        const mod = await import("@/app/api/admin/check/route");
+        const res = await mod.GET(
+          new Request("http://localhost:7020/api/admin/check"),
+        );
+        return (await res.json()) as { isAdmin: boolean };
+      } finally {
+        process.env = prev;
+      }
+    }
+
+    it("should return isAdmin: true when all four bypass conditions are met", async () => {
+      const body = await callWithEnv({
+        E2E_SKIP_AUTH: "true",
+        E2E_ADMIN_BYPASS: "true",
+        NODE_ENV: "development",
+        RAILWAY_ENVIRONMENT: undefined,
+      });
+      expect(body.isAdmin).toBe(true);
+    });
+
+    it("should NOT bypass when E2E_SKIP_AUTH is missing", async () => {
+      const body = await callWithEnv({
+        E2E_SKIP_AUTH: undefined,
+        E2E_ADMIN_BYPASS: "true",
+        NODE_ENV: "development",
+        RAILWAY_ENVIRONMENT: undefined,
+      });
+      expect(body.isAdmin).toBe(false);
+    });
+
+    it("should NOT bypass when E2E_ADMIN_BYPASS is missing", async () => {
+      const body = await callWithEnv({
+        E2E_SKIP_AUTH: "true",
+        E2E_ADMIN_BYPASS: undefined,
+        NODE_ENV: "development",
+        RAILWAY_ENVIRONMENT: undefined,
+      });
+      expect(body.isAdmin).toBe(false);
+    });
+
+    it("should NOT bypass when NODE_ENV is not development", async () => {
+      const body = await callWithEnv({
+        E2E_SKIP_AUTH: "true",
+        E2E_ADMIN_BYPASS: "true",
+        NODE_ENV: "production",
+        RAILWAY_ENVIRONMENT: undefined,
+      });
+      expect(body.isAdmin).toBe(false);
+    });
+
+    it("should NOT bypass when RAILWAY_ENVIRONMENT is set (production guard)", async () => {
+      const body = await callWithEnv({
+        E2E_SKIP_AUTH: "true",
+        E2E_ADMIN_BYPASS: "true",
+        NODE_ENV: "development",
+        RAILWAY_ENVIRONMENT: "production",
+      });
+      expect(body.isAdmin).toBe(false);
+    });
+  });
 });
