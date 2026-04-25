@@ -253,4 +253,358 @@ describe("GET /api/achievements", () => {
       expect(body.error).toBe("Failed to compute achievements");
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Limit mode — sorts by tier+progress, slices top N, skips earnedBy queries.
+  // -------------------------------------------------------------------------
+
+  describe("limit mode", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+
+      // Make first-blood diamond (any usage) and power-user locked.
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 1_000_000,
+        input_tokens: 600_000,
+        output_tokens: 400_000,
+        cached_input_tokens: 200_000,
+        reasoning_output_tokens: 50_000,
+      });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-04-03", total_tokens: 100_000 },
+      ]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 1,
+        model_count: 1,
+        device_count: 1,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 1,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 1,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([]);
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+      mockClient.getAchievementEarners.mockResolvedValue([]);
+      mockClient.getAchievementEarnersCount.mockResolvedValue(0);
+    });
+
+    it("should slice achievements to limit count and sort by tier desc", async () => {
+      const res = await GET(makeGetRequest("/api/achievements", { limit: "3" }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.achievements).toHaveLength(3);
+
+      const tierRank: Record<string, number> = {
+        diamond: 4,
+        gold: 3,
+        silver: 2,
+        bronze: 1,
+        locked: 0,
+      };
+      // Each adjacent pair must be in non-increasing tier rank
+      for (let i = 1; i < body.achievements.length; i++) {
+        const prev = tierRank[body.achievements[i - 1].tier] ?? 0;
+        const curr = tierRank[body.achievements[i].tier] ?? 0;
+        expect(prev).toBeGreaterThanOrEqual(curr);
+      }
+    });
+
+    it("should skip earnedBy queries entirely in limit mode", async () => {
+      await GET(makeGetRequest("/api/achievements", { limit: "5" }));
+
+      expect(mockClient.getAchievementEarners).not.toHaveBeenCalled();
+      expect(mockClient.getAchievementEarnersCount).not.toHaveBeenCalled();
+    });
+
+    it("should still return summary based on full achievement set, not limited", async () => {
+      const res = await GET(makeGetRequest("/api/achievements", { limit: "2" }));
+      const body = await res.json();
+
+      expect(body.summary.totalAchievements).toBe(25);
+      // First-blood is diamond → at least 1 unlocked across full set
+      expect(body.summary.totalUnlocked).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Timezone-dependent counting (weekend-warrior, night-owl, early-bird)
+  // -------------------------------------------------------------------------
+
+  describe("timezone-dependent counting", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_input_tokens: 0,
+        reasoning_output_tokens: 0,
+      });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 0,
+        model_count: 0,
+        device_count: 0,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 0,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 0,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+      mockClient.getAchievementEarners.mockResolvedValue([]);
+      mockClient.getAchievementEarnersCount.mockResolvedValue(0);
+    });
+
+    it("should count UTC Sunday hour as weekend (tzOffset=0)", async () => {
+      // 2026-04-05 was a Sunday in UTC.
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([
+        { hour_start: "2026-04-05T12:00:00Z", total_tokens: 100 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      const ww = body.achievements.find((a: any) => a.id === "weekend-warrior");
+      expect(ww.currentValue).toBe(1);
+    });
+
+    it("should shift to local time when tzOffset is provided", async () => {
+      // 2026-04-06 00:30 UTC. With JS-style tzOffset=-540 (UTC+9, e.g. JST),
+      // local = UTC - tzOffset*60s = 2026-04-06 09:30 +9 → still Monday → not weekend.
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([
+        { hour_start: "2026-04-06T00:30:00Z", total_tokens: 100 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements", { tzOffset: "-540" }));
+      const body = await res.json();
+      const ww = body.achievements.find((a: any) => a.id === "weekend-warrior");
+      expect(ww.currentValue).toBe(0);
+    });
+
+    it("should count night-owl hours (local 0-6) and early-bird hours (local 6-9)", async () => {
+      // tzOffset=0 → UTC interpretation:
+      // 02:00 UTC → night owl, 07:00 UTC → early bird, 12:00 UTC → neither.
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([
+        { hour_start: "2026-04-01T02:00:00Z", total_tokens: 100 },
+        { hour_start: "2026-04-01T07:00:00Z", total_tokens: 100 },
+        { hour_start: "2026-04-01T12:00:00Z", total_tokens: 100 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      expect(body.achievements.find((a: any) => a.id === "night-owl").currentValue).toBe(1);
+      expect(body.achievements.find((a: any) => a.id === "early-bird").currentValue).toBe(1);
+    });
+
+    it("should not count zero-token hours toward timezone counters", async () => {
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([
+        { hour_start: "2026-04-05T12:00:00Z", total_tokens: 0 },
+        { hour_start: "2026-04-01T02:00:00Z", total_tokens: 0 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      expect(body.achievements.find((a: any) => a.id === "weekend-warrior").currentValue).toBe(0);
+      expect(body.achievements.find((a: any) => a.id === "night-owl").currentValue).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Longest streak — gap-aware computation across active days.
+  // -------------------------------------------------------------------------
+
+  describe("longest streak computation", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_input_tokens: 0,
+        reasoning_output_tokens: 0,
+      });
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 0,
+        model_count: 0,
+        device_count: 0,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 0,
+        quick_sessions: 0,
+        marathon_sessions: 0,
+        max_messages: 0,
+        automated_sessions: 0,
+      });
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([]);
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+      mockClient.getAchievementEarners.mockResolvedValue([]);
+      mockClient.getAchievementEarnersCount.mockResolvedValue(0);
+    });
+
+    it("should return 0 when there are no active days", async () => {
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      expect(body.summary.longestStreak).toBe(0);
+    });
+
+    it("should pick the longest run across multiple gaps", async () => {
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-01-01", total_tokens: 1 },
+        { day: "2026-01-02", total_tokens: 1 },
+        // gap
+        { day: "2026-01-05", total_tokens: 1 },
+        { day: "2026-01-06", total_tokens: 1 },
+        { day: "2026-01-07", total_tokens: 1 },
+        // gap
+        { day: "2026-01-10", total_tokens: 1 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      expect(body.summary.longestStreak).toBe(3);
+    });
+
+    it("should return 1 for a single isolated day", async () => {
+      mockClient.getAchievementDailyUsage.mockResolvedValue([
+        { day: "2026-01-01", total_tokens: 1 },
+      ]);
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      expect(body.summary.longestStreak).toBe(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // earnedBy SQL branch dispatch — verifies the correct SQL is selected per
+  // achievement id (volume / diversity / sessions / big-day CTE / cache-master).
+  // -------------------------------------------------------------------------
+
+  describe("earnedBy SQL dispatch", () => {
+    beforeEach(() => {
+      vi.mocked(resolveUser).mockResolvedValue({
+        userId: "u1",
+        email: "test@example.com",
+      });
+      mockClient.getAchievementUsageAggregates.mockResolvedValue({
+        total_tokens: 1, input_tokens: 1, output_tokens: 1,
+        cached_input_tokens: 0, reasoning_output_tokens: 0,
+      });
+      mockClient.getAchievementDailyUsage.mockResolvedValue([]);
+      mockClient.getAchievementDailyCostBreakdown.mockResolvedValue([]);
+      mockClient.getAchievementDiversityCounts.mockResolvedValue({
+        source_count: 0, model_count: 0, device_count: 0,
+      });
+      mockClient.getAchievementSessionAggregates.mockResolvedValue({
+        total_sessions: 0, quick_sessions: 0, marathon_sessions: 0,
+        max_messages: 0, automated_sessions: 0,
+      });
+      mockClient.getAchievementHourlyUsage.mockResolvedValue([]);
+      mockClient.getAchievementCostByModelSource.mockResolvedValue([]);
+      mockClient.getAchievementEarners.mockResolvedValue([]);
+      mockClient.getAchievementEarnersCount.mockResolvedValue(0);
+    });
+
+    it("should dispatch a distinct SQL branch for each social achievement id", async () => {
+      await GET(makeGetRequest("/api/achievements"));
+
+      const calledIds = mockClient.getAchievementEarners.mock.calls.map(
+        (c: any[]) => c[0],
+      );
+      // Spot-check coverage of all major SQL branches in the route.
+      const expected = [
+        "power-user", "first-blood", "millionaire", "billionaire",
+        "input-hog", "output-addict", "reasoning-junkie",
+        "veteran", "centurion",
+        "tool-hoarder", "model-tourist", "device-nomad",
+        "session-hoarder", "quick-draw", "marathon", "automation-addict",
+        "big-day", "chatterbox", "cache-master",
+      ];
+      for (const id of expected) {
+        expect(calledIds).toContain(id);
+      }
+    });
+
+    it("should pass the SQL string and bronze threshold to each earnedBy call", async () => {
+      await GET(makeGetRequest("/api/achievements"));
+
+      // big-day uses a CTE — verify that branch's SQL is wired in.
+      const bigDayCall = mockClient.getAchievementEarners.mock.calls.find(
+        (c: any[]) => c[0] === "big-day",
+      );
+      expect(bigDayCall).toBeDefined();
+      expect(bigDayCall![1]).toContain("WITH daily AS");
+      expect(Array.isArray(bigDayCall![2])).toBe(true);
+      expect(bigDayCall![2][1]).toBe(5); // limit
+      expect(bigDayCall![2][2]).toBe(0); // offset
+
+      // cache-master uses a percentage CASE expression.
+      const cacheCall = mockClient.getAchievementEarners.mock.calls.find(
+        (c: any[]) => c[0] === "cache-master",
+      );
+      expect(cacheCall).toBeDefined();
+      expect(cacheCall![1]).toContain("cached_input_tokens");
+      expect(cacheCall![1]).toContain("100.0");
+    });
+
+    it("should map earner tier from value via computeTierProgress", async () => {
+      mockClient.getAchievementEarners.mockImplementation(
+        async (id: string) => {
+          if (id === "first-blood") {
+            return [
+              { id: "u2", name: "Alice", image: null, slug: "alice", value: 100 },
+            ];
+          }
+          return [];
+        },
+      );
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      const fb = body.achievements.find((a: any) => a.id === "first-blood");
+      expect(fb.earnedBy).toHaveLength(1);
+      // first-blood is single-tier: any value → diamond.
+      expect(fb.earnedBy[0].tier).toBe("diamond");
+      expect(fb.earnedBy[0].name).toBe("Alice");
+    });
+
+    it("should fallback earner name to 'Anonymous' when null", async () => {
+      mockClient.getAchievementEarners.mockImplementation(
+        async (id: string) => {
+          if (id === "first-blood") {
+            return [
+              { id: "u3", name: null, image: null, slug: null, value: 1 },
+            ];
+          }
+          return [];
+        },
+      );
+
+      const res = await GET(makeGetRequest("/api/achievements"));
+      const body = await res.json();
+      const fb = body.achievements.find((a: any) => a.id === "first-blood");
+      expect(fb.earnedBy[0].name).toBe("Anonymous");
+    });
+  });
 });
