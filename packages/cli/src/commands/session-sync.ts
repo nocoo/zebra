@@ -123,8 +123,10 @@ export interface SessionSyncResult {
  * Defense-in-depth: validates that project_ref is either null or a
  * hex hash string. If a parser accidentally passes a non-hash value,
  * it gets hashed here as a safety net before any data leaves the device.
+ *
+ * Exported for unit testing of the hash-fallback branch.
  */
-function toQueueRecord(snap: SessionSnapshot): SessionQueueRecord {
+export function toQueueRecord(snap: SessionSnapshot): SessionQueueRecord {
   // Validate project_ref: must be null or a 16-char hex string (from hashProjectRef).
   // If it's something else, a parser forgot to hash — apply hashProjectRef as safety net.
   let projectRef = snap.projectRef;
@@ -148,8 +150,11 @@ function toQueueRecord(snap: SessionSnapshot): SessionQueueRecord {
   };
 }
 
-/** Map Source type to short result key (null if source has no session driver) */
-function sourceKey(source: Source): keyof SessionSyncResult["sources"] | null {
+/** Map Source type to short result key (null if source has no session driver).
+ *
+ * Exported for unit testing.
+ */
+export function sourceKey(source: Source): keyof SessionSyncResult["sources"] | null {
   switch (source) {
     case "claude-code": return "claude";
     case "codex": return "codex";
