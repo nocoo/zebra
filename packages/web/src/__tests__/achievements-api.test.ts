@@ -317,6 +317,28 @@ describe("GET /api/achievements", () => {
       }
     });
 
+    it("should sort by progress DESC within the same tier (secondary key)", async () => {
+      // Pull all 25 achievements via limit so we can scan adjacent same-tier pairs.
+      const res = await GET(makeGetRequest("/api/achievements", { limit: "25" }));
+      const body = await res.json();
+
+      let sameTierPairsChecked = 0;
+      for (let i = 1; i < body.achievements.length; i++) {
+        const prev = body.achievements[i - 1];
+        const curr = body.achievements[i];
+        if (prev.tier === curr.tier) {
+          // The route sorts by `b.progress - a.progress` within a tier, so
+          // earlier elements must have progress >= later elements.
+          expect(prev.progress).toBeGreaterThanOrEqual(curr.progress);
+          sameTierPairsChecked++;
+        }
+      }
+      // The fixture produces enough locked achievements with varying progress
+      // that we MUST exercise the secondary key — otherwise this test is a
+      // tautology.
+      expect(sameTierPairsChecked).toBeGreaterThan(0);
+    });
+
     it("should skip earnedBy queries entirely in limit mode", async () => {
       await GET(makeGetRequest("/api/achievements", { limit: "5" }));
 
@@ -494,6 +516,74 @@ describe("GET /api/achievements", () => {
       const body = await res.json();
       expect(body.summary.longestStreak).toBe(1);
     });
+
+    it("currentStreak: 3 consecutive days ending today (route walks back from UTC today)", async () => {
+      vi.useFakeTimers();
+      try {
+        // Pin a deterministic "today" so the route's `today` and the daily
+        // fixtures align — this is the branch at route.ts:81-88 that decrements
+        // current.setUTCDate until activeDays misses.
+        const fakeNow = new Date("2026-04-10T05:00:00Z");
+        vi.setSystemTime(fakeNow);
+
+        mockClient.getAchievementDailyUsage.mockResolvedValue([
+          { day: "2026-04-08", total_tokens: 1 },
+          { day: "2026-04-09", total_tokens: 1 },
+          { day: "2026-04-10", total_tokens: 1 },
+        ]);
+
+        const res = await GET(makeGetRequest("/api/achievements"));
+        const body = await res.json();
+        expect(body.summary.currentStreak).toBe(3);
+
+        const streakAch = body.achievements.find(
+          (a: any) => a.id === "streak",
+        );
+        expect(streakAch.currentValue).toBe(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("currentStreak: 0 when today itself is not active (early-exit branch)", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date("2026-04-10T05:00:00Z"));
+
+        // Yesterday + day before were active, but today is not — the while
+        // loop must break immediately.
+        mockClient.getAchievementDailyUsage.mockResolvedValue([
+          { day: "2026-04-08", total_tokens: 1 },
+          { day: "2026-04-09", total_tokens: 1 },
+        ]);
+
+        const res = await GET(makeGetRequest("/api/achievements"));
+        const body = await res.json();
+        expect(body.summary.currentStreak).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("currentStreak: stops at the first gap walking backward", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date("2026-04-10T05:00:00Z"));
+
+        // Today + yesterday active, gap on -2, then -3 active — streak is 2.
+        mockClient.getAchievementDailyUsage.mockResolvedValue([
+          { day: "2026-04-07", total_tokens: 1 },
+          { day: "2026-04-09", total_tokens: 1 },
+          { day: "2026-04-10", total_tokens: 1 },
+        ]);
+
+        const res = await GET(makeGetRequest("/api/achievements"));
+        const body = await res.json();
+        expect(body.summary.currentStreak).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -566,6 +656,55 @@ describe("GET /api/achievements", () => {
       expect(cacheCall).toBeDefined();
       expect(cacheCall![1]).toContain("cached_input_tokens");
       expect(cacheCall![1]).toContain("100.0");
+    });
+
+    it("should pass the right SQL fingerprint for every social SQL branch", async () => {
+      await GET(makeGetRequest("/api/achievements"));
+
+      type Call = [string, string, [number, number, number]];
+      const calls = mockClient.getAchievementEarners.mock.calls as Call[];
+      const sqlFor = (id: string): string => {
+        const c = calls.find((row) => row[0] === id);
+        if (!c) throw new Error(`no earnedBy call for ${id}`);
+        return c[1];
+      };
+
+      // Volume-style: SUM(<column>) GROUP BY user — wrong column would mean
+      // the dispatch is wired to the wrong template.
+      expect(sqlFor("power-user")).toContain("SUM(ur.total_tokens)");
+      expect(sqlFor("millionaire")).toContain("SUM(ur.total_tokens)");
+      expect(sqlFor("billionaire")).toContain("SUM(ur.total_tokens)");
+      expect(sqlFor("first-blood")).toContain("SUM(ur.total_tokens)");
+      expect(sqlFor("input-hog")).toContain("SUM(ur.input_tokens)");
+      expect(sqlFor("input-hog")).not.toContain("SUM(ur.output_tokens)");
+      expect(sqlFor("output-addict")).toContain("SUM(ur.output_tokens)");
+      expect(sqlFor("output-addict")).not.toContain("SUM(ur.input_tokens)");
+      expect(sqlFor("reasoning-junkie")).toContain("SUM(ur.reasoning_output_tokens)");
+
+      // Active-day count branches use COUNT(DISTINCT DATE(hour_start)).
+      for (const id of ["veteran", "centurion"]) {
+        expect(sqlFor(id)).toContain("COUNT(DISTINCT DATE(ur.hour_start))");
+      }
+
+      // Diversity branches each pick a distinct column.
+      expect(sqlFor("tool-hoarder")).toContain("COUNT(DISTINCT ur.source)");
+      expect(sqlFor("tool-hoarder")).not.toContain("COUNT(DISTINCT ur.model)");
+      expect(sqlFor("model-tourist")).toContain("COUNT(DISTINCT ur.model)");
+      expect(sqlFor("model-tourist")).not.toContain("COUNT(DISTINCT ur.source)");
+      expect(sqlFor("device-nomad")).toContain("COUNT(DISTINCT ur.device_id)");
+      expect(sqlFor("device-nomad")).not.toContain("COUNT(DISTINCT ur.model)");
+
+      // Session-based branches join session_records and use the right CASE.
+      expect(sqlFor("session-hoarder")).toContain("session_records sr");
+      expect(sqlFor("session-hoarder")).toMatch(/COUNT\(\*\)\s+AS value/);
+      expect(sqlFor("quick-draw")).toContain("sr.duration_seconds < 300");
+      expect(sqlFor("quick-draw")).not.toContain("> 7200");
+      expect(sqlFor("marathon")).toContain("sr.duration_seconds > 7200");
+      expect(sqlFor("marathon")).not.toContain("< 300");
+      expect(sqlFor("automation-addict")).toContain("sr.kind = 'automated'");
+
+      // Single-session-max branch uses MAX(total_messages).
+      expect(sqlFor("chatterbox")).toContain("MAX(total_messages)");
     });
 
     it("should map earner tier from value via computeTierProgress", async () => {
