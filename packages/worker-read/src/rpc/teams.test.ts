@@ -3,9 +3,11 @@ import {
   handleTeamsRpc,
   type GetTeamMembershipRequest,
   type ListUserTeamsRequest,
+  type ListAllTeamsRequest,
   type CheckTeamSlugExistsRequest,
   type GetTeamByIdRequest,
   type GetTeamMembersRequest,
+  type GetTeamSeasonRegistrationsRequest,
   type CountTeamMembersRequest,
   type GetTeamLogoUrlRequest,
   type FindTeamByInviteCodeRequest,
@@ -523,6 +525,245 @@ describe("teams RPC handlers", () => {
 
       expect(response.status).toBe(200);
       expect(body).toEqual({ result: { shared: false } });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // teams.listAll
+  // -------------------------------------------------------------------------
+
+  describe("teams.listAll", () => {
+    it("should return all teams ordered by created_at desc", async () => {
+      const rows = [
+        { id: "t1", name: "A", slug: "a", invite_code: "i1", created_by: "u1", created_at: "2026-01-02", logo_url: null, member_count: 3 },
+        { id: "t2", name: "B", slug: "b", invite_code: "i2", created_by: "u2", created_at: "2026-01-01", logo_url: null, member_count: 1 },
+      ];
+      db.all.mockResolvedValue({ results: rows });
+      const req: ListAllTeamsRequest = { method: "teams.listAll" };
+      const res = await handleTeamsRpc(req, db);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: rows });
+      // No bind args required
+      const sql = (db.prepare as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(sql).toContain("ORDER BY t.created_at DESC");
+      expect(sql).toContain("member_count");
+    });
+
+    it("should return empty array when no teams", async () => {
+      db.all.mockResolvedValue({ results: [] });
+      const req: ListAllTeamsRequest = { method: "teams.listAll" };
+      expect(await (await handleTeamsRpc(req, db)).json()).toEqual({ result: [] });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // teams.getSeasonRegistrations
+  // -------------------------------------------------------------------------
+
+  describe("teams.getSeasonRegistrations", () => {
+    it("should map rows to season_id strings", async () => {
+      db.all.mockResolvedValue({
+        results: [{ season_id: "s1" }, { season_id: "s2" }],
+      });
+      const req: GetTeamSeasonRegistrationsRequest = {
+        method: "teams.getSeasonRegistrations",
+        teamId: "t1",
+      };
+      const res = await handleTeamsRpc(req, db);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: ["s1", "s2"] });
+      expect(db.bind).toHaveBeenCalledWith("t1");
+    });
+
+    it("should return [] when no registrations", async () => {
+      db.all.mockResolvedValue({ results: [] });
+      const req: GetTeamSeasonRegistrationsRequest = {
+        method: "teams.getSeasonRegistrations",
+        teamId: "t1",
+      };
+      expect(await (await handleTeamsRpc(req, db)).json()).toEqual({ result: [] });
+    });
+
+    it("should return 400 when teamId missing", async () => {
+      const req = {
+        method: "teams.getSeasonRegistrations",
+        teamId: "",
+      } as GetTeamSeasonRegistrationsRequest;
+      expect((await handleTeamsRpc(req, db)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // teams.getById — schema fallback
+  // -------------------------------------------------------------------------
+
+  describe("teams.getById schema fallback", () => {
+    it("should retry without auto_register_season on missing-column error", async () => {
+      const fallbackRow = {
+        id: "t1",
+        name: "T",
+        slug: "t",
+        invite_code: "i",
+        created_at: "2026-01-01",
+        logo_url: null,
+      };
+      let call = 0;
+      db.first.mockImplementation(async () => {
+        call++;
+        if (call === 1) {
+          throw new Error("D1_ERROR: no such column: auto_register_season");
+        }
+        return fallbackRow;
+      });
+      const req: GetTeamByIdRequest = { method: "teams.getById", teamId: "t1" };
+      const res = await handleTeamsRpc(req, db);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        result: { ...fallbackRow, auto_register_season: null },
+      });
+      expect(call).toBe(2);
+    });
+
+    it("should return null result when fallback also returns null", async () => {
+      let call = 0;
+      db.first.mockImplementation(async () => {
+        call++;
+        if (call === 1) {
+          throw new Error("no such column: auto_register_season");
+        }
+        return null;
+      });
+      const req: GetTeamByIdRequest = { method: "teams.getById", teamId: "t1" };
+      const res = await handleTeamsRpc(req, db);
+      expect(await res.json()).toEqual({ result: null });
+    });
+
+    it("should rethrow unrelated errors", async () => {
+      db.first.mockRejectedValue(new Error("some other db error"));
+      const req: GetTeamByIdRequest = { method: "teams.getById", teamId: "t1" };
+      await expect(handleTeamsRpc(req, db)).rejects.toThrow("some other db error");
+    });
+
+    it("should rethrow non-Error rejections", async () => {
+      db.first.mockRejectedValue("string error");
+      const req: GetTeamByIdRequest = { method: "teams.getById", teamId: "t1" };
+      await expect(handleTeamsRpc(req, db)).rejects.toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // teams.getMembers — schema fallback
+  // -------------------------------------------------------------------------
+
+  describe("teams.getMembers schema fallback", () => {
+    it("should retry without nickname/slug when missing-column error", async () => {
+      const fallbackRows = [
+        { user_id: "u1", name: "Alice", image: null, role: "owner", joined_at: "2026-01-01" },
+      ];
+      let call = 0;
+      db.all.mockImplementation(async () => {
+        call++;
+        if (call === 1) {
+          throw new Error("no such column: u.nickname");
+        }
+        return { results: fallbackRows };
+      });
+      const req: GetTeamMembersRequest = { method: "teams.getMembers", teamId: "t1" };
+      const res = await handleTeamsRpc(req, db);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { result: Array<Record<string, unknown>> };
+      expect(body.result[0]).toMatchObject({
+        user_id: "u1",
+        nickname: null,
+        slug: null,
+      });
+      expect(call).toBe(2);
+    });
+
+    it("should rethrow when error is unrelated to columns", async () => {
+      db.all.mockRejectedValue(new Error("connection lost"));
+      const req: GetTeamMembersRequest = { method: "teams.getMembers", teamId: "t1" };
+      await expect(handleTeamsRpc(req, db)).rejects.toThrow("connection lost");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 400 validation paths for handlers that require ids
+  // -------------------------------------------------------------------------
+
+  describe("400 validation", () => {
+    it("teams.getById 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getById", teamId: "" } as GetTeamByIdRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getMembers 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getMembers", teamId: "" } as GetTeamMembersRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.countMembers 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.countMembers", teamId: "" } as CountTeamMembersRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getLogoUrl 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getLogoUrl", teamId: "" } as GetTeamLogoUrlRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getMemberUserIds 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getMemberUserIds", teamId: "" } as GetTeamMemberUserIdsRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getOwner 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getOwner", teamId: "" } as GetTeamOwnerRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.findByInviteCode 400 when missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.findByInviteCode", inviteCode: "" } as FindTeamByInviteCodeRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.checkSlugExists 400 when missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.checkSlugExists", slug: "" } as CheckTeamSlugExistsRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.membershipExists 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.membershipExists", teamId: "", userId: "u" } as CheckTeamMembershipExistsRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.membershipExists 400 when userId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.membershipExists", teamId: "t", userId: "" } as CheckTeamMembershipExistsRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getAppSetting 400 when key missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getAppSetting", key: "" } as GetAppSettingRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.getMembership 400 when teamId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.getMembership", teamId: "", userId: "u" } as GetTeamMembershipRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.listForUser 400 when userId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.listForUser", userId: "" } as ListUserTeamsRequest, db)).status,
+      ).toBe(400);
+    });
+    it("teams.usersShareTeam 400 when either userId missing", async () => {
+      expect(
+        (await handleTeamsRpc({ method: "teams.usersShareTeam", userId1: "", userId2: "b" } as CheckUsersShareTeamRequest, db)).status,
+      ).toBe(400);
+      expect(
+        (await handleTeamsRpc({ method: "teams.usersShareTeam", userId1: "a", userId2: "" } as CheckUsersShareTeamRequest, db)).status,
+      ).toBe(400);
     });
   });
 
