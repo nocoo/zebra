@@ -160,6 +160,34 @@ describe("GET /api/live", () => {
   });
 
   // -------------------------------------------------------------------------
+  // DB ping timeout (Promise.race vs 3s setTimeout)
+  // -------------------------------------------------------------------------
+
+  it("should return 503 with 'DB ping timed out' when ping exceeds 3s", async () => {
+    vi.useFakeTimers();
+    try {
+      const mockDbRead = createMockDbRead();
+      // ping never resolves -- timeout branch must win the race
+      mockDbRead.ping.mockReturnValue(new Promise(() => {}));
+      getDbRead.mockResolvedValue(mockDbRead);
+
+      const resPromise = GET(makeGetRequest());
+      // Advance past the 3s DB_PING_TIMEOUT_MS so setTimeout fires
+      await vi.advanceTimersByTimeAsync(3_000);
+      const res = await resPromise;
+
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.status).toBe("error");
+      const database = body.database as Record<string, unknown>;
+      expect(database.connected).toBe(false);
+      expect(database.error).toBe("DB ping timed out");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // -------------------------------------------------------------------------
   // No auth required
   // -------------------------------------------------------------------------
 
