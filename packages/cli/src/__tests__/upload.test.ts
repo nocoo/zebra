@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { executeUpload, aggregateRecords, type UploadOptions } from "../commands/upload.js";
+import { executeUpload, aggregateRecords } from "../commands/upload.js";
 import { LocalQueue } from "../storage/local-queue.js";
 import { ConfigManager } from "../config/manager.js";
 import { DEFAULT_HOST } from "../commands/login.js";
@@ -443,7 +443,7 @@ describe("executeUpload", () => {
     // On re-upload, all 120 records are re-aggregated and re-sent.
     // With overwrite upsert, this is safe — already-uploaded records
     // are simply overwritten with the same values.
-    const { fetchFn: fetchFn2, calls: calls2 } = createMockFetch([
+    const { fetchFn: fetchFn2 } = createMockFetch([
       { status: 200, body: { ingested: 50 } },
       { status: 200, body: { ingested: 50 } },
       { status: 200, body: { ingested: 20 } },

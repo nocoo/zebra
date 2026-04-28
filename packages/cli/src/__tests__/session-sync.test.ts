@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeSessionSync, type SessionSyncResult } from "../commands/session-sync.js";
+import { executeSessionSync } from "../commands/session-sync.js";
 import { SessionQueue } from "../storage/session-queue.js";
 import { SessionCursorStore } from "../storage/session-cursor-store.js";
 import type { SessionQueueRecord } from "@pew/core";
@@ -566,7 +566,7 @@ describe("executeSessionSync", () => {
       ].join("\n") + "\n",
     );
 
-    const result = await executeSessionSync({
+    await executeSessionSync({
       stateDir,
       claudeDir: join(dataDir, ".claude"),
     });

@@ -33,8 +33,6 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: "^_",
         },
       ],
-      // Allow dynamic delete — used intentionally in config manipulation (notifier hooks)
-      "@typescript-eslint/no-dynamic-delete": "off",
     },
   },
 
@@ -60,7 +58,6 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
-      "@typescript-eslint/no-unused-vars": "off",
       // Ban .skip and .only — prevent accidentally committed debug modifiers
       "no-restricted-syntax": [
         "error",

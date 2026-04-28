@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   executeStatus,
-  type StatusResult,
   type SourceDirs,
 } from "../commands/status.js";
 import { CursorStore } from "../storage/cursor-store.js";
@@ -330,7 +329,7 @@ describe("executeStatus", () => {
 
     // Advance the offset past all records
     const offset = await queue.loadOffset();
-    const { records, newOffset } = await queue.readFromOffset(offset);
+    const { newOffset } = await queue.readFromOffset(offset);
     await queue.saveOffset(newOffset);
 
     const result = await executeStatus({

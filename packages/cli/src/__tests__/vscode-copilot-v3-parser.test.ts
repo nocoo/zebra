@@ -2,10 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  parseVscodeCopilotV3File,
-  type VscodeCopilotV3ParseOpts,
-} from "../parsers/vscode-copilot-v3.js";
+import { parseVscodeCopilotV3File } from "../parsers/vscode-copilot-v3.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

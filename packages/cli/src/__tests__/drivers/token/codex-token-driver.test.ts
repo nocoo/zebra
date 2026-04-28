@@ -16,7 +16,6 @@ function codexTokenLine(opts: {
   const {
     input = 1000,
     output = 200,
-    model = "o3-mini",
     timestamp = "2026-03-07T10:15:30.000Z",
   } = opts;
   return JSON.stringify({

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeSync, type SyncResult } from "../commands/sync.js";
+import { executeSync } from "../commands/sync.js";
 import type { QueueRecord } from "@pew/core";
 
 /** Helper: create Claude JSONL content */
@@ -1749,6 +1749,7 @@ describe("executeSync", () => {
     // Remove all entries matching the Claude file path
     for (const key of fileKeys) {
       if (key.includes("proj-cursor-miss") && key.includes(".claude")) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- 测试模拟 cursor key 丢失
         delete cursorsData.files[key];
       }
     }
@@ -2591,6 +2592,7 @@ describe("executeSync", () => {
     const fileKeys = Object.keys(cursorsData.files);
     for (const key of fileKeys) {
       if (key.includes("proj-file-loss") && key.includes(".claude")) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- 测试模拟 file cursor 丢失
         delete cursorsData.files[key];
       }
     }

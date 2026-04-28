@@ -202,9 +202,7 @@ describe("DELETE /api/account/delete", () => {
       });
 
       // First few succeed, then season tables fail (they may not exist)
-      let callCount = 0;
       mockWriteClient.execute.mockImplementation(async (sql: string) => {
-        callCount++;
         if (sql.includes("season_member_snapshots") || sql.includes("season_team_members") || sql.includes("device_aliases")) {
           throw new Error("no such table");
         }

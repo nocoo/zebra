@@ -6,7 +6,7 @@ import { stat } from "node:fs/promises";
 import { createOpenCodeSqliteTokenDriver } from "../../../drivers/token/opencode-sqlite-token-driver.js";
 import type { OpenCodeSqliteCursor } from "@pew/core";
 import type { SyncContext } from "../../../drivers/types.js";
-import type { MessageRow, QueryMessagesFn } from "../../../parsers/opencode-sqlite.js";
+import type { MessageRow } from "../../../parsers/opencode-sqlite.js";
 
 /** Helper: create a mock MessageRow */
 function mockRow(overrides: Partial<MessageRow> = {}): MessageRow {

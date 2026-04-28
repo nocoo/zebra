@@ -148,12 +148,7 @@ describe("parseOpenClawFile", () => {
 
   it("should skip lines where message is missing", async () => {
     const filePath = join(tempDir, "session.jsonl");
-    const noMsg = JSON.stringify({
-      type: "message",
-      timestamp: "2026-03-07T10:00:00.000Z",
-      // message field missing, but usage/totalTokens in other places won't match fast-path
-    });
-    // But we need the fast-path to pass, so embed usage+totalTokens in a way that parses
+    // message field missing; embed usage+totalTokens to satisfy fast-path and prove the line is still skipped
     const noMsgWithKeywords = JSON.stringify({
       type: "message",
       timestamp: "2026-03-07T10:00:00.000Z",

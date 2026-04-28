@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Env, IngestRecord, IngestRequest } from "./index";
+import type { Env, IngestRecord } from "./index";
 
 // Import the default export (Worker handler) and version constant
 import worker, { WORKER_VERSION } from "./index";

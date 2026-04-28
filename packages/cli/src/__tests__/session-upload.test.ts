@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import {
   deduplicateSessionRecords,
   executeSessionUpload,
-  type SessionUploadOptions,
 } from "../commands/session-upload.js";
 import { SessionQueue } from "../storage/session-queue.js";
 import { ConfigManager } from "../config/manager.js";

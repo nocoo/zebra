@@ -6,7 +6,6 @@ import {
   createUploadEngine,
   type UploadEngineConfig,
   type UploadProgressEvent,
-  type UploadResult,
 } from "../commands/upload-engine.js";
 import { BaseQueue } from "../storage/base-queue.js";
 import { ConfigManager } from "../config/manager.js";

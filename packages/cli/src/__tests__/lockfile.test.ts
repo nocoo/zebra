@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   acquireLock,
   releaseLock,
@@ -35,7 +35,7 @@ function createFakeFs(opts?: {
       state.content = data;
     },
 
-    async readFile(path: string): Promise<string> {
+    async readFile(_path: string): Promise<string> {
       if (opts?.readThrows) throw opts.readThrows;
       if (state.content === null) {
         const err = new Error("ENOENT") as NodeJS.ErrnoException;
@@ -45,7 +45,7 @@ function createFakeFs(opts?: {
       return state.content;
     },
 
-    async unlink(path: string): Promise<void> {
+    async unlink(_path: string): Promise<void> {
       if (opts?.unlinkThrows) throw opts.unlinkThrows;
       state.content = null;
     },
@@ -61,7 +61,7 @@ function createFakeProcess(opts?: {
 
   return {
     pid,
-    kill(targetPid: number, signal: number): boolean {
+    kill(targetPid: number, _signal: number): boolean {
       const errCode = killThrows.get(targetPid);
       if (errCode) {
         const err = new Error(errCode) as NodeJS.ErrnoException;

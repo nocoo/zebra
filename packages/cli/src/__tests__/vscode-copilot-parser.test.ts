@@ -6,8 +6,6 @@ import {
   parseVscodeCopilotFile,
   estimateToolRoundTokens,
   estimateV3InputTokens,
-  type VscodeCopilotParseOpts,
-  type VscodeCopilotFileResult,
   type SkipInfo,
 } from "../parsers/vscode-copilot.js";
 
@@ -387,7 +385,7 @@ describe("parseVscodeCopilotFile", () => {
     ];
     await writeFile(filePath, lines.join("\n") + "\n");
 
-    const result1 = await parseVscodeCopilotFile({
+    await parseVscodeCopilotFile({
       filePath,
       startOffset: 0,
       requestMeta: {},

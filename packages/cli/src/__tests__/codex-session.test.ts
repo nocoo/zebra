@@ -311,14 +311,6 @@ describe("collectCodexSessions", () => {
 
   it("should compute correct duration", async () => {
     const f = join(tmpDir, "rollout-dur.jsonl");
-    const lines = [
-      sessionMetaLine({
-        id: "dur-test",
-        timestamp: "2026-03-07T10:00:00.000Z",
-      }),
-      responseItemLine("user", "2026-03-07T10:30:00.000Z"),
-      responseItemLine("assistant", "2026-03-07T11:00:00.000Z"),
-    ];
     // Override top-level timestamp of session_meta
     const metaLine = JSON.stringify({
       timestamp: "2026-03-07T10:00:00.000Z",

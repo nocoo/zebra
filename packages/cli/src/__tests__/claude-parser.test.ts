@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseClaudeFile, normalizeClaudeUsage } from "../parsers/claude.js";
-import type { ByteOffsetCursor, CursorState } from "@pew/core";
 
 /** Helper: create a Claude-style JSONL line */
 function claudeLine(overrides: Record<string, unknown> = {}): string {

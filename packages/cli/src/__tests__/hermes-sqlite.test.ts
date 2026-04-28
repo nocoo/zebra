@@ -1,8 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { writeFile, rm, mkdtemp, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { HermesSqliteCursor } from "@pew/core";
 import { parseHermesDatabase, type SessionRow } from "../parsers/hermes-sqlite.js";
 
 describe("parseHermesDatabase", () => {

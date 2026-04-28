@@ -221,7 +221,7 @@ describe("Claude hook installer", () => {
         throw err;
       },
       writeFile: async () => {},
-      mkdir: async (p: string) => {
+      mkdir: async (_p: string) => {
         mkdirCallCount++;
         if (mkdirCallCount === 1) {
           // First call (URL-based path) fails

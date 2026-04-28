@@ -110,6 +110,7 @@ export async function uninstallOpenClawHook(
   const plugins = normalizeObject(config.plugins);
   const entries = normalizeObject(plugins.entries);
   if (entries[PLUGIN_ID]) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- 卸载 hook 时清理配置 key
     delete entries[PLUGIN_ID];
     changed = true;
   }
@@ -132,6 +133,7 @@ export async function uninstallOpenClawHook(
       ? resolve(String((value as Record<string, unknown>).installPath))
       : null;
     if (key === PLUGIN_ID || sourcePath === resolvedPluginDir || installPath === resolvedPluginDir) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- 卸载 hook 时清理配置 key
       delete installs[key];
       changed = true;
     }
