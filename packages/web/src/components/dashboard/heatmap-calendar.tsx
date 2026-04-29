@@ -1,13 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { getYearWeeks, getColorIndex, formatDateISO, computePercentileBoundaries } from "@/lib/calendar-helpers";
 
 // ---------------------------------------------------------------------------
@@ -114,129 +108,168 @@ export function HeatmapCalendar({
 
   const labelWidth = 30;
 
+  // Single tooltip state — avoids Radix multi-Tooltip stale-content bug
+  const [hoveredCell, setHoveredCell] = useState<{
+    dateStr: string;
+    value: number;
+    rect: { top: number; left: number; width: number; height: number };
+  } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleCellEnter = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, dateStr: string, value: number) => {
+      const cellRect = e.currentTarget.getBoundingClientRect();
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      setHoveredCell({
+        dateStr,
+        value,
+        rect: {
+          top: cellRect.top - containerRect.top,
+          left: cellRect.left - containerRect.left,
+          width: cellRect.width,
+          height: cellRect.height,
+        },
+      });
+    },
+    [],
+  );
+
+  const handleCellLeave = useCallback(() => {
+    setHoveredCell(null);
+  }, []);
+
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <TooltipProvider>
-        <div className="inline-block">
-          {/* Month labels */}
+      <div className="inline-block relative" ref={containerRef}>
+        {/* Month labels */}
+        <div
+          className="relative h-4 text-xs text-muted-foreground mb-1"
+          style={{ marginLeft: labelWidth }}
+        >
+          {monthLabels.map((label, i) => (
+            <div
+              key={i}
+              className="absolute"
+              style={{ left: label.weekIndex * (cellSize + cellGap) }}
+            >
+              {label.month}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex">
+          {/* Weekday labels */}
           <div
-            className="relative h-4 text-xs text-muted-foreground mb-1"
-            style={{ marginLeft: labelWidth }}
+            className="flex flex-col text-xs text-muted-foreground mr-1"
+            style={{ width: labelWidth }}
           >
-            {monthLabels.map((label, i) => (
+            {WEEKDAYS.map((day, i) => (
               <div
-                key={i}
-                className="absolute"
-                style={{ left: label.weekIndex * (cellSize + cellGap) }}
+                key={day}
+                style={{
+                  height: cellSize + cellGap,
+                  lineHeight: `${cellSize + cellGap}px`,
+                  visibility: i % 2 === 1 ? "visible" : "hidden",
+                }}
               >
-                {label.month}
+                {day}
               </div>
             ))}
           </div>
 
-          <div className="flex">
-            {/* Weekday labels */}
-            <div
-              className="flex flex-col text-xs text-muted-foreground mr-1"
-              style={{ width: labelWidth }}
-            >
-              {WEEKDAYS.map((day, i) => (
-                <div
-                  key={day}
-                  style={{
-                    height: cellSize + cellGap,
-                    lineHeight: `${cellSize + cellGap}px`,
-                    visibility: i % 2 === 1 ? "visible" : "hidden",
-                  }}
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Heatmap grid */}
-            <div className="flex" style={{ gap: cellGap }}>
-              {weeks.map((week, weekIndex) => (
-                <div
-                  key={weekIndex}
-                  className="flex flex-col"
-                  style={{ gap: cellGap }}
-                >
-                  {week.map((date, dayIndex) => {
-                    const dateStr = formatDateISO(date);
-                    const value = dataMap.get(dateStr) ?? 0;
-                    const isCurrentYear = date.getFullYear() === year;
-                    const colorIndex = getColorIndex(
-                      value,
-                      boundaries,
-                      colorScale
-                    );
-
-                    if (!isCurrentYear) {
-                      return (
-                        <div
-                          key={dayIndex}
-                          style={{
-                            width: cellSize,
-                            height: cellSize,
-                            visibility: "hidden",
-                          }}
-                        />
-                      );
-                    }
-
-                    return (
-                      <Tooltip key={dayIndex}>
-                        <TooltipTrigger asChild>
-                          <div
-                            className={cn(
-                              "rounded-sm cursor-pointer transition-colors hover:ring-1 hover:ring-foreground",
-                              colorIndex === 0 && "border border-border/60",
-                            )}
-                            style={{
-                              width: cellSize,
-                              height: cellSize,
-                              backgroundColor: colorScale[colorIndex],
-                            }}
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="text-sm">
-                            <div className="font-medium">{dateStr}</div>
-                            <div className="text-muted-foreground">
-                              {metricLabel}: {valueFormatter(value, dateStr)}
-                            </div>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center justify-end gap-1 mt-2 text-xs text-muted-foreground">
-            <span>{legendLabels?.[0] ?? "Less"}</span>
-            {colorScale.map((color, i) => (
+          {/* Heatmap grid */}
+          <div className="flex" style={{ gap: cellGap }}>
+            {weeks.map((week, weekIndex) => (
               <div
-                key={i}
-                className={cn(
-                  "rounded-sm",
-                  i === 0 && "border border-border/60",
-                )}
-                style={{
-                  width: cellSize,
-                  height: cellSize,
-                  backgroundColor: color,
-                }}
-              />
+                key={weekIndex}
+                className="flex flex-col"
+                style={{ gap: cellGap }}
+              >
+                {week.map((date, dayIndex) => {
+                  const dateStr = formatDateISO(date);
+                  const value = dataMap.get(dateStr) ?? 0;
+                  const isCurrentYear = date.getFullYear() === year;
+                  const colorIndex = getColorIndex(
+                    value,
+                    boundaries,
+                    colorScale
+                  );
+
+                  if (!isCurrentYear) {
+                    return (
+                      <div
+                        key={dayIndex}
+                        style={{
+                          width: cellSize,
+                          height: cellSize,
+                          visibility: "hidden",
+                        }}
+                      />
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={dayIndex}
+                      className={cn(
+                        "rounded-sm cursor-pointer transition-colors hover:ring-1 hover:ring-foreground",
+                        colorIndex === 0 && "border border-border/60",
+                      )}
+                      style={{
+                        width: cellSize,
+                        height: cellSize,
+                        backgroundColor: colorScale[colorIndex],
+                      }}
+                      onMouseEnter={(e) => handleCellEnter(e, dateStr, value)}
+                      onMouseLeave={handleCellLeave}
+                    />
+                  );
+                })}
+              </div>
             ))}
-            <span>{legendLabels?.[1] ?? "More"}</span>
           </div>
         </div>
-      </TooltipProvider>
+
+        {/* Floating tooltip */}
+        {hoveredCell && (
+          <div
+            className="pointer-events-none absolute z-50 w-fit rounded-[var(--radius-widget)] bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95"
+            style={{
+              top: hoveredCell.rect.top - 4,
+              left: hoveredCell.rect.left + hoveredCell.rect.width / 2,
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <div className="text-sm">
+              <div className="font-medium">{hoveredCell.dateStr}</div>
+              <div className="text-muted-foreground">
+                {metricLabel}: {valueFormatter(hoveredCell.value, hoveredCell.dateStr)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="flex items-center justify-end gap-1 mt-2 text-xs text-muted-foreground">
+          <span>{legendLabels?.[0] ?? "Less"}</span>
+          {colorScale.map((color, i) => (
+            <div
+              key={i}
+              className={cn(
+                "rounded-sm",
+                i === 0 && "border border-border/60",
+              )}
+              style={{
+                width: cellSize,
+                height: cellSize,
+                backgroundColor: color,
+              }}
+            />
+          ))}
+          <span>{legendLabels?.[1] ?? "More"}</span>
+        </div>
+      </div>
     </div>
   );
 }
