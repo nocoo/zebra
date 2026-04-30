@@ -14,12 +14,8 @@
 import { NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth-helpers";
 import { getDbRead } from "@/lib/db";
-import {
-  getDefaultPricingMap,
-  buildPricingMap,
-  lookupPricing,
-  estimateCost,
-} from "@/lib/pricing";
+import { lookupPricing, estimateCost } from "@/lib/pricing";
+import { loadPricingMap } from "@/lib/load-pricing-map";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,15 +107,8 @@ export async function GET(request: Request) {
       tzOffset,
     });
 
-    // 4. Build pricing map (merge static defaults + DB overrides)
-    let pricingMap;
-    try {
-      const pricingRows = await db.listModelPricing();
-      pricingMap = buildPricingMap(pricingRows);
-    } catch {
-      // Table might not exist yet — fall back to static defaults
-      pricingMap = getDefaultPricingMap();
-    }
+    // 4. Build pricing map (dynamic + admin DB rows + safety net)
+    const pricingMap = await loadPricingMap(db);
 
     // 5. Compute estimated_cost per device from cost detail rows
     const costByDevice = new Map<string, number>();

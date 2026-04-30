@@ -6,7 +6,6 @@ import {
   getDefaultPricingMap,
   buildPricingMap,
   lookupPricing,
-  DEFAULT_MODEL_PRICES,
   DEFAULT_PREFIX_PRICES,
   DEFAULT_SOURCE_DEFAULTS,
   DEFAULT_FALLBACK,
@@ -160,9 +159,9 @@ describe("pricing", () => {
   });
 
   describe("getDefaultPricingMap", () => {
-    it("should return a PricingMap with all static defaults", () => {
+    it("should return a PricingMap with safety-net only (empty exact-match table)", () => {
       const map = getDefaultPricingMap();
-      expect(map.models).toEqual(DEFAULT_MODEL_PRICES);
+      expect(map.models).toEqual({});
       expect(map.prefixes).toEqual(DEFAULT_PREFIX_PRICES);
       expect(map.sourceDefaults).toEqual(DEFAULT_SOURCE_DEFAULTS);
       expect(map.fallback).toEqual(DEFAULT_FALLBACK);
@@ -194,21 +193,21 @@ describe("pricing", () => {
 
     it("should override exact model prices from DB rows", () => {
       const row = makeDbRow({ model: "claude-sonnet-4-20250514", input: 4, output: 20, cached: 0.4 });
-      const map = buildPricingMap([row]);
+      const map = buildPricingMap({ dynamic: [], dbRows: [row] });
 
       expect(map.models["claude-sonnet-4-20250514"]).toEqual({ input: 4, output: 20, cached: 0.4 });
     });
 
     it("should add new model entries from DB rows", () => {
       const row = makeDbRow({ model: "my-custom-model", input: 7, output: 30, cached: 0.7 });
-      const map = buildPricingMap([row]);
+      const map = buildPricingMap({ dynamic: [], dbRows: [row] });
 
       expect(map.models["my-custom-model"]).toEqual({ input: 7, output: 30, cached: 0.7 });
     });
 
     it("should override source defaults when row has source", () => {
       const row = makeDbRow({ model: "custom-claude", source: "claude-code", input: 5, output: 25, cached: 0.5 });
-      const map = buildPricingMap([row]);
+      const map = buildPricingMap({ dynamic: [], dbRows: [row] });
 
       expect(map.sourceDefaults["claude-code"]).toEqual({ input: 5, output: 25, cached: 0.5 });
       // Should also be added as exact model entry
@@ -217,22 +216,68 @@ describe("pricing", () => {
 
     it("should omit cached from pricing when DB cached is null", () => {
       const row = makeDbRow({ model: "no-cache-model", input: 3, output: 15, cached: null });
-      const map = buildPricingMap([row]);
+      const map = buildPricingMap({ dynamic: [], dbRows: [row] });
 
       expect(map.models["no-cache-model"]).toEqual({ input: 3, output: 15 });
       expect(map.models["no-cache-model"]!.cached).toBeUndefined();
     });
 
-    it("should preserve static defaults for models not in DB", () => {
-      const row = makeDbRow({ model: "my-custom-model", input: 7, output: 30 });
-      const map = buildPricingMap([row]);
-
-      // Original static model should still be there
-      expect(map.models["o3"]).toEqual({ input: 10, output: 40, cached: 2.5 });
+    it("admin row wins over a same-model dynamic entry", () => {
+      const map = buildPricingMap({
+        dynamic: [
+          {
+            model: "claude-sonnet-4-20250514",
+            provider: "Anthropic",
+            displayName: "Claude Sonnet 4",
+            inputPerMillion: 3,
+            outputPerMillion: 15,
+            cachedPerMillion: 0.3,
+            contextWindow: 200000,
+            origin: "baseline",
+            updatedAt: "2026-04-30T00:00:00.000Z",
+          },
+        ],
+        dbRows: [
+          makeDbRow({
+            model: "claude-sonnet-4-20250514",
+            input: 99,
+            output: 199,
+            cached: 9.9,
+          }),
+        ],
+      });
+      expect(map.models["claude-sonnet-4-20250514"]).toEqual({
+        input: 99,
+        output: 199,
+        cached: 9.9,
+      });
     });
 
-    it("should handle empty DB rows (returns pure defaults)", () => {
-      const map = buildPricingMap([]);
+    it("aliases share the canonical entry's pricing", () => {
+      const map = buildPricingMap({
+        dynamic: [
+          {
+            model: "anthropic/claude-sonnet-4",
+            provider: "Anthropic",
+            displayName: "Claude Sonnet 4",
+            inputPerMillion: 3,
+            outputPerMillion: 15,
+            cachedPerMillion: 0.3,
+            contextWindow: 200000,
+            origin: "openrouter",
+            updatedAt: "2026-04-30T00:00:00.000Z",
+            aliases: ["claude-sonnet-4-alias"],
+          },
+        ],
+        dbRows: [],
+      });
+      expect(map.models["claude-sonnet-4-alias"]).toEqual(
+        map.models["anthropic/claude-sonnet-4"],
+      );
+    });
+
+    it("should handle empty inputs (returns safety-net defaults)", () => {
+      const map = buildPricingMap({ dynamic: [], dbRows: [] });
       const defaults = getDefaultPricingMap();
       expect(map).toEqual(defaults);
     });
@@ -241,7 +286,7 @@ describe("pricing", () => {
   describe("lookupPricing", () => {
     const defaultMap = getDefaultPricingMap();
 
-    it("should resolve exact model match", () => {
+    it("should resolve via prefix when models table is empty", () => {
       const p = lookupPricing(defaultMap, "o3");
       expect(p).toEqual({ input: 10, output: 40, cached: 2.5 });
     });
@@ -274,18 +319,23 @@ describe("pricing", () => {
       expect(p).toEqual(DEFAULT_FALLBACK);
     });
 
-    it("should prefer DB override over static default", () => {
-      const map = buildPricingMap([{
-        id: 1,
-        model: "o3",
-        input: 99,
-        output: 199,
-        cached: 9.9,
-        source: null,
-        note: null,
-        updated_at: "2026-01-01T00:00:00Z",
-        created_at: "2026-01-01T00:00:00Z",
-      }]);
+    it("should prefer DB override over prefix-resolved default", () => {
+      const map = buildPricingMap({
+        dynamic: [],
+        dbRows: [
+          {
+            id: 1,
+            model: "o3",
+            input: 99,
+            output: 199,
+            cached: 9.9,
+            source: null,
+            note: null,
+            updated_at: "2026-01-01T00:00:00Z",
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
 
       const p = lookupPricing(map, "o3");
       expect(p).toEqual({ input: 99, output: 199, cached: 9.9 });

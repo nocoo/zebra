@@ -35,6 +35,10 @@ describe("GET /api/pricing", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockDbRead = createMockDbRead();
+    mockDbRead.getDynamicPricing.mockResolvedValue({
+      entries: [],
+      servedFrom: "baseline",
+    });
     vi.mocked(getDbRead).mockResolvedValue(mockDbRead);
     const mod = await import("@/app/api/pricing/route");
     GET = mod.GET;

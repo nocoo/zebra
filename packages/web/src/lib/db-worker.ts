@@ -38,7 +38,6 @@ import type {
   ShowcaseExistsResult,
   SessionRecordRow,
   PricingRow,
-  DynamicPricingEntryDto,
   DynamicPricingMetaDto,
   AdminStorageUserRow,
   UsageRecordRow,
@@ -72,6 +71,7 @@ import type {
   ActiveBadgeRow,
   BadgeAssignmentCheckResult,
 } from "./rpc-types";
+import type { DynamicPricingEntry } from "./pricing";
 
 export function createWorkerDbRead(): DbRead {
   const url = process.env.WORKER_READ_URL;
@@ -820,10 +820,10 @@ export function createWorkerDbRead(): DbRead {
     },
 
     async getDynamicPricing(): Promise<{
-      entries: DynamicPricingEntryDto[];
+      entries: DynamicPricingEntry[];
       servedFrom: "kv" | "baseline";
     }> {
-      return rpc<{ entries: DynamicPricingEntryDto[]; servedFrom: "kv" | "baseline" }>({
+      return rpc<{ entries: DynamicPricingEntry[]; servedFrom: "kv" | "baseline" }>({
         method: "pricing.getDynamicPricing",
       });
     },

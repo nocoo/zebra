@@ -385,22 +385,17 @@ export interface PricingRow {
 // ---------------------------------------------------------------------------
 // Dynamic pricing DTOs (mirror worker-read sync/types — kept web-side until
 // a cross-package alias is introduced; route.test.ts contract test pins shape).
+//
+// The runtime entry shape lives in `lib/pricing.ts` (`DynamicPricingEntry`) so
+// that client code can import it without dragging server-only modules. The Dto
+// alias is preserved for callers that historically imported from rpc-types.
 // ---------------------------------------------------------------------------
 
-export type DynamicPricingOrigin = "baseline" | "openrouter" | "models.dev" | "admin";
+import type { DynamicPricingEntry } from "./pricing";
 
-export interface DynamicPricingEntryDto {
-  model: string;
-  provider: string | null;
-  displayName: string | null;
-  inputPerMillion: number;
-  outputPerMillion: number;
-  cachedPerMillion: number | null;
-  contextWindow: number | null;
-  origin: DynamicPricingOrigin;
-  updatedAt: string;
-  aliases?: string[];
-}
+export type { DynamicPricingOrigin } from "./pricing";
+
+export type DynamicPricingEntryDto = DynamicPricingEntry;
 
 export interface DynamicPricingErrorDto {
   source: "openrouter" | "models.dev" | "d1" | "kv";

@@ -4,19 +4,47 @@
  * Prices are in USD per 1M tokens.
  *
  * Architecture:
- * - Static tables serve as built-in defaults (always available, zero latency).
- * - Database table `model_pricing` allows admins to override / add entries.
- * - `buildPricingMap()` merges DB rows on top of static defaults (server-side).
+ * - Dynamic dataset (worker-read KV, baseline JSON underneath) provides the
+ *   exact-match table; admin DB rows in `model_pricing` overlay on top.
+ * - `buildPricingMap({ dynamic, dbRows })` projects both into a `PricingMap`.
+ * - Static prefix / source / fallback tables remain as the safety net beneath
+ *   dynamic data and admin overrides.
  * - Client pages fetch the merged map from `/api/pricing` and pass it to
  *   `lookupPricing()` for per-model resolution.
- * - `estimateCost()` and `formatCost()` are pure helpers, unchanged.
  *
  * Matching strategy: exact model ID → prefix match → source default → fallback.
+ *
+ * Client-safe: this module must not import any server-only code so client
+ * bundles (e.g. use-pricing.ts → getDefaultPricingMap) stay free of db-worker.
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Origin of a dynamic pricing entry, in priority order. */
+export type DynamicPricingOrigin =
+  | "baseline"
+  | "openrouter"
+  | "models.dev"
+  | "admin";
+
+/**
+ * Client-safe DTO for one dynamic pricing entry. Mirrors worker-read's
+ * sync/types but lives here so callers don't pull server code transitively.
+ */
+export interface DynamicPricingEntry {
+  model: string;
+  provider: string | null;
+  displayName: string | null;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  cachedPerMillion: number | null;
+  contextWindow: number | null;
+  origin: DynamicPricingOrigin;
+  updatedAt: string;
+  aliases?: string[];
+}
 
 export interface ModelPricing {
   /** Price per 1M input tokens (USD) */
@@ -49,31 +77,8 @@ export interface PricingMap {
 }
 
 // ---------------------------------------------------------------------------
-// Static pricing tables (built-in defaults)
+// Static pricing tables (safety net beneath dynamic + admin)
 // ---------------------------------------------------------------------------
-
-/** Exact model ID → pricing */
-export const DEFAULT_MODEL_PRICES: Record<string, ModelPricing> = {
-  // Anthropic (Claude Code)
-  "claude-sonnet-4-20250514": { input: 3, output: 15, cached: 0.3 },
-  "claude-opus-4-20250514": { input: 15, output: 75, cached: 1.5 },
-  "claude-3.5-sonnet-20241022": { input: 3, output: 15, cached: 0.3 },
-  "claude-3.5-haiku-20241022": { input: 0.8, output: 4, cached: 0.08 },
-
-  // Google (Gemini CLI)
-  "gemini-2.5-pro": { input: 1.25, output: 10, cached: 0.31 },
-  "gemini-2.5-flash": { input: 0.15, output: 0.6, cached: 0.04 },
-  "gemini-2.0-flash": { input: 0.1, output: 0.4, cached: 0.025 },
-
-  // OpenAI (OpenCode / OpenClaw)
-  "o3": { input: 10, output: 40, cached: 2.5 },
-  "o4-mini": { input: 1.1, output: 4.4, cached: 0.275 },
-  "gpt-4.1": { input: 2, output: 8, cached: 0.5 },
-  "gpt-4.1-mini": { input: 0.4, output: 1.6, cached: 0.1 },
-  "gpt-4.1-nano": { input: 0.1, output: 0.4, cached: 0.025 },
-  "gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
-};
 
 /** Prefix patterns for fuzzy matching */
 export const DEFAULT_PREFIX_PRICES: Array<{ prefix: string; pricing: ModelPricing }> = [
@@ -115,24 +120,59 @@ export const DEFAULT_FALLBACK: ModelPricing = { input: 3, output: 15, cached: 0.
 // ---------------------------------------------------------------------------
 
 /**
- * Build the default PricingMap from static tables only.
+ * Build the safety-net PricingMap (no dynamic, no DB).
+ * Exact-match table is empty — exact prices come from dynamic data.
  */
 export function getDefaultPricingMap(): PricingMap {
   return {
-    models: { ...DEFAULT_MODEL_PRICES },
+    models: {},
     prefixes: [...DEFAULT_PREFIX_PRICES],
     sourceDefaults: { ...DEFAULT_SOURCE_DEFAULTS },
     fallback: DEFAULT_FALLBACK,
   };
 }
 
+export interface BuildPricingMapInput {
+  dynamic: DynamicPricingEntry[];
+  dbRows: DbPricingRow[];
+}
+
 /**
- * Merge database pricing rows on top of static defaults.
- * DB rows with `source` set override source defaults;
- * DB rows without `source` override exact model prices.
+ * Project the dynamic dataset + admin DB rows into a PricingMap.
+ *
+ * Layering (later wins):
+ *   1. dynamic entries (already merged baseline → openrouter → models.dev → admin
+ *      in the worker-read sync layer); aliases share the same pricing pointer.
+ *   2. admin DB rows (`model_pricing`):
+ *        - row.source != null → write sourceDefaults[source] AND models[model]
+ *        - row.source == null → write models[model]
  */
-export function buildPricingMap(dbRows: DbPricingRow[]): PricingMap {
-  const map = getDefaultPricingMap();
+export function buildPricingMap({
+  dynamic,
+  dbRows,
+}: BuildPricingMapInput): PricingMap {
+  const map: PricingMap = {
+    models: {},
+    prefixes: [...DEFAULT_PREFIX_PRICES],
+    sourceDefaults: { ...DEFAULT_SOURCE_DEFAULTS },
+    fallback: DEFAULT_FALLBACK,
+  };
+
+  for (const entry of dynamic) {
+    const pricing: ModelPricing = {
+      input: entry.inputPerMillion,
+      output: entry.outputPerMillion,
+      ...(entry.cachedPerMillion != null
+        ? { cached: entry.cachedPerMillion }
+        : {}),
+    };
+    map.models[entry.model] = pricing;
+    if (entry.aliases) {
+      for (const alias of entry.aliases) {
+        if (!(alias in map.models)) map.models[alias] = pricing;
+      }
+    }
+  }
 
   for (const row of dbRows) {
     const pricing: ModelPricing = {
@@ -142,11 +182,9 @@ export function buildPricingMap(dbRows: DbPricingRow[]): PricingMap {
     };
 
     if (row.source) {
-      // Source-specific override: treated as a source default
       map.sourceDefaults[row.source] = pricing;
     }
 
-    // Always add/override the exact model entry
     map.models[row.model] = pricing;
   }
 

@@ -39,6 +39,12 @@ describe("GET /api/usage/by-device", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDbRead = createMockDbRead();
+    // Default dynamic pricing stub: empty (so loadPricingMap falls through to
+    // safety net unless the test overrides it).
+    mockDbRead.getDynamicPricing.mockResolvedValue({
+      entries: [],
+      servedFrom: "baseline",
+    });
     vi.mocked(dbModule.getDbRead).mockResolvedValue(mockDbRead as any);
   });
 
@@ -526,9 +532,11 @@ describe("GET /api/usage/by-device", () => {
 
       // Verify buildPricingMap was called with the DB rows
       expect(buildPricingMap).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ model: "claude-sonnet-4-20250514", input: 100, output: 200 }),
-        ])
+        expect.objectContaining({
+          dbRows: expect.arrayContaining([
+            expect.objectContaining({ model: "claude-sonnet-4-20250514", input: 100, output: 200 }),
+          ]),
+        }),
       );
     });
 

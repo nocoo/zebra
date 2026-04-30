@@ -37,7 +37,6 @@ import type {
   ShowcaseExistsResult,
   SessionRecordRow,
   PricingRow,
-  DynamicPricingEntryDto,
   DynamicPricingMetaDto,
   AdminStorageUserRow,
   UsageRecordRow,
@@ -71,6 +70,7 @@ import type {
   ActiveBadgeRow,
   BadgeAssignmentCheckResult,
 } from "./rpc-types";
+import type { DynamicPricingEntry } from "./pricing";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -465,7 +465,7 @@ export interface DbRead {
 
   /** Get dynamic pricing entries (KV-backed, falls back to bundled baseline) */
   getDynamicPricing(): Promise<{
-    entries: DynamicPricingEntryDto[];
+    entries: DynamicPricingEntry[];
     servedFrom: "kv" | "baseline";
   }>;
 
