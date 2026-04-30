@@ -39,6 +39,7 @@ import type {
   SessionRecordRow,
   PricingRow,
   DynamicPricingMetaDto,
+  SyncOutcomeDto,
   AdminStorageUserRow,
   UsageRecordRow,
   UsageDeviceSummaryRow,
@@ -831,6 +832,17 @@ export function createWorkerDbRead(): DbRead {
     async getDynamicPricingMeta(): Promise<DynamicPricingMetaDto> {
       return rpc<DynamicPricingMetaDto>({
         method: "pricing.getDynamicPricingMeta",
+      });
+    },
+
+    async rebuildDynamicPricing(
+      options?: { forceRefetch?: boolean },
+    ): Promise<SyncOutcomeDto> {
+      return rpc<SyncOutcomeDto>({
+        method: "pricing.rebuildDynamicPricing",
+        ...(options?.forceRefetch !== undefined && {
+          forceRefetch: options.forceRefetch,
+        }),
       });
     },
 

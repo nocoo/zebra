@@ -10,6 +10,7 @@ import type {
 } from "@/lib/rpc-types";
 import { PricingTable } from "./pricing-table";
 import { PricingMetaBanner } from "./pricing-meta-banner";
+import { ForceSyncButton } from "./force-sync-button";
 
 interface ModelsResponse {
   entries: DynamicPricingEntryDto[];
@@ -87,6 +88,7 @@ export default function ModelPricesPage() {
       {data && (
         <>
           <PricingMetaBanner meta={data.meta} servedFrom={data.servedFrom} />
+          <ForceSyncButton onComplete={() => fetchModels()} />
           <PricingTable entries={data.entries} />
         </>
       )}

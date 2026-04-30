@@ -6,12 +6,19 @@ import {
   type GetModelPricingByModelSourceRequest,
   type GetDynamicPricingRequest,
   type GetDynamicPricingMetaRequest,
+  type RebuildDynamicPricingRequest,
 } from "./pricing";
 import baseline from "../data/model-prices.json";
 import {
   KEY_DYNAMIC,
   KEY_DYNAMIC_META,
+  KEY_LAST_FETCH_OPENROUTER,
+  KEY_LAST_FETCH_MODELS_DEV,
 } from "../sync/kv-store";
+import {
+  OPENROUTER_URL,
+  type SyncOutcome,
+} from "../sync/orchestrator";
 import type { DynamicPricingEntry, DynamicPricingMeta } from "../sync/types";
 import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
 
@@ -381,6 +388,177 @@ describe("pricing RPC handlers", () => {
       expect(body.result.modelCount).toBe((baseline as DynamicPricingEntry[]).length);
       expect(body.result.lastErrors?.[0]?.source).toBe("kv");
       expect(body.result.lastErrors?.[0]?.message).toContain("cold start");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // pricing.rebuildDynamicPricing
+  // -------------------------------------------------------------------------
+
+  describe("pricing.rebuildDynamicPricing", () => {
+    function memoryKv(): KVNamespace & { store: Map<string, string> } {
+      const store = new Map<string, string>();
+      return {
+        store,
+        get: vi.fn(async (key: string, type?: string) => {
+          const raw = store.get(key);
+          if (raw === undefined) return null;
+          if (type === "json") {
+            try {
+              return JSON.parse(raw);
+            } catch {
+              return null;
+            }
+          }
+          return raw;
+        }),
+        put: vi.fn(async (key: string, value: string) => {
+          store.set(key, value);
+        }),
+      } as unknown as KVNamespace & { store: Map<string, string> };
+    }
+
+    function emptyDb(): D1Database {
+      return {
+        prepare: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        }),
+      } as unknown as D1Database;
+    }
+
+    const OPENROUTER_OK = {
+      data: [
+        {
+          id: "anthropic/claude-sonnet-4-20250514",
+          name: "Anthropic: Claude Sonnet 4",
+          context_length: 200000,
+          pricing: {
+            prompt: "0.000003",
+            completion: "0.000015",
+            input_cache_read: "0.0000003",
+          },
+        },
+      ],
+    };
+    const MODELS_DEV_OK = {
+      openai: {
+        models: {
+          "gpt-4o": {
+            name: "GPT-4o",
+            cost: { input: 2.5, output: 10, cache_read: 1.25 },
+            limit: { context: 128000 },
+          },
+        },
+      },
+    };
+
+    beforeEach(() => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    });
+
+    it("default (no forceRefetch) does not hit upstream; merges last-fetch cache + admin D1 + baseline", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("should not be called"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const memKv = memoryKv();
+      // pre-seed last-fetch cache so merge has something beyond baseline
+      memKv.store.set(
+        KEY_LAST_FETCH_OPENROUTER,
+        JSON.stringify({ json: OPENROUTER_OK, fetchedAt: "2026-04-29T00:00:00.000Z" }),
+      );
+      memKv.store.set(
+        KEY_LAST_FETCH_MODELS_DEV,
+        JSON.stringify({ json: MODELS_DEV_OK, fetchedAt: "2026-04-29T00:00:00.000Z" }),
+      );
+
+      const req: RebuildDynamicPricingRequest = {
+        method: "pricing.rebuildDynamicPricing",
+      };
+      const res = await handlePricingRpc(req, emptyDb(), memKv);
+      const body = (await res.json()) as { result: SyncOutcome };
+
+      expect(res.status).toBe(200);
+      expect(body.result.ok).toBe(true);
+      expect(body.result.entriesWritten).toBeGreaterThanOrEqual(
+        (baseline as DynamicPricingEntry[]).length,
+      );
+      expect(memKv.store.has(KEY_DYNAMIC)).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
+    it("forceRefetch=true hits upstream and refreshes per-source caches", async () => {
+      const fetchSpy = vi.fn(async (url: string | URL | Request) => {
+        const u =
+          typeof url === "string"
+            ? url
+            : url instanceof URL
+              ? url.toString()
+              : url.url;
+        const body = u === OPENROUTER_URL ? OPENROUTER_OK : MODELS_DEV_OK;
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const memKv = memoryKv();
+      const req: RebuildDynamicPricingRequest = {
+        method: "pricing.rebuildDynamicPricing",
+        forceRefetch: true,
+      };
+      const res = await handlePricingRpc(req, emptyDb(), memKv);
+      const body = (await res.json()) as { result: SyncOutcome };
+
+      expect(res.status).toBe(200);
+      expect(body.result.ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(memKv.store.has(KEY_LAST_FETCH_OPENROUTER)).toBe(true);
+      expect(memKv.store.has(KEY_LAST_FETCH_MODELS_DEV)).toBe(true);
+      expect(memKv.store.has(KEY_DYNAMIC)).toBe(true);
+
+      vi.unstubAllGlobals();
+    });
+
+    it("forceRefetch=true with one upstream failure → ok=false propagates partial failure", async () => {
+      const fetchSpy = vi.fn(async (url: string | URL | Request) => {
+        const u =
+          typeof url === "string"
+            ? url
+            : url instanceof URL
+              ? url.toString()
+              : url.url;
+        if (u === OPENROUTER_URL) {
+          return new Response("boom", { status: 500 });
+        }
+        return new Response(JSON.stringify(MODELS_DEV_OK), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const memKv = memoryKv();
+      const req: RebuildDynamicPricingRequest = {
+        method: "pricing.rebuildDynamicPricing",
+        forceRefetch: true,
+      };
+      const res = await handlePricingRpc(req, emptyDb(), memKv);
+      const body = (await res.json()) as { result: SyncOutcome };
+
+      expect(body.result.ok).toBe(false);
+      expect(body.result.errors.some((e) => e.source === "openrouter")).toBe(
+        true,
+      );
+      // models.dev still parsed → entries written includes it + baseline
+      expect(body.result.entriesWritten).toBeGreaterThanOrEqual(
+        (baseline as DynamicPricingEntry[]).length,
+      );
+
+      vi.unstubAllGlobals();
     });
   });
 

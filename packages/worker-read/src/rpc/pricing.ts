@@ -8,6 +8,7 @@ import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
 import { withCache, TTL_24H } from "../cache";
 import baseline from "../data/model-prices.json";
 import { readDynamic, readMeta } from "../sync/kv-store";
+import { syncDynamicPricing, type SyncOutcome } from "../sync/orchestrator";
 import type { DynamicPricingEntry, DynamicPricingMeta } from "../sync/types";
 
 // ---------------------------------------------------------------------------
@@ -59,12 +60,18 @@ export interface GetDynamicPricingMetaRequest {
   method: "pricing.getDynamicPricingMeta";
 }
 
+export interface RebuildDynamicPricingRequest {
+  method: "pricing.rebuildDynamicPricing";
+  forceRefetch?: boolean;
+}
+
 export type PricingRpcRequest =
   | ListModelPricingRequest
   | GetModelPricingByIdRequest
   | GetModelPricingByModelSourceRequest
   | GetDynamicPricingRequest
-  | GetDynamicPricingMetaRequest;
+  | GetDynamicPricingMetaRequest
+  | RebuildDynamicPricingRequest;
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -163,6 +170,19 @@ async function handleGetDynamicPricingMeta(kv: KVNamespace): Promise<Response> {
   return Response.json({ result: synthesized });
 }
 
+async function handleRebuildDynamicPricing(
+  req: RebuildDynamicPricingRequest,
+  db: D1Database,
+  kv: KVNamespace
+): Promise<Response> {
+  const outcome: SyncOutcome = await syncDynamicPricing(
+    { db, kv },
+    new Date().toISOString(),
+    { forceRefetch: req.forceRefetch === true }
+  );
+  return Response.json({ result: outcome });
+}
+
 export async function handlePricingRpc(
   request: PricingRpcRequest,
   db: D1Database,
@@ -179,6 +199,8 @@ export async function handlePricingRpc(
       return handleGetDynamicPricing(kv);
     case "pricing.getDynamicPricingMeta":
       return handleGetDynamicPricingMeta(kv);
+    case "pricing.rebuildDynamicPricing":
+      return handleRebuildDynamicPricing(request, db, kv);
     default:
       return Response.json(
         { error: `Unknown pricing method: ${(request as { method: string }).method}` },

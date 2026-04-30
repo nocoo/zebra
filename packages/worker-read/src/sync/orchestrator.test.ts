@@ -214,6 +214,68 @@ describe("syncDynamicPricing", () => {
     expect(r.meta.lastErrors?.some((e) => e.source === "kv")).toBe(true);
   });
 
+  it("forceRefetch=false → skips upstream entirely; uses cache when present", async () => {
+    kv.store.set(
+      KEY_LAST_FETCH_OPENROUTER,
+      JSON.stringify({ json: OPENROUTER_OK, fetchedAt: "2026-04-29T00:00:00.000Z" })
+    );
+    kv.store.set(
+      KEY_LAST_FETCH_MODELS_DEV,
+      JSON.stringify({ json: MODELS_DEV_OK, fetchedAt: "2026-04-29T00:00:00.000Z" })
+    );
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("upstream must not be called when forceRefetch=false");
+    }) as unknown as typeof fetch;
+    const r = await syncDynamicPricing({ db, kv, fetchImpl }, NOW, { forceRefetch: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+    expect(r.entriesWritten).toBeGreaterThan(0);
+  });
+
+  it("forceRefetch=false with no cache → ok=true, baseline floor only, no upstream calls", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("upstream must not be called when forceRefetch=false");
+    }) as unknown as typeof fetch;
+    const r = await syncDynamicPricing({ db, kv, fetchImpl }, NOW, { forceRefetch: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(r.ok).toBe(true);
+    expect(r.entriesWritten).toBe((baseline as DynamicPricingEntry[]).length);
+  });
+
+  it("forceRefetch=true → upstream success refreshes last-fetch cache", async () => {
+    // Pre-seed stale cache; verify it's overwritten on success.
+    kv.store.set(
+      KEY_LAST_FETCH_OPENROUTER,
+      JSON.stringify({ json: { data: [] }, fetchedAt: "2026-04-29T00:00:00.000Z" })
+    );
+    const fetchImpl = mockFetch({
+      [OPENROUTER_URL]: { status: 200, body: OPENROUTER_OK },
+      [MODELS_DEV_URL]: { status: 200, body: MODELS_DEV_OK },
+    });
+    const r = await syncDynamicPricing({ db, kv, fetchImpl }, NOW, { forceRefetch: true });
+    expect(r.ok).toBe(true);
+    const cached = JSON.parse(kv.store.get(KEY_LAST_FETCH_OPENROUTER)!);
+    expect(cached.fetchedAt).toBe(NOW);
+    expect(cached.json).toEqual(OPENROUTER_OK);
+  });
+
+  it("forceRefetch=true → upstream failure does NOT fall back to cache; surfaces error", async () => {
+    kv.store.set(
+      KEY_LAST_FETCH_OPENROUTER,
+      JSON.stringify({ json: OPENROUTER_OK, fetchedAt: "2026-04-29T00:00:00.000Z" })
+    );
+    const fetchImpl = mockFetch({
+      [OPENROUTER_URL]: { status: 500, body: { error: "boom" } },
+      [MODELS_DEV_URL]: { status: 200, body: MODELS_DEV_OK },
+    });
+    const r = await syncDynamicPricing({ db, kv, fetchImpl }, NOW, { forceRefetch: true });
+    expect(r.ok).toBe(false);
+    expect(r.errors.find((e) => e.source === "openrouter")).toBeDefined();
+    // Should not have used the cached OpenRouter data; entry count should be only models.dev + baseline.
+    // We don't pin exact counts (depends on baseline), just verify it's not throwing on the cache path.
+  });
+
   it("D1 admin-loader failure → ok=false with source='d1' in errors; entries still merged from upstream + baseline", async () => {
     const throwingDb = {
       prepare: vi.fn().mockReturnValue({

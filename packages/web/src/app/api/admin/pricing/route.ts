@@ -9,7 +9,32 @@
 
 import { NextResponse } from "next/server";
 import { resolveAdmin } from "@/lib/admin";
-import { getDbRead, getDbWrite } from "@/lib/db";
+import { getDbRead, getDbWrite, type DbRead } from "@/lib/db";
+
+// ---------------------------------------------------------------------------
+// Side effects after successful write — invalidate `pricing:all` and rebuild
+// the dynamic pricing dataset so admins don't see stale data until the next
+// cron tick. Best-effort: failures must not flip a successful write into 5xx.
+// ---------------------------------------------------------------------------
+
+async function runWriteSideEffects(dbRead: DbRead): Promise<void> {
+  const results = await Promise.allSettled([
+    dbRead.invalidateCacheKey("pricing:all"),
+    dbRead.rebuildDynamicPricing(),
+  ]);
+  if (results[0].status === "rejected") {
+    console.error(
+      "admin pricing side-effect failed: pricing:all invalidate",
+      results[0].reason,
+    );
+  }
+  if (results[1].status === "rejected") {
+    console.error(
+      "admin pricing side-effect failed: rebuildDynamicPricing",
+      results[1].reason,
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // GET — list all DB pricing rows
@@ -98,6 +123,8 @@ export async function POST(request: Request) {
     );
 
     const row = await dbRead.getModelPricingByModelSource(model.trim(), source ?? null);
+
+    await runWriteSideEffects(dbRead);
 
     return NextResponse.json(row, { status: 201 });
   } catch (err) {
@@ -209,6 +236,8 @@ export async function PUT(request: Request) {
 
     const row = await dbRead.getModelPricingById(id);
 
+    await runWriteSideEffects(dbRead);
+
     return NextResponse.json(row);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
@@ -261,6 +290,9 @@ export async function DELETE(request: Request) {
     if (meta.changes === 0) {
       return NextResponse.json({ error: "Entry not found" }, { status: 404 });
     }
+
+    const dbRead = await getDbRead();
+    await runWriteSideEffects(dbRead);
 
     return NextResponse.json({ deleted: true });
   } catch (err) {

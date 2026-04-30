@@ -414,6 +414,27 @@ export interface DynamicPricingMetaDto {
 }
 
 // ---------------------------------------------------------------------------
+// Sync outcome (mirror of worker-read SyncOutcome).
+// Returned from pricing.rebuildDynamicPricing — used by admin invalidation
+// and the "Force sync now" button.
+// ---------------------------------------------------------------------------
+
+export type SyncErrorSourceDto = "openrouter" | "models.dev" | "d1" | "kv";
+
+export interface SyncErrorDto {
+  source: SyncErrorSourceDto;
+  message: string;
+}
+
+export interface SyncOutcomeDto {
+  ok: boolean;
+  entriesWritten: number;
+  meta: DynamicPricingMetaDto;
+  warnings: string[];
+  errors: SyncErrorDto[];
+}
+
+// ---------------------------------------------------------------------------
 // Admin domain types
 // ---------------------------------------------------------------------------
 

@@ -38,6 +38,7 @@ import type {
   SessionRecordRow,
   PricingRow,
   DynamicPricingMetaDto,
+  SyncOutcomeDto,
   AdminStorageUserRow,
   UsageRecordRow,
   UsageDeviceSummaryRow,
@@ -471,6 +472,14 @@ export interface DbRead {
 
   /** Get dynamic pricing meta (last sync stats + per-source errors) */
   getDynamicPricingMeta(): Promise<DynamicPricingMetaDto>;
+
+  /**
+   * Trigger a worker-side rebuild of the dynamic pricing dataset.
+   * Admin-gated at the web layer (matches `cache.invalidate` posture).
+   * `forceRefetch: true` always hits upstream; otherwise (default / false)
+   * the worker merges D1 + last-fetch cache + baseline without upstream calls.
+   */
+  rebuildDynamicPricing(options?: { forceRefetch?: boolean }): Promise<SyncOutcomeDto>;
 
   // ---------------------------------------------------------------------------
   // Usage domain RPC methods

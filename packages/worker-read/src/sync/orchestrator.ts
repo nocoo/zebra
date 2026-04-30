@@ -67,12 +67,30 @@ interface FetchResolution {
   error: string | null;
 }
 
+export interface SyncOptions {
+  /**
+   * Controls upstream-fetch policy:
+   *   - undefined (cron default): fetch upstream, fall back to last-fetch cache on failure.
+   *   - false (admin CRUD invalidation): skip upstream fetch entirely; merge from last-fetch cache + baseline + admin D1. Cheap; admin row is the source of truth being mutated.
+   *   - true ("Force sync now"): always fetch upstream; do NOT fall back to cache on failure (operator wants fresh).
+   */
+  forceRefetch?: boolean;
+}
+
 async function resolveSource(
   source: LastFetchSource,
   url: string,
   now: string,
-  deps: SyncDeps
+  deps: SyncDeps,
+  forceRefetch: boolean | undefined
 ): Promise<FetchResolution> {
+  // Admin-CRUD path: do not hit upstream. Use cached JSON if any.
+  if (forceRefetch === false) {
+    const cached = await readLastFetch(deps.kv, source);
+    if (cached) return { json: cached.json, fromCache: true, error: null };
+    return { json: null, fromCache: false, error: null };
+  }
+
   const fetchFn = deps.fetchImpl ?? fetch;
   try {
     const res = await fetchFn(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
@@ -82,6 +100,10 @@ async function resolveSource(
     return { json, fromCache: false, error: null };
   } catch (err) {
     const message = (err as Error).message ?? String(err);
+    // forceRefetch=true → operator wants fresh; do not silently substitute stale cache.
+    if (forceRefetch === true) {
+      return { json: null, fromCache: false, error: message };
+    }
     const cached = await readLastFetch(deps.kv, source);
     if (cached) {
       return { json: cached.json, fromCache: true, error: message };
@@ -92,13 +114,15 @@ async function resolveSource(
 
 export async function syncDynamicPricing(
   deps: SyncDeps,
-  now: string
+  now: string,
+  options?: SyncOptions
 ): Promise<SyncOutcome> {
+  const forceRefetch = options?.forceRefetch;
   const errors: SyncError[] = [];
 
   const [orRes, mdRes] = await Promise.all([
-    resolveSource("openrouter", OPENROUTER_URL, now, deps),
-    resolveSource("models.dev", MODELS_DEV_URL, now, deps),
+    resolveSource("openrouter", OPENROUTER_URL, now, deps, forceRefetch),
+    resolveSource("models.dev", MODELS_DEV_URL, now, deps, forceRefetch),
   ]);
 
   if (orRes.error) errors.push({ source: "openrouter", message: orRes.error });

@@ -104,6 +104,22 @@ export function createMockDbRead() {
     getModelPricingByModelSource: vi.fn(),
     getDynamicPricing: vi.fn(),
     getDynamicPricingMeta: vi.fn(),
+    invalidateCacheKey: vi.fn().mockResolvedValue(undefined),
+    rebuildDynamicPricing: vi.fn().mockResolvedValue({
+      ok: true,
+      entriesWritten: 0,
+      warnings: [],
+      errors: [],
+      meta: {
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        modelCount: 0,
+        baselineCount: 0,
+        openRouterCount: 0,
+        modelsDevCount: 0,
+        adminOverrideCount: 0,
+        lastErrors: null,
+      },
+    }),
     // Admin RPC methods
     getAdminStorageStats: vi.fn(),
     // Sessions RPC methods
@@ -229,6 +245,8 @@ export function createMockDbRead() {
     getModelPricingByModelSource: ReturnType<typeof vi.fn>;
     getDynamicPricing: ReturnType<typeof vi.fn>;
     getDynamicPricingMeta: ReturnType<typeof vi.fn>;
+    rebuildDynamicPricing: ReturnType<typeof vi.fn>;
+    invalidateCacheKey: ReturnType<typeof vi.fn>;
     getAdminStorageStats: ReturnType<typeof vi.fn>;
     getSessionRecords: ReturnType<typeof vi.fn>;
     getUsageRecords: ReturnType<typeof vi.fn>;
