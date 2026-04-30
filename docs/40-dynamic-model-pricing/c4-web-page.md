@@ -44,8 +44,8 @@ export async function GET(request: Request): Promise<Response>;
 Behavior:
 
 1. **Auth gate** (existing pattern from `app/api/organizations/mine/route.ts`):
-   - `const auth = await resolveUser(request)`; null → 401.
-   - `const admin = await isAdminUser(auth.userId)`; false → 403.
+   - `const authResult = await resolveUser(request)`; null → 401.
+   - `const admin = await isAdminUser(authResult)`; false → 403.
 2. **Fetch**:
    - `entries = await db.getDynamicPricing()` (returns `{ entries, servedFrom }`)
    - `meta = await db.getDynamicPricingMeta()`
@@ -76,8 +76,8 @@ Client component, mirroring the existing `(dashboard)/admin/pricing/page.tsx` pa
 import { useAdmin } from "@/hooks/use-admin";
 
 export default function ModelPricesPage() {
-  const { isAdmin, isLoading } = useAdmin();
-  if (isLoading) return <PricingSkeleton />;
+  const { isAdmin, loading: adminLoading } = useAdmin();
+  if (adminLoading) return <PricingSkeleton />;
   if (!isAdmin) return <ForbiddenView />;
 
   // useSWR or useEffect+fetch on /api/admin/pricing/models
@@ -160,11 +160,12 @@ The React components themselves are thin wrappers around these helpers and valid
 
 ## Conventions followed
 
-- Page lives under `(dashboard)` route group and inherits the dashboard layout.
-- Server / client component split mirrors existing pages like `(dashboard)/sessions/page.tsx`.
+- Page lives under `(dashboard)/admin/` route group, mirroring existing admin pages such as `(dashboard)/admin/pricing/page.tsx`.
+- Client component + `useAdmin()` hook + `ForbiddenView` matches the pattern used by every other admin page.
+- API route under `app/api/admin/` follows existing admin endpoint layout (e.g. `app/api/admin/check`).
 - RPC method names in `db-worker.ts` match the worker-side names exactly (`getDynamicPricing`, `getDynamicPricingMeta`).
-- Tests use vitest + `@testing-library/react` per repo norm.
-- Type re-export pattern (`lib/dynamic-pricing-types.ts`) follows the existing `lib/rpc-types.ts` precedent.
+- Tests use `vitest`. Pure helpers cover sort/filter/format; React components are validated manually until `@testing-library/react` is added by a separate commit.
+- DTO types live web-side in `lib/db-worker.ts` (or a sibling DTO file); a `route.test.ts` contract test pins the shape against a representative payload.
 
 ## What this commit does NOT do
 
