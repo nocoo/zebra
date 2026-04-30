@@ -1,0 +1,44 @@
+import { describe, it, expect } from "vitest";
+import sample from "./__fixtures__/models-dev.sample.json";
+import { parseModelsDev } from "./models-dev";
+
+const NOW = "2026-04-30T00:00:00.000Z";
+
+describe("parseModelsDev", () => {
+  it("normalizes valid entries", () => {
+    const { entries } = parseModelsDev(sample, NOW);
+    const sonnet = entries.find((e) => e.model === "anthropic/claude-sonnet-4");
+    expect(sonnet).toBeDefined();
+    expect(sonnet!.provider).toBe("Anthropic");
+    expect(sonnet!.displayName).toBe("Claude Sonnet 4");
+    expect(sonnet!.inputPerMillion).toBe(3);
+    expect(sonnet!.outputPerMillion).toBe(15);
+    expect(sonnet!.cachedPerMillion).toBe(0.3);
+    expect(sonnet!.contextWindow).toBe(200000);
+    expect(sonnet!.origin).toBe("models.dev");
+    expect(sonnet!.updatedAt).toBe(NOW);
+  });
+
+  it("treats missing cache_read as null", () => {
+    const { entries } = parseModelsDev(sample, NOW);
+    const opus = entries.find((e) => e.model === "anthropic/claude-opus-4");
+    expect(opus!.cachedPerMillion).toBe(null);
+  });
+
+  it("skips entries with missing input cost (warning)", () => {
+    const { entries, warnings } = parseModelsDev(sample, NOW);
+    expect(entries.find((e) => e.model === "openai/gpt-broken")).toBeUndefined();
+    expect(warnings.some((w) => w.includes("gpt-broken"))).toBe(true);
+  });
+
+  it("skips unknown providers", () => {
+    const { entries, warnings } = parseModelsDev(sample, NOW);
+    expect(entries.find((e) => e.model.startsWith("unknown-vendor/"))).toBeUndefined();
+    expect(warnings.some((w) => w.includes("unknown-vendor"))).toBe(true);
+  });
+
+  it("handles malformed input", () => {
+    expect(parseModelsDev(null, NOW).entries).toEqual([]);
+    expect(parseModelsDev([], NOW).entries).toEqual([]);
+  });
+});
