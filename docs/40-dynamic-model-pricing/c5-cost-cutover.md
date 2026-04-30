@@ -19,7 +19,9 @@ packages/web/src/lib/load-pricing-map.ts            # NEW — server helper: fet
 packages/web/src/lib/load-pricing-map.test.ts       # NEW — partial-degradation matrix
 packages/web/src/app/api/pricing/route.ts           # use loadPricingMap(db)
 packages/web/src/app/api/usage/by-device/route.ts   # use loadPricingMap(db) (was buildPricingMap(rows) directly)
-packages/web/src/lib/db-worker.ts                   # (already added in C4) type-only import of DynamicPricingEntry from lib/pricing.ts
+packages/web/src/lib/db.ts                          # add getDynamicPricing/getDynamicPricingMeta to DbRead interface
+packages/web/src/lib/db-worker.ts                   # (impl from C4) type-only import of DynamicPricingEntry from lib/pricing.ts
+packages/web/src/__tests__/test-utils.ts            # extend DbRead mock factory with the two new methods
 packages/web/src/__tests__/pricing.test.ts          # update assertions for new buildPricingMap signature
 packages/web/src/lib/pricing-cutover.test.ts        # NEW — proves identical PricingMap for the 14 legacy models
 packages/web/src/app/api/pricing/route.test.ts      # update mocks to use loadPricingMap path
@@ -67,6 +69,17 @@ export interface DynamicPricingEntry {
 ```typescript
 import type { DynamicPricingEntry } from "./pricing";
 ```
+
+`lib/db.ts` `DbRead` interface gains the two C4 methods so callers can type their `db` parameter against the interface (not the concrete worker impl):
+```typescript
+interface DbRead {
+  // ... existing methods
+  getDynamicPricing(): Promise<{ entries: DynamicPricingEntry[]; servedFrom: 'kv' | 'baseline' }>;
+  getDynamicPricingMeta(): Promise<DynamicPricingMeta>;
+}
+```
+
+Test-utils mock factory for `DbRead` is extended with default stubs for both — otherwise any test that builds a fake `DbRead` through the factory would fail typecheck post-C5.
 
 This keeps `lib/pricing.ts` free of server imports — `useSWR(... /api/pricing)` consumers and `use-pricing.ts` (which imports `getDefaultPricingMap`) stay in the client bundle without dragging `db-worker` along.
 
@@ -134,15 +147,19 @@ export function buildPricingMap({ dynamic, dbRows }: BuildPricingMapInput): Pric
 ### `lib/load-pricing-map.ts` — new server helper
 
 ```typescript
-import type { DbWorker } from "./db-worker";
+import type { DbRead } from "./db";
 import {
   buildPricingMap,
   getDefaultPricingMap,
   type PricingMap,
 } from "./pricing";
 
+// Narrowed to the two methods we need so test mocks don't have to satisfy the
+// full DbRead surface.
+type PricingMapDb = Pick<DbRead, "getDynamicPricing" | "listModelPricing">;
+
 /**
- * Server-only. Imports `db-worker` (RPC client). Do NOT import from client code.
+ * Server-only. Imports `db` (RPC client). Do NOT import from client code.
  *
  * Partial-degradation policy:
  *   - Both succeed   → buildPricingMap({ dynamic, dbRows })
@@ -153,7 +170,7 @@ import {
  * Each failure is logged with its source tag. The map ALWAYS returns; callers
  * never see exceptions from this helper.
  */
-export async function loadPricingMap(db: DbWorker): Promise<PricingMap> {
+export async function loadPricingMap(db: PricingMapDb): Promise<PricingMap> {
   const [dynamicSettled, dbSettled] = await Promise.allSettled([
     db.getDynamicPricing(),
     db.listModelPricing(),
@@ -281,7 +298,7 @@ The cross-package import for `baselineEntries` (`@pew-worker-read/...`) is the s
 
 ### `pricing.test.ts` updates
 
-- All callers of `buildPricingMap(rows)` switched to `buildPricingMap({ dynamic: [], dbRows: rows })`. Behavior is identical when `dynamic` is empty — the test exercises pure DB-overlay semantics.
+- All callers of `buildPricingMap(rows)` switched to `buildPricingMap({ dynamic: [], dbRows: rows })`. DB overlay semantics are preserved; **exact legacy equivalence for the 14 baked-in models is covered by `pricing-cutover.test.ts` with baseline dynamic entries** (not by these tests, since `dynamic=[]` no longer materializes the legacy exact-match table).
 - One new case: `buildPricingMap({ dynamic, dbRows })` with both populated, verifying admin wins over dynamic for the same model.
 - Snapshot for `getDefaultPricingMap()` updates: `models` is now `{}` (was 14 entries). This is expected and documented in the commit message.
 
