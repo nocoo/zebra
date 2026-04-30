@@ -63,17 +63,17 @@ Reference implementation: **manifest** project fetches from OpenRouter API + mod
                  ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Next.js API:                                           │
-│  • GET /api/pricing         → PricingMap (compat path)  │
-│  • GET /api/pricing/models  → DynamicPricingEntry[] +   │
-│                                meta (for table page)    │
+│  • GET /api/pricing               → PricingMap (compat) │
+│  • GET /api/admin/pricing/models  → DynamicPricingEntry[] +
+│                                      meta (admin-only)  │
 └────────────────┬────────────────────────────────────────┘
                  │
         ┌────────┴────────┐
         ▼                 ▼
 ┌──────────────┐  ┌──────────────────────────┐
-│  Dashboard   │  │  Cost calculation        │
-│  /pricing    │  │  (all charts, summaries) │
-│  page (new)  │  │  via unified lookupPrice │
+│  Admin page         │  │  Cost calculation        │
+│  /admin/model-prices│  │  (all charts, summaries) │
+│  (new in C4)        │  │  via unified lookupPrice │
 └──────────────┘  └──────────────────────────┘
 ```
 
@@ -122,7 +122,7 @@ interface DynamicPricingMeta {
   openRouterCount: number;
   modelsDevCount: number;
   adminOverrideCount: number;
-  /** Per-source errors from the last sync run; UI surfaces them on the /pricing page.
+  /** Per-source errors from the last sync run; UI surfaces them on the /admin/model-prices page.
    *  Multi-entry because openrouter/models.dev/d1 can fail independently in one cron tick. */
   lastErrors?: Array<{ source: 'openrouter' | 'models.dev' | 'd1' | 'kv'; at: string; message: string }> | null;
 }
@@ -146,7 +146,7 @@ These resolve ambiguities raised in review.
 - `pricing:all` — existing; admin CRUD list of D1 rows. **Kept**.
 - `pricing:dynamic` — new; merged dynamic dataset. **New**.
 - `pricing:dynamic:meta` — new; sync stats.
-- These are independent. `/api/admin/pricing` reads `pricing:all`; `/api/pricing` and `/api/pricing/models` read `pricing:dynamic`.
+- These are independent. `/api/admin/pricing` reads `pricing:all` (admin CRUD list, unchanged). `/api/admin/pricing/models` (added in C4) reads `pricing:dynamic`. `/api/pricing` keeps the static merge until C5 cuts it over to read `pricing:dynamic`.
 
 ### N3. Admin override semantics
 
@@ -275,13 +275,13 @@ crons = ["0 3 * * *"]
 
 **Existing `pricing.listModelPricing` / `pricing:all`:** unchanged. Continues to back the admin CRUD list.
 
-### Phase 3: Web API + Dashboard Page
+### Phase 3: Web API + Admin Page (C4)
 
 **Next.js API:**
-- `GET /api/pricing` — **unchanged response shape** (`PricingMap`); internally now sourced from `pricing.getDynamicPricing` instead of `pricing.listModelPricing` + static merge.
-- `GET /api/pricing/models` — new; returns `{ entries: DynamicPricingEntry[]; meta: DynamicPricingMeta }` for the table page.
+- `GET /api/pricing` — **unchanged in C4**; still uses static `lib/pricing.ts` path. Cuts over to `pricing.getDynamicPricing` only in C5.
+- `GET /api/admin/pricing/models` — new in C4; admin-gated; returns `{ entries: DynamicPricingEntry[]; meta: DynamicPricingMeta; servedFrom: 'kv' | 'baseline' }`. `Cache-Control: private, no-store`.
 
-**Page route:** `/pricing` (under dashboard layout)
+**Page route:** `/admin/model-prices` (under `(dashboard)/admin/` route group, separate from existing `/admin/pricing` Token Pricing CRUD).
 
 **Features:**
 | Feature | Description |
@@ -291,15 +291,18 @@ crons = ["0 3 * * *"]
 | Search by model name | Text input, instant filter |
 | Price formatting | Adaptive precision: <$0.01→4dp, <$1→3dp, else→2dp |
 | Origin badge | Color-coded: baseline (gray), models.dev (green), OpenRouter (blue), admin (purple) |
-| Last synced | Timestamp in page header (from meta.lastSyncedAt); warn banner if >48h |
+| Last synced | Timestamp in page header (from meta.lastSyncedAt); warn banner if >36h |
+| Per-source error rows | Renders `meta.lastErrors[]` one row per source |
+| Servedfrom badge | Orange "showing bundled baseline" notice when `servedFrom === 'baseline'` |
 | Model count | "Showing X of Y models" |
 | Pagination | Client-side, 25 per page |
 | Empty/loading states | Skeleton rows while loading |
 
-**Components:**
-- `packages/web/src/app/(dashboard)/pricing/page.tsx`
-- `packages/web/src/components/pricing/pricing-table.tsx`
-- `packages/web/src/components/pricing/pricing-filters.tsx`
+**Components** (see `c4-web-page.md` for full layout):
+- `packages/web/src/app/(dashboard)/admin/model-prices/page.tsx`
+- `packages/web/src/app/(dashboard)/admin/model-prices/pricing-table.tsx`
+- `packages/web/src/app/(dashboard)/admin/model-prices/pricing-meta-banner.tsx`
+- `packages/web/src/app/(dashboard)/admin/model-prices/pricing-table-helpers.ts` (pure, unit-tested)
 
 ### Phase 4: Unified Cost Calculation (the cutover)
 
@@ -327,7 +330,7 @@ The existing admin UI (`/admin/pricing`) continues to work; this phase wires it 
 1. **C0 (this commit):** Doc revisions; no code change.
 2. **C1–C2:** Add sync core + bundled baseline JSON. Nothing reads them yet.
 3. **C3:** worker-read writes KV via cron; new RPC available but unused.
-4. **C4:** New `/pricing` page + `/api/pricing/models`. Old `/api/pricing` still uses static path. **Additive only.**
+4. **C4:** New `/admin/model-prices` page + `/api/admin/pricing/models`. Old `/api/pricing` still uses static path. **Additive only.**
 5. **C5 (cutover):** `lib/pricing.ts` switches to dynamic source. Existing tests green; behavior identical for 14 known models, expanded coverage for the rest.
 6. **C6:** Admin invalidation hookup. Optional UI polish.
 
@@ -357,7 +360,7 @@ Fallback chain at every step: KV fresh → KV stale → bundled `model-prices.js
 - **L2 Integration:** `scheduled()` end-to-end against test KV + mocked external APIs (KV write → RPC read round-trip)
 - **L2 Integration:** Cold start with empty KV returns bundled baseline
 - **L2 Integration:** Admin write invalidates and rebuilds dynamic KV (C6)
-- **L3 E2E:** `/pricing` page renders, filters/sort/pagination work
+- **L3 E2E:** `/admin/model-prices` page renders, filters/sort/pagination work
 
 ## Out of Scope
 
@@ -375,7 +378,7 @@ Fallback chain at every step: KV fresh → KV stale → bundled `model-prices.js
 | C1 | Sync pure functions + L1 tests | `packages/worker-read/src/sync/{openrouter,models-dev,merge}.ts`, fixtures, tests | No |
 | C2 | Root sync script + checked-in baseline | `scripts/sync-prices.ts`, `packages/worker-read/src/data/model-prices.json`, root `package.json` script, baseline schema/regression tests | No |
 | C3 | Worker `scheduled` + RPC + KV writes | `packages/worker-read/{wrangler.toml, src/index.ts, src/rpc/pricing.ts}`, tests | New surface only — no read switchover |
-| C4 | New `/api/pricing/models` + `/pricing` page | `packages/web/src/app/api/pricing/models/route.ts`, `(dashboard)/pricing/page.tsx`, components, tests | Additive |
+| C4 | New `/api/admin/pricing/models` + `/admin/model-prices` page | `packages/web/src/app/api/admin/pricing/models/route.ts`, `(dashboard)/admin/model-prices/page.tsx`, helpers, tests | Additive |
 | C5 | **Cutover**: `lib/pricing.ts` consumes dynamic data | `packages/web/src/lib/pricing.ts`, `packages/web/src/app/api/pricing/route.ts`, regression tests | **Yes** — single behavioral switch |
 | C6 | Admin invalidation + UI polish | `packages/web/src/app/api/admin/pricing/*`, admin UI, optional "force sync now" button | Yes — admin path only |
 
