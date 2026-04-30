@@ -6,7 +6,7 @@ Last commit. Wires the existing admin pricing CRUD (`/api/admin/pricing`) to the
 
 Concretely:
 
-- Worker-read gains a single new RPC method `pricing.rebuildDynamicPricing` (admin-gated, write-capable).
+- Worker-read gains a single new RPC method `pricing.rebuildDynamicPricing` (service-auth, write-capable; admin-gated by the web routes that call it).
 - Web admin `POST` / `PUT` / `DELETE` on `/api/admin/pricing` invalidate `pricing:all` (existing) AND call the new RPC.
 - C4's `/admin/model-prices` page gets a "Force sync now" button that triggers the same RPC via a new admin-only proxy route.
 - No changes to `lib/pricing.ts`, `lib/load-pricing-map.ts`, cost calculation, charts, or schema.
