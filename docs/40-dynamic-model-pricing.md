@@ -162,7 +162,7 @@ In both cases:
 ### N4. Admin cache invalidation
 The current `/api/admin/pricing` POST/PUT/DELETE writes D1 but does **not** invalidate `pricing:all`. With dynamic pricing in play this is a gap — admin overrides could be stale up to 24h.
 - C6 adds: after every admin write, invalidate `pricing:all`, then call the same merge function used by `scheduled()` to rebuild `pricing:dynamic` + `pricing:dynamic:meta` synchronously (admin endpoints are low-traffic; the rebuild does no external fetch — it reads D1 + bundled baseline + the latest cached external fetch results, which are stored alongside meta).
-- To support this, `scheduled()` also stores the most recent raw external fetch results in KV (`pricing:dynamic:openrouter-raw` / `:models-dev-raw`) so admin rebuilds don't need network IO.
+- To support this, `scheduled()` also stores the most recent raw external fetch results in KV (`pricing:last-fetch:openrouter` / `pricing:last-fetch:models-dev`, each as `{ json, fetchedAt }`) so admin rebuilds don't need network IO.
 
 ### N5. Reasoning-token pricing (out of scope, explicitly)
 - pew records `reasoning_output_tokens` but `estimateCost()` currently bills it via the `output` price.
@@ -264,10 +264,12 @@ crons = ["0 3 * * *"]
 **`packages/worker-read/src/index.ts`** additions:
 - Export `scheduled(event, env, ctx)`. It calls a single `runPricingSync(env)` function that performs fetch → merge → KV write (`pricing:dynamic`, `pricing:dynamic:meta`, raw caches).
 
-**RPC endpoints (new):**
+**RPC endpoints (added in C3):**
 - `pricing.getDynamicPricing` — read `pricing:dynamic` from KV; on miss return bundled baseline. Never fetches externally.
 - `pricing.getDynamicPricingMeta` — read `pricing:dynamic:meta`.
-- `pricing.rebuildDynamicPricing` — admin-only; runs `runPricingSync` synchronously (used by admin CRUD invalidation in C6, and by an optional admin "force sync now" button).
+
+**RPC endpoints (added in C6):**
+- `pricing.rebuildDynamicPricing` — admin-only; runs the same `syncDynamicPricing` orchestrator synchronously (used by admin CRUD invalidation in C6, and by an optional admin "force sync now" button). C3 deliberately does not register this method to keep the cron commit free of admin write surface.
 
 > No HTTP-triggered external fetch from `fetch()` request handlers — all external IO lives in `scheduled` and the admin-gated rebuild RPC.
 

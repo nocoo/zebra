@@ -192,8 +192,8 @@ For `[env.test]`, follow Wrangler's environment-scoped trigger syntax. **Validat
 
 ### `rpc/pricing.test.ts` additions
 
-- `pricing.getDynamicPricing` returns `{ entries: [...], source: 'kv' }` when KV populated.
-- `pricing.getDynamicPricing` returns `{ entries: <baseline>, source: 'baseline' }` on KV miss.
+- `pricing.getDynamicPricing` returns `{ entries: [...], servedFrom: 'kv' }` when KV populated.
+- `pricing.getDynamicPricing` returns `{ entries: <baseline>, servedFrom: 'baseline' }` on KV miss.
 - `pricing.getDynamicPricingMeta` returns synthesized cold-start meta on KV miss.
 - Existing `pricing.listModelPricing` test stays green (no behavior change).
 
@@ -229,5 +229,5 @@ For `[env.test]`, follow Wrangler's environment-scoped trigger syntax. **Validat
 - `bun run --filter @pew/worker-read typecheck` green.
 - `bun run lint` green.
 - `wrangler dev --local` boots; `curl -X POST /api/rpc -d '{"method":"pricing.getDynamicPricing"}'` returns the bundled baseline.
-- `wrangler dev --local --test-scheduled` then `curl /__scheduled?cron=0+3+*+*+*` writes KV; subsequent `getDynamicPricing` returns `source: 'kv'`.
+- `wrangler dev --local --test-scheduled` then `curl /__scheduled?cron=0+3+*+*+*` writes KV; subsequent `getDynamicPricing` returns `servedFrom: 'kv'`.
 - `bun test` whole-repo green; existing web/cli tests untouched.
