@@ -148,10 +148,15 @@ These resolve ambiguities raised in review.
 - These are independent. `/api/admin/pricing` reads `pricing:all`; `/api/pricing` and `/api/pricing/models` read `pricing:dynamic`.
 
 ### N3. Admin override semantics
-- An admin DB row in `model_pricing` is keyed by `(model, source)`; `source` may be `null`.
-- During merge, an admin row **fully replaces** the entry with the same `(model, source)` from baseline/OpenRouter/models.dev. No field-level overlay.
-- Deleting the admin row reverts that entry to whichever upstream source last provided it.
-- `DynamicPricingEntry.origin = 'admin'` is **never written back to D1**; it only marks runtime provenance.
+
+Admin DB rows in `model_pricing` are keyed by `(model, source)` where `source` may be `null`. This `source` is the **usage/tool** dimension (`codex`, `claude-code`, …), which dynamic upstream entries (OpenRouter / models.dev / baseline) do **not** carry. So admin overrides do not "replace a dynamic entry by `(model, source)`" — they overlay onto distinct slots in `PricingMap`:
+
+- **`source = null`**: admin row overrides `PricingMap.models[model]`. This shadows whatever the dynamic system wrote for that exact model ID (baseline / OpenRouter / models.dev).
+- **`source != null`**: admin row sets `PricingMap.sourceDefaults[source]`, **and** also writes `PricingMap.models[model]` — preserving current `buildPricingMap()` behavior. The `models[model]` write still shadows any dynamic exact-match entry for that model.
+
+In both cases:
+- `DynamicPricingEntry.origin = 'admin'` is recorded only on entries the admin layer added/replaced; it is never written back to D1.
+- Deleting the admin row reverts `models[model]` (and, if applicable, `sourceDefaults[source]`) to whatever the dynamic / static layer last provided. If nothing else covers it, lookup falls through to prefix → source default → fallback.
 
 ### N4. Admin cache invalidation
 The current `/api/admin/pricing` POST/PUT/DELETE writes D1 but does **not** invalidate `pricing:all`. With dynamic pricing in play this is a gap — admin overrides could be stale up to 24h.
