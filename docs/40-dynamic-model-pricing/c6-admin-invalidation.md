@@ -47,7 +47,7 @@ No changes to schema, baseline JSON, sync core, or cost path.
 ```typescript
 export interface RebuildDynamicPricingRequest {
   method: "pricing.rebuildDynamicPricing";
-  // No params — orchestrator reads admin rows + cached upstream JSON internally.
+  forceRefetch?: boolean;
 }
 
 export interface RebuildDynamicPricingResponse {
@@ -61,9 +61,9 @@ export interface RebuildDynamicPricingResponse {
 
 Behavior:
 
-1. **Admin gate**: reuse the same `isAdminUser`/auth helper that `pricing.listModelPricing` write paths use. Reject with the existing RPC-level 403 shape on failure. (The exact admin-gating helper lives in `worker-read/src/rpc/admin.ts`; C6 reuses it without modification.)
-2. **Invocation policy**: by default, the orchestrator **does not refetch upstream** — it merges admin D1 + last cached `openrouter` / `models.dev` JSON + bundled baseline. Pass `{ forceRefetch: true }` only when called by the "Force sync now" UI (see below).
-3. Calls `syncDynamicPricing(env, new Date().toISOString(), { forceRefetch })` — the same orchestrator C3 wired up, no duplication.
+1. **Auth posture**: worker-read RPC is **service-auth only** — `worker-read/src/index.ts` already gates `/api/rpc` on the `WORKER_READ_SECRET` bearer token, and `handlePricingRpc(request, db, kv)` does not see end-user identity. C6 does NOT add per-user admin gating inside the worker. The admin gate for this RPC lives **in the web layer** (`/api/admin/pricing/rebuild` and the existing `/api/admin/pricing` CRUD route), exactly the same posture as the existing `cache.invalidate` RPC.
+2. **Invocation policy**: by default the orchestrator does not refetch upstream — it merges admin D1 + last cached `openrouter` / `models.dev` JSON + bundled baseline. Pass `forceRefetch: true` only when called by the "Force sync now" UI.
+3. Calls `syncDynamicPricing(env, new Date().toISOString(), { forceRefetch: req.forceRefetch === true })` — the same orchestrator C3 wired up, no duplication.
 4. Returns the full `SyncOutcome` so the UI can surface partial-failure diagnostics inline.
 
 The `forceRefetch` parameter is passed to the orchestrator via the existing `options` argument C3 already defined. Concrete plumbing:
@@ -103,9 +103,11 @@ Behavior:
 1. `const admin = await resolveAdmin(request);` — null → 403 (matches sibling `route.ts`).
 2. `const dbRead = await getDbRead();`
 3. `const outcome = await dbRead.rebuildDynamicPricing({ forceRefetch: true });`
-4. Return `NextResponse.json(outcome, { status: outcome.ok ? 200 : 207, headers: { 'cache-control': 'private, no-store' } })`.
-   - `207 Multi-Status` for partial-success conveys "rebuild ran but some sources failed" without flagging the operator's click as a hard error.
-5. On RPC throw: 502 with `{ error, fallback: null }`. Log the failure.
+4. Status discipline (single rule, no edge-case branches):
+   - RPC resolves with `outcome.ok === true` → **200** + outcome JSON.
+   - RPC resolves with `outcome.ok === false` → **207 Multi-Status** + outcome JSON. Communicates "rebuild ran but at least one source failed" without flagging the operator's click as a hard error. The UI uses `outcome.errors[]` to render per-source chips.
+   - RPC throws / network failure → **502** + `{ error: <message>, fallback: null }`. Log the failure.
+5. `cache-control: private, no-store` header set.
 
 Method is `POST` (not `GET`) because it has side effects (KV writes, possible upstream fetches). No CSRF concern beyond the existing admin session cookie posture used by the rest of `/api/admin/*`.
 
@@ -132,9 +134,12 @@ The button is intentionally minimal: no scheduling UI, no per-source toggles. C6
 // db.ts — DbRead interface
 rebuildDynamicPricing(options?: { forceRefetch?: boolean }): Promise<SyncOutcome>;
 
-// db-worker.ts — RPC wrapper
+// db-worker.ts — RPC wrapper using the existing closure-style `rpc<T>` helper inside createWorkerDbRead()
 async rebuildDynamicPricing(options?: { forceRefetch?: boolean }): Promise<SyncOutcome> {
-  return this.call("pricing.rebuildDynamicPricing", options ?? {});
+  return rpc<SyncOutcome>({
+    method: "pricing.rebuildDynamicPricing",
+    ...(options?.forceRefetch !== undefined && { forceRefetch: options.forceRefetch }),
+  });
 }
 ```
 
@@ -148,11 +153,14 @@ async rebuildDynamicPricing(options?: { forceRefetch?: boolean }): Promise<SyncO
 
 ### `worker-read/src/rpc/pricing.test.ts` additions
 
-- `pricing.rebuildDynamicPricing` rejects non-admin caller with the existing 403 shape.
-- Admin call with `forceRefetch: false` skips upstream fetch (assert `fetch` not called) and writes KV from D1 + cached `last-fetch:*`.
-- Admin call with `forceRefetch: true` calls upstream (mocked) and refreshes per-source caches.
+Worker-read RPC is service-auth only (gated at `index.ts` on `WORKER_READ_SECRET`); tests do **not** simulate per-user admin and do **not** assert 403 from the handler. They verify behavior given a well-formed request:
+
+- `pricing.rebuildDynamicPricing` with no body → orchestrator called with `forceRefetch: false`; upstream `fetch` not called; KV written from D1 + cached `last-fetch:*`.
+- `pricing.rebuildDynamicPricing` with `forceRefetch: true` → orchestrator called with `forceRefetch: true`; upstream (mocked) called; per-source caches refreshed.
 - Returns full `SyncOutcome` shape; `ok: false` propagates partial failures.
 - Two concurrent rebuild calls don't corrupt KV (last-write-wins is fine because merge is deterministic for the same inputs — verified by asserting the second write equals the first).
+
+Bearer-token gating is already covered at the `index.ts` integration layer in existing tests; no new coverage needed there.
 
 ### `web/app/api/admin/pricing/route.test.ts` additions
 
@@ -167,10 +175,10 @@ For each of `POST`, `PUT`, `DELETE`:
 
 ### `web/app/api/admin/pricing/rebuild/route.test.ts` (new)
 
-- 403 when `resolveAdmin` returns null.
+- 403 when `resolveAdmin` returns null (admin gate lives here, not in worker-read).
 - Calls `dbRead.rebuildDynamicPricing({ forceRefetch: true })` exactly once.
 - Returns 200 + outcome JSON when `outcome.ok === true`.
-- Returns 207 + outcome JSON when `outcome.ok === false` and `outcome.entriesWritten > 0` (partial success).
+- Returns 207 + outcome JSON when `outcome.ok === false` (any partial-failure shape, regardless of `entriesWritten`).
 - Returns 502 when the RPC throws.
 - `cache-control: private, no-store` header set.
 
@@ -181,7 +189,7 @@ For each of `POST`, `PUT`, `DELETE`:
 
 ## Conventions followed
 
-- Admin RPC handler lives in the existing `pricing.ts` module alongside read methods (matches existing `pricing.listModelPricing` location for admin-write endpoints in this project; the `worker-read` name reflects historic split, not a hard read-only constraint — admin writes are already routed here, e.g. `cache.invalidate`).
+- New RPC handler lives in the existing `pricing.ts` module alongside read methods. Worker-read RPC is service-auth only — admin gating happens in the web layer (matches existing `cache.invalidate` posture).
 - Side-effect ordering uses `Promise.allSettled` and post-success placement, matching `app/api/admin/cache/route.ts`.
 - Force-sync UI is a single client component, no new state library; uses the same SWR cache key the page already owns.
 - New 207 status code is used only for the operator-facing rebuild endpoint; CRUD endpoints stay strictly 2xx/4xx/5xx.
