@@ -149,7 +149,14 @@ export interface MergeInput {
 }
 
 export interface MergeResult {
-  entries: DynamicPricingEntry[];      // final merged list, deterministic order
+  /** Final dynamic pricing list, deterministic order. Excludes admin source-specific overrides. */
+  entries: DynamicPricingEntry[];
+  /** Admin rows with source != null. Consumed by C5 to populate PricingMap.sourceDefaults. */
+  sourceOverrides: Array<{
+    source: string;
+    pricing: { input: number; output: number; cached: number | null };
+    model: string;            // the row.model that triggered this override (for traceability)
+  }>;
   meta: Omit<DynamicPricingMeta, 'lastSyncedAt' | 'lastError'> & { lastSyncedAt: string };
   warnings: string[];
 }
@@ -166,28 +173,13 @@ export function mergePricingSources(input: MergeInput): MergeResult;
    - Otherwise replace (origin becomes `'openrouter'`).
 3. Apply `modelsDev` on top with the same rules; replaces become `'models.dev'`.
 4. Apply `admin` rows:
-   - For `source = null`: overwrite the entry whose `model === row.model` (insert if absent). Origin → `'admin'`.
-   - For `source != null`: this row affects `sourceDefaults[source]` and `models[model]` in the consumer (`buildPricingMap`). At the merge layer, we still want it represented in `entries`, so we add/replace the entry whose `model === row.model` and **also emit a synthetic per-source admin record** (see "Output shape" below).
+   - For `source = null`: overwrite/insert the entry whose `model === row.model` in `entries`. Origin → `'admin'`.
+   - For `source != null`: append to `sourceOverrides` only. **Do NOT** create or modify any `entries` row — the source-specific overlay is applied later in C5's `buildPricingMap` against `PricingMap.sourceDefaults` (and `PricingMap.models[model]` per existing behavior). Keeping these out of `entries` prevents `pricing:dynamic` and the C4 `/pricing` table from showing per-source overrides as if they were canonical model prices.
 5. **Alias expansion (last step)**: for each canonical entry whose ID contains `/`, compute the bare-name suffix; record it on `entry.aliases` only when no other entry already claims that bare name.
 
 **Output shape:**
-- `entries` — merged canonical list, sorted by `[provider, model]` for deterministic diffs and stable JSON output (essential for git-checked baseline).
-- The synthetic per-source admin records are NOT placed in `entries`; instead `merge.ts` returns them on a side channel:
-
-```typescript
-export interface MergeResult {
-  entries: DynamicPricingEntry[];
-  sourceOverrides: Array<{
-    source: string;
-    pricing: { input: number; output: number; cached: number | null };
-    model: string;            // the model that triggered this override (for traceability)
-  }>;
-  meta: ...;
-  warnings: string[];
-}
-```
-
-C5 (`buildPricingMap`) will consume both `entries` and `sourceOverrides`, mapping the latter to `PricingMap.sourceDefaults`. The merge layer doesn't know about `PricingMap` — it just reports what admin rows asked for, in a structure the consumer can apply.
+- `entries` — final canonical list, sorted by `[provider, model]` for deterministic diffs and stable JSON output (essential for git-checked baseline). Excludes admin source-specific overrides.
+- `sourceOverrides` — admin rows with `source != null`. C5's `buildPricingMap` writes them into `PricingMap.sourceDefaults` and (per existing behavior) also into `PricingMap.models[model]`. The merge layer is intentionally ignorant of `PricingMap` — it just reports what admin rows asked for, in a structure the consumer can apply.
 
 **Counts in `meta`:**
 - `baselineCount` / `openRouterCount` / `modelsDevCount` — number of entries whose final `origin` matches that source after merge (i.e. how many survived).
@@ -230,7 +222,7 @@ Cases:
 3. **Zero-price protection** → baseline has $3/$15; openRouter has $0/$0 → baseline retained, no warning needed (silent skip).
 4. **modelsDev > openRouter** for overlapping IDs (modelsDev curated, higher priority).
 5. **Admin source=null** → overwrites entry with origin='admin'; `sourceDefaults` empty.
-6. **Admin source='codex'** → entry overwritten AND `sourceOverrides` contains `{source: 'codex', pricing, model}`.
+6. **Admin source='codex'** → `sourceOverrides` contains `{source: 'codex', pricing, model}`; `entries` is NOT modified by this row (canonical model price stays whatever the prior layer set).
 7. **Alias expansion**:
    - `anthropic/claude-sonnet-4` and no other `claude-sonnet-4` → `aliases: ['claude-sonnet-4']`.
    - `anthropic/claude-3.5-sonnet` AND `bedrock/claude-3.5-sonnet` → no alias (collision).
