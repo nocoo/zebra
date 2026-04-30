@@ -14,15 +14,27 @@ C5 is the only commit reviewers should expect cost-calculation diffs from. Every
 ## Files modified
 
 ```
-packages/web/src/lib/pricing.ts                     # remove DEFAULT_MODEL_PRICES; new buildPricingMap signature
-packages/web/src/app/api/pricing/route.ts           # fetch dynamic entries from worker-read; pass to buildPricingMap
-packages/web/src/lib/db-worker.ts                   # (already added in C4) used here, no further change
+packages/web/src/lib/pricing.ts                     # remove DEFAULT_MODEL_PRICES; new buildPricingMap signature; client-safe DynamicPricingEntry type
+packages/web/src/lib/load-pricing-map.ts            # NEW — server helper: fetch dynamic + dbRows with partial degradation, build PricingMap
+packages/web/src/lib/load-pricing-map.test.ts       # NEW — partial-degradation matrix
+packages/web/src/app/api/pricing/route.ts           # use loadPricingMap(db)
+packages/web/src/app/api/usage/by-device/route.ts   # use loadPricingMap(db) (was buildPricingMap(rows) directly)
+packages/web/src/lib/db-worker.ts                   # (already added in C4) type-only import of DynamicPricingEntry from lib/pricing.ts
 packages/web/src/__tests__/pricing.test.ts          # update assertions for new buildPricingMap signature
-packages/web/src/lib/pricing-cutover.test.ts        # new — proves identical PricingMap for the 14 legacy models
-packages/web/src/app/api/pricing/route.test.ts      # update mocks to include getDynamicPricing
+packages/web/src/lib/pricing-cutover.test.ts        # NEW — proves identical PricingMap for the 14 legacy models
+packages/web/src/app/api/pricing/route.test.ts      # update mocks to use loadPricingMap path
+packages/web/src/app/api/usage/by-device/route.test.ts  # update mocks for loadPricingMap path
 ```
 
 No changes to chart components, RPC layer beyond what was added in C3/C4, or any worker file.
+
+### Why a `loadPricingMap(db)` helper
+
+Two server entry points compute cost from a `PricingMap`: `/api/pricing` (returns the map) and `/api/usage/by-device` (uses it inline for `estimated_cost`). Inlining the dynamic+DB+fallback policy in two places guarantees drift. C5 introduces a single helper so both routes share one implementation of:
+
+- Parallel fetch of `db.getDynamicPricing()` and `db.listModelPricing()`.
+- Per-source degradation (see below).
+- Final `buildPricingMap({ dynamic, dbRows })` call.
 
 ## Module contracts
 
@@ -32,6 +44,31 @@ Remove:
 ```typescript
 export const DEFAULT_MODEL_PRICES: Record<string, ModelPricing> = { ... 14 entries ... };
 ```
+
+Add the client-safe DTO type at the top of the module (so client code that imports `getDefaultPricingMap` does not transitively pull `db-worker.ts` server code):
+
+```typescript
+// lib/pricing.ts — client-safe. No server-only imports allowed in this file.
+export interface DynamicPricingEntry {
+  model: string;
+  provider: string;
+  displayName: string | null;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  cachedPerMillion: number | null;
+  contextWindow: number | null;
+  origin: 'baseline' | 'openrouter' | 'models.dev' | 'admin';
+  updatedAt: string;
+  aliases?: string[];
+}
+```
+
+`db-worker.ts` (server-only) drops its inline DTO from C4 and switches to a **type-only** import:
+```typescript
+import type { DynamicPricingEntry } from "./pricing";
+```
+
+This keeps `lib/pricing.ts` free of server imports — `useSWR(... /api/pricing)` consumers and `use-pricing.ts` (which imports `getDefaultPricingMap`) stay in the client bundle without dragging `db-worker` along.
 
 Replace `buildPricingMap` signature:
 
@@ -94,6 +131,53 @@ export function buildPricingMap({ dynamic, dbRows }: BuildPricingMapInput): Pric
 
 `lookupPricing()`, `estimateCost()`, `formatCost()`, `getModelPricing()` unchanged.
 
+### `lib/load-pricing-map.ts` — new server helper
+
+```typescript
+import type { DbWorker } from "./db-worker";
+import {
+  buildPricingMap,
+  getDefaultPricingMap,
+  type PricingMap,
+} from "./pricing";
+
+/**
+ * Server-only. Imports `db-worker` (RPC client). Do NOT import from client code.
+ *
+ * Partial-degradation policy:
+ *   - Both succeed   → buildPricingMap({ dynamic, dbRows })
+ *   - dynamic fails  → buildPricingMap({ dynamic: [], dbRows })  (admin overlay still applied)
+ *   - dbRows fails   → buildPricingMap({ dynamic, dbRows: [] })  (dynamic still applied)
+ *   - Both fail      → getDefaultPricingMap()                    (prefix/source/fallback only)
+ *
+ * Each failure is logged with its source tag. The map ALWAYS returns; callers
+ * never see exceptions from this helper.
+ */
+export async function loadPricingMap(db: DbWorker): Promise<PricingMap> {
+  const [dynamicSettled, dbSettled] = await Promise.allSettled([
+    db.getDynamicPricing(),
+    db.listModelPricing(),
+  ]);
+
+  const dynamic =
+    dynamicSettled.status === "fulfilled" ? dynamicSettled.value.entries : [];
+  const dbRows = dbSettled.status === "fulfilled" ? dbSettled.value : [];
+
+  if (dynamicSettled.status === "rejected") {
+    console.error("loadPricingMap: getDynamicPricing failed", dynamicSettled.reason);
+  }
+  if (dbSettled.status === "rejected") {
+    console.error("loadPricingMap: listModelPricing failed", dbSettled.reason);
+  }
+
+  if (dynamicSettled.status === "rejected" && dbSettled.status === "rejected") {
+    return getDefaultPricingMap();
+  }
+
+  return buildPricingMap({ dynamic, dbRows });
+}
+```
+
 ### `app/api/pricing/route.ts` — diff
 
 ```typescript
@@ -102,16 +186,30 @@ const results = await db.listModelPricing();
 const pricingMap = buildPricingMap(results);
 
 // after
-const [dynamicResp, dbRows] = await Promise.all([
-  db.getDynamicPricing(),       // { entries, servedFrom }
-  db.listModelPricing(),
-]);
-const pricingMap = buildPricingMap({ dynamic: dynamicResp.entries, dbRows });
+const pricingMap = await loadPricingMap(db);
 ```
 
-Error fallback stays the same shape (`getDefaultPricingMap()`), but now applies when **either** RPC fails. Log the failed RPC; return the static safety net.
-
 Response shape is unchanged. No new fields. No version bump.
+
+### `app/api/usage/by-device/route.ts` — diff
+
+The existing inline try/catch at lines 114–122 is replaced with the same helper:
+
+```typescript
+// before
+let pricingMap;
+try {
+  const pricingRows = await db.listModelPricing();
+  pricingMap = buildPricingMap(pricingRows);
+} catch {
+  pricingMap = getDefaultPricingMap();
+}
+
+// after
+const pricingMap = await loadPricingMap(db);
+```
+
+The route now picks up dynamic entries for non-legacy models (e.g. `deepseek-v3.1`) automatically — same behavior as `/api/pricing`. Per-device cost numbers for the 14 legacy models stay byte-identical (proven via the cutover test plus existing by-device tests).
 
 ### Removed exports
 
@@ -130,8 +228,16 @@ If any other importer surfaces during implementation, the choice is: replace wit
 The whole point of C5 is that for every model the previous code priced via `DEFAULT_MODEL_PRICES`, the new code returns an identical `ModelPricing` object. This test makes that property explicit and unkillable:
 
 ```typescript
-import { LEGACY_DEFAULT_MODEL_PRICES } from "@pew-worker-read/data/model-prices.test";  // re-export the frozen copy
 import baselineEntries from "@pew-worker-read/data/model-prices.json";
+
+// Frozen 14-entry copy of the pre-C5 DEFAULT_MODEL_PRICES table.
+// Duplicated inline (not imported) on purpose — the regression-floor JSON in
+// worker-read carries the same numbers, but pinning them here makes this test
+// independent of any other file's mutation. 14 entries is small enough that
+// duplication is preferable to a brittle cross-package test-file import.
+const LEGACY_DEFAULT_MODEL_PRICES: Record<string, ModelPricing> = {
+  // ... 14 entries copied verbatim from the pre-C5 DEFAULT_MODEL_PRICES ...
+};
 
 test("for every legacy model, buildPricingMap({dynamic: baseline, dbRows: []}) returns identical pricing", () => {
   const map = buildPricingMap({ dynamic: baselineEntries, dbRows: [] });
@@ -171,7 +277,7 @@ test("dynamic empty + dbRows empty → models is empty (only safety net survives
 });
 ```
 
-The cross-package import in the test (`@pew-worker-read/...`) follows whatever module-resolution pattern is set up in C2 for the test file location. If that resolution is awkward, copy the constant into this test file too — duplication of 14 entries is acceptable here because both copies are pinned by the same intent.
+The cross-package import for `baselineEntries` (`@pew-worker-read/...`) is the same path C2 introduced for the regression test. If that resolution is awkward at the web-package layer, copy the JSON into a fixture under `packages/web/src/__fixtures__/` — duplication of pinned data is acceptable to keep the test self-contained.
 
 ### `pricing.test.ts` updates
 
@@ -179,11 +285,28 @@ The cross-package import in the test (`@pew-worker-read/...`) follows whatever m
 - One new case: `buildPricingMap({ dynamic, dbRows })` with both populated, verifying admin wins over dynamic for the same model.
 - Snapshot for `getDefaultPricingMap()` updates: `models` is now `{}` (was 14 entries). This is expected and documented in the commit message.
 
-### `route.test.ts` updates
+### `load-pricing-map.test.ts` (new — partial-degradation matrix)
 
-- Add mock for `getDynamicPricing()` returning `{ entries: [], servedFrom: 'baseline' }` in the success path.
-- New case: when `getDynamicPricing` rejects but `listModelPricing` resolves, route returns `getDefaultPricingMap()` (existing fallback behavior).
-- New case: when both reject, route returns `getDefaultPricingMap()` and logs both errors.
+```typescript
+test("both succeed → buildPricingMap with both inputs")
+test("getDynamicPricing rejects, listModelPricing resolves → dynamic=[], dbRows applied (NOT full fallback)")
+test("listModelPricing rejects, getDynamicPricing resolves → dynamic applied, dbRows=[] (NOT full fallback)")
+test("both reject → getDefaultPricingMap() (safety net only)")
+test("both reject → both errors logged with source tag")
+test("never throws — even when db.* throws synchronously")
+```
+
+Mocks the `DbWorker` interface; no real RPC. The matrix exists so that future regressions in either degradation branch fail loudly.
+
+### `route.test.ts` updates (api/pricing)
+
+- Mock `loadPricingMap` directly (single seam) instead of mocking the two RPC methods.
+- Existing success / error assertions stay; they now verify that the route surfaces whatever map the helper returns.
+
+### `by-device/route.test.ts` updates
+
+- Replace the existing `listModelPricing` mock with a `loadPricingMap` mock returning a representative `PricingMap`.
+- New case: when `loadPricingMap` returns `getDefaultPricingMap()` (both-fail path), per-device `estimated_cost` falls through to prefix/source/fallback for legacy models, matching pre-C5 behavior modulo the missing exact-match table. Document the expected-cost delta in the test name (it is intentional — exact-match data is now sourced from dynamic, and dynamic was unreachable in this branch).
 
 ### Existing chart / dashboard tests
 
@@ -194,6 +317,8 @@ Stay green. `lookupPricing` returns identical numbers for every legacy model (pr
 - Unchanged `lookupPricing` / `estimateCost` / `formatCost` API surface.
 - Removal of `DEFAULT_MODEL_PRICES` is clean (no `// removed in C5` comment, no shim re-export).
 - `buildPricingMap` signature change is breaking for callers — all callers in the repo are updated in the same commit.
+- All server cost paths go through `loadPricingMap(db)` — no inline duplication of the dynamic+DB+fallback policy.
+- `lib/pricing.ts` stays **client-safe**: no server-only imports added. `DynamicPricingEntry` lives here; `db-worker.ts` imports it as `type`-only.
 - New test file naming follows `__tests__/`-style where the rest of the package puts them; placed alongside the code it covers.
 
 ## What this commit does NOT do
@@ -206,13 +331,15 @@ Stay green. `lookupPricing` returns identical numbers for every legacy model (pr
 ## Acceptance
 
 - `bun run --filter @pew/web typecheck` green.
-- `bun run --filter @pew/web test` green — including the new `pricing-cutover.test.ts`.
+- `bun run --filter @pew/web test` green — including the new `pricing-cutover.test.ts` and `load-pricing-map.test.ts`.
 - `bun run lint` green.
 - `bun run dev`:
   - `/dashboard` renders cost numbers identical to pre-C5 within ±0 cents for the 14 legacy models (manual spot check + the cutover test guarantees this).
+  - `/api/usage/by-device` returns identical `estimated_cost` per device for legacy models; non-legacy models now use dynamic prices instead of `DEFAULT_FALLBACK`.
   - For models *not* in the 14 legacy set (e.g. `deepseek-v3.1`), cost now uses the dynamic price instead of falling through to `DEFAULT_FALLBACK`.
+  - With worker-read deliberately broken (kill `getDynamicPricing`), routes still serve admin DB rows + safety net (no 5xx); with D1 deliberately broken, routes still serve dynamic + safety net.
 - Existing E2E tests stay green.
-- `git grep DEFAULT_MODEL_PRICES` returns nothing in `packages/web/` after this commit (only the frozen copy in `LEGACY_DEFAULT_MODEL_PRICES` inside `worker-read/src/data/model-prices.test.ts`).
+- `git grep DEFAULT_MODEL_PRICES packages/web/` returns nothing after this commit. The only frozen copy lives inline in `pricing-cutover.test.ts` (and the regression-floor copy in `worker-read/src/data/model-prices.test.ts` from C2).
 
 ## Rollback plan
 
