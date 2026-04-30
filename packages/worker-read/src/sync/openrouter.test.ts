@@ -48,4 +48,24 @@ describe("parseOpenRouter", () => {
     expect(entries).toEqual([]);
     expect(warnings.length).toBeGreaterThan(0);
   });
+
+  it("skips non-object entries, missing-pricing entries, and capitalizes empty provider", () => {
+    const { entries, warnings } = parseOpenRouter(
+      {
+        data: [
+          null,
+          "not-an-object",
+          { id: "no-pricing/model" },
+          { id: "/leading-slash", pricing: { prompt: "0.000001", completion: "0.000002" } },
+        ],
+      },
+      NOW,
+    );
+    expect(warnings.some((w) => w.includes("non-object"))).toBe(true);
+    expect(warnings.some((w) => w.includes("no-pricing/model") && w.includes("missing pricing"))).toBe(true);
+    // Leading-slash id has empty provider slug → capitalize() short-circuits on empty string.
+    const leading = entries.find((e) => e.model === "/leading-slash");
+    expect(leading).toBeDefined();
+    expect(leading!.provider).toBe("");
+  });
 });

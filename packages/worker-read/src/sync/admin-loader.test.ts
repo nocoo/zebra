@@ -46,4 +46,18 @@ describe("admin-loader", () => {
     expect(result.error).toBe("D1 down");
     expect(errSpy).toHaveBeenCalled();
   });
+
+  it("D1 returns missing .results → rows=[]", async () => {
+    const db = mockDb(async () => ({}) as { results: unknown[] });
+    expect(await loadAdminRows(db)).toEqual({ rows: [], error: null });
+  });
+
+  it("D1 throws non-Error → falls back to String(err)", async () => {
+    const db = mockDb(async () => {
+      throw { toString: () => "weird-fault" };
+    });
+    const result = await loadAdminRows(db);
+    expect(result.rows).toEqual([]);
+    expect(result.error).toBe("weird-fault");
+  });
 });

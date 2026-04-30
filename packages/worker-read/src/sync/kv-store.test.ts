@@ -142,4 +142,34 @@ describe("kv-store", () => {
     expect(kv.store.has(KEY_LAST_FETCH_OPENROUTER)).toBe(false);
     expect(warnSpy).toHaveBeenCalled();
   });
+
+  it("readDynamic returns null when kv.get throws and logs", async () => {
+    kv.get = vi.fn(async () => {
+      throw new Error("kv get 503");
+    });
+    expect(await readDynamic(kv)).toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+  });
+
+  it("writeLastFetch returns early when payload cannot be serialized", async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    await writeLastFetch(kv, "openrouter", {
+      json: circular,
+      fetchedAt: "T",
+    });
+    expect(kv.store.has(KEY_LAST_FETCH_OPENROUTER)).toBe(false);
+    expect(errSpy).toHaveBeenCalled();
+  });
+
+  it("writeLastFetch swallows kv.put errors and logs", async () => {
+    kv.put = vi.fn(async () => {
+      throw new Error("kv 503");
+    });
+    await writeLastFetch(kv, "models.dev", {
+      json: { a: 1 },
+      fetchedAt: "T",
+    });
+    expect(errSpy).toHaveBeenCalled();
+  });
 });

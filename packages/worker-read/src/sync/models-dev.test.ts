@@ -41,4 +41,25 @@ describe("parseModelsDev", () => {
     expect(parseModelsDev(null, NOW).entries).toEqual([]);
     expect(parseModelsDev([], NOW).entries).toEqual([]);
   });
+
+  it("skips non-object models, missing-cost models, and invalid output cost", () => {
+    const { entries, warnings } = parseModelsDev(
+      {
+        anthropic: {
+          models: {
+            "non-object-entry": null as unknown as Record<string, unknown>,
+            "no-cost": { name: "No Cost" } as unknown as Record<string, unknown>,
+            "bad-output": { cost: { input: 1, output: -3 } } as unknown as Record<string, unknown>,
+          },
+        },
+        openai: { models: null as unknown as Record<string, unknown> },
+      },
+      NOW,
+    );
+    expect(entries).toEqual([]);
+    expect(warnings.some((w) => w.includes("non-object-entry") && w.includes("non-object"))).toBe(true);
+    expect(warnings.some((w) => w.includes("no-cost") && w.includes("missing cost"))).toBe(true);
+    expect(warnings.some((w) => w.includes("bad-output") && w.includes("invalid output cost"))).toBe(true);
+    expect(warnings.some((w) => w.includes("openai") && w.includes("no models"))).toBe(true);
+  });
 });
